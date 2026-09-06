@@ -325,6 +325,7 @@ impl Via6522 {
     
     fn update_port_a(&mut self, value: u8) {
         let old = self.input_a;
+        let old_port_a = self.read_port_a();
         self.input_a = value;
         if old != value {
             // CA1 latches on configured edge.
@@ -337,10 +338,15 @@ impl Via6522 {
             if triggered {
                 self.set_ifr(IRQ_CA1);
             }
-            self.send_to_all(ViaProtocolMessage::PortState {
-                port: b'A',
-                port_state: value,
-            });
+            // Broadcast the DDR-composed level, not the raw input: bits configured as VIA
+            // outputs are driven by ORA and must not echo a peripheral's own pull back to it.
+            let new_port_a = self.read_port_a();
+            if old_port_a != new_port_a {
+                self.send_to_all(ViaProtocolMessage::PortState {
+                    port: b'A',
+                    port_state: new_port_a,
+                });
+            }
         }
     }
 
@@ -425,6 +431,7 @@ impl Via6522 {
 
     fn update_port_b(&mut self, value: u8) {
         let old = self.input_b;
+        let old_port_b = self.read_port_b();
         self.input_b = value;
         if old != value {
             let pos_edge = self.pcr & PCR_CB1_EDGE != 0;
@@ -434,10 +441,15 @@ impl Via6522 {
                 (old & !value) != 0
             };
             if triggered { self.set_ifr(IRQ_CB1); }
-            self.send_to_all(ViaProtocolMessage::PortState {
-                port: b'B',
-                port_state: value,
-            });
+            // Broadcast the DDR-composed level, not the raw input: bits configured as VIA
+            // outputs are driven by ORB and must not echo a peripheral's own pull back to it.
+            let new_port_b = self.read_port_b();
+            if old_port_b != new_port_b {
+                self.send_to_all(ViaProtocolMessage::PortState {
+                    port: b'B',
+                    port_state: new_port_b,
+                });
+            }
         }
         // T2 pulse-counting mode: count negative PB6 transitions.
         if self.acr & ACR_T2_PB6_COUNT != 0 && self.t2_running {
@@ -1701,6 +1713,46 @@ mod tests {
         // The state dump sends initial state; ORB write sends "B01".
         assert!(received.windows(3).any(|w| w == b"B01"),
             "expected B01 in {:?}", String::from_utf8_lossy(&received));
+    }
+
+    // --- Incoming peripheral message must not echo raw input on VIA-driven pins (issue #609) ---
+
+    #[test]
+    fn incoming_set_port_a_does_not_echo_raw_value_for_output_pins() {
+        let (mut via, mut remote, tx) = device_with_pipe();
+        send_byte(&via, &tx, 0x20); // ASCII
+        via.tick(1); // handshake
+        via.write(0x3, 0xF0); // DDRA: PA7-PA4 are VIA outputs; ORA is never written (stays 0)
+        collect_bytes(&mut remote); // drain the state dump and any DDRA-triggered change
+
+        send_bytes(&via, &tx, "SA80"); // peripheral pulls PA7 (a VIA output pin) high
+        via.tick(1);
+
+        let received = collect_bytes(&mut remote);
+        assert!(!received.windows(3).any(|w| w == b"A80"),
+            "must not echo the peripheral's own raw pull as PortState on a VIA output pin: {:?}",
+            String::from_utf8_lossy(&received));
+        // ORA was never written, so the DDR-composed level for PA7 stays 0 regardless of the
+        // peripheral's pull.
+        assert_eq!(via.read_port_a() & 0x80, 0);
+    }
+
+    #[test]
+    fn incoming_set_port_b_does_not_echo_raw_value_for_output_pins() {
+        let (mut via, mut remote, tx) = device_with_pipe();
+        send_byte(&via, &tx, 0x20); // ASCII
+        via.tick(1); // handshake
+        via.write(0x2, 0xF0); // DDRB: PB7-PB4 are VIA outputs; ORB is never written (stays 0)
+        collect_bytes(&mut remote); // drain the state dump and any DDRB-triggered change
+
+        send_bytes(&via, &tx, "SB80"); // peripheral pulls PB7 (a VIA output pin) high
+        via.tick(1);
+
+        let received = collect_bytes(&mut remote);
+        assert!(!received.windows(3).any(|w| w == b"B80"),
+            "must not echo the peripheral's own raw pull as PortState on a VIA output pin: {:?}",
+            String::from_utf8_lossy(&received));
+        assert_eq!(via.read_port_b() & 0x80, 0);
     }
 
     // --- Incoming port message updates input pins ---
