@@ -86,7 +86,8 @@ EMMA65_CLOCK_SPEED_HZ=1843200
 | `via/6522`      |    16     | `transport` (optional), `protocol` (`ascii` or `binary`, optional)                  |
 | `ptm/6840`      |     8     | `transport` (optional), `protocol` (`ascii` or `binary`, optional)                  |
 | `display/matrix`| variable  | `arrangement` (required `COLSxROWS`; `columns * rows` must be 1, 2, 4, or 8), `register-address` (required), `frame_rate_hz`, `transport` (optional, `pipe:` only) |
-| `display`  |  variable | `columns`, `rows` (optional, default 40×25), `palette`, `font` (optional paths), `double-buffered` (bool), `frame-rate-hz`, `transport` (optional, `pipe:` only) |
+| `display/lcd`   |     2     | `geometry` (optional, default `16x2`), `cgrom` (optional, `a00`/`a02`/path), `polarity`, `backlight` (optional presets), `background`, `foreground` (optional hex overrides), `transport` (optional, `pipe:` only) |
+| `display`  |  variable | `columns`, `rows` (optional, default 40×25), `palette`, `font` (optional paths), `double-buffered` (bool), `frame-rate-hz`, `transport` (optional, `pipe:` only), `keyboard-address` (optional address: maps a second 2-byte data/latch range, debugger-only for live input), `break` (optional byte, requires `keyboard-address`), `irq` (optional, only allocated when `keyboard-address` is set) |
 | `lfsr`          |     2     | `taps` (optional u16), `mode` (`continuous` or `step`, optional)                    |
 | `mem/finch`     |     2     | `bank-registers`, `control-register` (required addresses), `image` (required path), `write-policy`, `fill`, `offset`, `labels` (all optional) |
 | `mem/phoebe`    |     1     | `control-register` (required address), `image` (required path), `write-policy`, `fill`, `ram-fill`, `offset`, `labels` (all optional) |
