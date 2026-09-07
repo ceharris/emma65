@@ -96,9 +96,29 @@ Free-running execution throttles to a configurable target clock frequency by
 comparing accumulated emulated cycles against elapsed wall time, sleeping as
 needed to match the target rate. Throttling is batched over roughly 1,000
 instructions at a time, keeping sleep-syscall overhead negligible while
-maintaining sub-millisecond timing granularity. Tested and accurate up to
-approximately 2 MHz on typical hardware, covering the clock speeds of all
-historically common 6502-based systems.
+maintaining sub-millisecond timing granularity. This comfortably covers the
+clock speeds of all historically common 6502-based systems, and headroom on
+modern hardware goes well beyond that. In both cases below, accuracy held to
+within 0.02% of target right up to the boundary shown, then fell off sharply
+once the requested speed exceeded what the host could execute unthrottled —
+so the boundary itself, not some margin below it, is the practical ceiling:
+
+| device complement | measured accurate ceiling |
+|---|---|
+| bundled default (32K RAM, 32K ROM, VIA, two ACIAs, LFSR, console) | ~34 MHz |
+| minimal (32K RAM, 32K ROM, console only) | ~85 MHz |
+
+(release build, on a mid-range 2023 laptop CPU — AMD Ryzen 5 7530U). Every
+polled device adds per-instruction overhead — its `tick()` runs on every
+`Cpu::step()` — so trimming the default complement down to just RAM, ROM, and
+a console more than doubled the ceiling here. Use these two points to
+interpolate a rough expectation for your own configuration: more polled
+devices pulls the ceiling down toward the low end, a bare-bones setup pushes
+it toward the high end. The ceiling also depends on the host CPU and the
+build profile — a debug build is roughly an order of magnitude slower than
+release and hits its own, much lower ceiling — so treat it as "however fast
+your configuration runs unthrottled on your machine in a `--release` build,"
+not a fixed number.
 
 ```rust
 ClockSpeed::mhz(1.0)       // 1 MHz — Apple II speed
