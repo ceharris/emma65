@@ -1,6 +1,9 @@
 use emma65::emulator::cpu::StepResult;
 use emma65::emulator::device::{Console, Mc6840, Mc6850, R6551, Via6522};
-use emma65::emulator::{AddressRange, Bus, ChannelRelay, ClockSpeed, CpuBuilder, CpuVariant, DeviceId, InternalPipeTransport, InvalidOpcodePolicy, Mnemonic, TransportRelay};
+use emma65::emulator::{
+    AddressRange, Bus, ChannelRelay, ClockSpeed, CpuBuilder, CpuVariant, DeviceId,
+    InternalPipeTransport, InvalidOpcodePolicy, Mnemonic, TransportRelay,
+};
 
 const MAX_STEPS: u32 = 10_000;
 
@@ -20,7 +23,9 @@ fn build_cpu(prog_addr: u16, prog: &[u8]) -> emma65::emulator::Cpu {
     for (i, &b) in prog.iter().enumerate() {
         cpu.bus_mut().write(prog_addr + i as u16, b).unwrap();
     }
-    cpu.bus_mut().write(0xFFFC, (prog_addr & 0xFF) as u8).unwrap();
+    cpu.bus_mut()
+        .write(0xFFFC, (prog_addr & 0xFF) as u8)
+        .unwrap();
     cpu.bus_mut().write(0xFFFD, (prog_addr >> 8) as u8).unwrap();
     cpu.reset().unwrap();
     cpu
@@ -55,7 +60,7 @@ fn step_to_stop_deadline(cpu: &mut emma65::emulator::Cpu, deadline: std::time::I
             StepResult::Stopped => return,
             StepResult::Executed(_) | StepResult::Waiting => {}
             StepResult::Error(e) => panic!("CPU error: {e}"),
-            StepResult::Reset 
+            StepResult::Reset
             | StepResult::Breakpoint(_)
             | StepResult::WatchTriggered { .. }
             | StepResult::WatchError { .. } => unreachable!(),
@@ -108,7 +113,10 @@ fn page_crossing_adds_cycle() {
     let before_lda = cpu.cycles();
     assert!(matches!(cpu.step(None, true), StepResult::Executed(_)));
     let lda_cycles = cpu.cycles() - before_lda;
-    assert_eq!(lda_cycles, 5, "expected 5 cycles for page-crossing LDA abs,X, got {lda_cycles}");
+    assert_eq!(
+        lda_cycles, 5,
+        "expected 5 cycles for page-crossing LDA abs,X, got {lda_cycles}"
+    );
     assert_eq!(cpu.registers().a, 0x42);
 }
 
@@ -127,13 +135,23 @@ fn console_full_system_echo() {
     // their own, so this hand-fed one stands in for it).
     let (tx, rx) = crossbeam_channel::unbounded::<u8>();
     let mut console = Console::new("console").with_address(0xDF00);
-    console.attach_transport(Box::new(local), TransportRelay::Byte(ChannelRelay::spawn(rx, 256)));
+    console.attach_transport(
+        Box::new(local),
+        TransportRelay::Byte(ChannelRelay::spawn(rx, 256)),
+    );
 
     // 64 KB RAM; Console at $DF00–$DF01.
     let bus = Bus::config()
-        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0).unwrap()
-        .device(AddressRange::new(0xDF00, 0xDF01), DeviceId(1), Box::new(console)).unwrap()
-        .ram_with_fill(AddressRange::new(0xDF02, 0xFFFF), 0).unwrap()
+        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0)
+        .unwrap()
+        .device(
+            AddressRange::new(0xDF00, 0xDF01),
+            DeviceId(1),
+            Box::new(console),
+        )
+        .unwrap()
+        .ram_with_fill(AddressRange::new(0xDF02, 0xFFFF), 0)
+        .unwrap()
         .build();
 
     let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -148,12 +166,7 @@ fn console_full_system_echo() {
     //         BEQ poll    F0 FB      -- offset -5 → back to LDA $DF01
     //         STA $DF00   8D 00 DF   -- echo latched byte to output
     //         STP         DB
-    let prog: &[u8] = &[
-        0xAD, 0x01, 0xDF,
-        0xF0, 0xFB,
-        0x8D, 0x00, 0xDF,
-        0xDB,
-    ];
+    let prog: &[u8] = &[0xAD, 0x01, 0xDF, 0xF0, 0xFB, 0x8D, 0x00, 0xDF, 0xDB];
     for (i, &b) in prog.iter().enumerate() {
         cpu.bus_mut().write(0x0200 + i as u16, b).unwrap();
     }
@@ -168,7 +181,11 @@ fn console_full_system_echo() {
     step_to_stop(&mut cpu);
 
     std::thread::sleep(std::time::Duration::from_millis(1));
-    assert_eq!(remote.try_recv(), Some(0x55), "echoed byte should arrive on remote transport");
+    assert_eq!(
+        remote.try_recv(),
+        Some(0x55),
+        "echoed byte should arrive on remote transport"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -181,12 +198,22 @@ fn _transmit() {
     let (local, mut remote) = InternalPipeTransport::pair_direct().unwrap();
     let (_tx, rx) = crossbeam_channel::unbounded::<u8>();
     let mut acia = R6551::new("").with_address(0xDF00);
-    acia.attach_transport(Box::new(local), TransportRelay::Byte(ChannelRelay::spawn(rx, 256)));
+    acia.attach_transport(
+        Box::new(local),
+        TransportRelay::Byte(ChannelRelay::spawn(rx, 256)),
+    );
 
     let bus = Bus::config()
-        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0).unwrap()
-        .device(AddressRange::new(0xDF00, 0xDF03), DeviceId(1), Box::new(acia)).unwrap()
-        .ram_with_fill(AddressRange::new(0xDF04, 0xFFFF), 0).unwrap()
+        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0)
+        .unwrap()
+        .device(
+            AddressRange::new(0xDF00, 0xDF03),
+            DeviceId(1),
+            Box::new(acia),
+        )
+        .unwrap()
+        .ram_with_fill(AddressRange::new(0xDF04, 0xFFFF), 0)
+        .unwrap()
         .build();
 
     let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -210,7 +237,11 @@ fn _transmit() {
     step_to_stop(&mut cpu);
 
     std::thread::sleep(std::time::Duration::from_millis(1));
-    assert_eq!(remote.try_recv(), Some(0x41), "ACIA TX byte should appear on remote transport");
+    assert_eq!(
+        remote.try_recv(),
+        Some(0x41),
+        "ACIA TX byte should appear on remote transport"
+    );
 }
 
 /// Remote sends a byte; CPU polls R6551 RDRF status and reads the received byte.
@@ -219,12 +250,22 @@ fn _receive() {
     let (local, _remote) = InternalPipeTransport::pair_direct().unwrap();
     let (tx, rx) = crossbeam_channel::unbounded::<u8>();
     let mut acia = R6551::new("").with_address(0xDF00);
-    acia.attach_transport(Box::new(local), TransportRelay::Byte(ChannelRelay::spawn(rx, 256)));
+    acia.attach_transport(
+        Box::new(local),
+        TransportRelay::Byte(ChannelRelay::spawn(rx, 256)),
+    );
 
     let bus = Bus::config()
-        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0).unwrap()
-        .device(AddressRange::new(0xDF00, 0xDF03), DeviceId(1), Box::new(acia)).unwrap()
-        .ram_with_fill(AddressRange::new(0xDF04, 0xFFFF), 0).unwrap()
+        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0)
+        .unwrap()
+        .device(
+            AddressRange::new(0xDF00, 0xDF03),
+            DeviceId(1),
+            Box::new(acia),
+        )
+        .unwrap()
+        .ram_with_fill(AddressRange::new(0xDF04, 0xFFFF), 0)
+        .unwrap()
         .build();
 
     let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -244,14 +285,8 @@ fn _receive() {
     // $0212: STA $0300   8D 00 03   -- store result
     // $0215: STP         DB
     let prog: &[u8] = &[
-        0xA9, 0x03,
-        0x8D, 0x02, 0xDF,
-        0xAD, 0x01, 0xDF,
-        0x29, 0x08,
-        0xF0, 0xF9,
-        0xAD, 0x00, 0xDF,
-        0x8D, 0x00, 0x03,
-        0xDB,
+        0xA9, 0x03, 0x8D, 0x02, 0xDF, 0xAD, 0x01, 0xDF, 0x29, 0x08, 0xF0, 0xF9, 0xAD, 0x00, 0xDF,
+        0x8D, 0x00, 0x03, 0xDB,
     ];
     for (i, &b) in prog.iter().enumerate() {
         cpu.bus_mut().write(0x0200 + i as u16, b).unwrap();
@@ -266,7 +301,8 @@ fn _receive() {
     step_to_stop(&mut cpu);
 
     assert_eq!(
-        cpu.bus_mut().peek(0x0300).unwrap(), 0x55,
+        cpu.bus_mut().peek(0x0300).unwrap(),
+        0x55,
         "received byte should be stored at $0300"
     );
 }
@@ -280,12 +316,18 @@ fn mc6850_transmit_and_receive() {
         let (local, mut remote) = InternalPipeTransport::pair_direct().unwrap();
         let (_tx, rx) = crossbeam_channel::unbounded::<u8>();
         let mut mc = Mc6850::new("mc6850").with_address(0xDF00);
-        mc.attach_transport(Box::new(local), TransportRelay::Byte(ChannelRelay::spawn(rx, 256)));
+        mc.attach_transport(
+            Box::new(local),
+            TransportRelay::Byte(ChannelRelay::spawn(rx, 256)),
+        );
 
         let bus = Bus::config()
-            .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0).unwrap()
-            .device(AddressRange::new(0xDF00, 0xDF01), DeviceId(1), Box::new(mc)).unwrap()
-            .ram_with_fill(AddressRange::new(0xDF02, 0xFFFF), 0).unwrap()
+            .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0)
+            .unwrap()
+            .device(AddressRange::new(0xDF00, 0xDF01), DeviceId(1), Box::new(mc))
+            .unwrap()
+            .ram_with_fill(AddressRange::new(0xDF02, 0xFFFF), 0)
+            .unwrap()
             .build();
 
         let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -302,12 +344,7 @@ fn mc6850_transmit_and_receive() {
         // $020A: BEQ poll   F0 F9      -- next PC=$020C, target=$0205, offset=-7=0xF9
         // $020C: STP        DB
         let prog: &[u8] = &[
-            0xA9, 0x42,
-            0x8D, 0x01, 0xDF,
-            0xAD, 0x00, 0xDF,
-            0x29, 0x02,
-            0xF0, 0xF9,
-            0xDB,
+            0xA9, 0x42, 0x8D, 0x01, 0xDF, 0xAD, 0x00, 0xDF, 0x29, 0x02, 0xF0, 0xF9, 0xDB,
         ];
         for (i, &b) in prog.iter().enumerate() {
             cpu.bus_mut().write(0x0200 + i as u16, b).unwrap();
@@ -318,7 +355,11 @@ fn mc6850_transmit_and_receive() {
 
         step_to_stop(&mut cpu);
         std::thread::sleep(std::time::Duration::from_millis(1));
-        assert_eq!(remote.try_recv(), Some(0x42), "MC6850 TX byte should appear on remote transport");
+        assert_eq!(
+            remote.try_recv(),
+            Some(0x42),
+            "MC6850 TX byte should appear on remote transport"
+        );
     }
 
     // --- RX ---
@@ -326,12 +367,18 @@ fn mc6850_transmit_and_receive() {
         let (local, _remote) = InternalPipeTransport::pair_direct().unwrap();
         let (tx, rx) = crossbeam_channel::unbounded::<u8>();
         let mut mc = Mc6850::new("mc6850").with_address(0xDF00);
-        mc.attach_transport(Box::new(local), TransportRelay::Byte(ChannelRelay::spawn(rx, 256)));
+        mc.attach_transport(
+            Box::new(local),
+            TransportRelay::Byte(ChannelRelay::spawn(rx, 256)),
+        );
 
         let bus = Bus::config()
-            .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0).unwrap()
-            .device(AddressRange::new(0xDF00, 0xDF01), DeviceId(1), Box::new(mc)).unwrap()
-            .ram_with_fill(AddressRange::new(0xDF02, 0xFFFF), 0).unwrap()
+            .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0)
+            .unwrap()
+            .device(AddressRange::new(0xDF00, 0xDF01), DeviceId(1), Box::new(mc))
+            .unwrap()
+            .ram_with_fill(AddressRange::new(0xDF02, 0xFFFF), 0)
+            .unwrap()
             .build();
 
         let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -348,12 +395,7 @@ fn mc6850_transmit_and_receive() {
         // $020A: STA $0300  8D 00 03
         // $020D: STP        DB
         let prog: &[u8] = &[
-            0xAD, 0x00, 0xDF,
-            0x29, 0x01,
-            0xF0, 0xF9,
-            0xAD, 0x01, 0xDF,
-            0x8D, 0x00, 0x03,
-            0xDB,
+            0xAD, 0x00, 0xDF, 0x29, 0x01, 0xF0, 0xF9, 0xAD, 0x01, 0xDF, 0x8D, 0x00, 0x03, 0xDB,
         ];
         for (i, &b) in prog.iter().enumerate() {
             cpu.bus_mut().write(0x0200 + i as u16, b).unwrap();
@@ -368,7 +410,8 @@ fn mc6850_transmit_and_receive() {
         step_to_stop(&mut cpu);
 
         assert_eq!(
-            cpu.bus_mut().peek(0x0300).unwrap(), 0x77,
+            cpu.bus_mut().peek(0x0300).unwrap(),
+            0x77,
             "MC6850 received byte should be stored at $0300"
         );
     }
@@ -389,12 +432,22 @@ fn _irq_driven_receive() {
     let (local, _remote) = InternalPipeTransport::pair_direct().unwrap();
     let (tx, rx) = crossbeam_channel::unbounded::<u8>();
     let mut acia = R6551::new("").with_address(0xDF00);
-    acia.attach_transport(Box::new(local), TransportRelay::Byte(ChannelRelay::spawn(rx, 256)));
+    acia.attach_transport(
+        Box::new(local),
+        TransportRelay::Byte(ChannelRelay::spawn(rx, 256)),
+    );
 
     let bus = Bus::config()
-        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0).unwrap()
-        .device(AddressRange::new(0xDF00, 0xDF03), DeviceId(1), Box::new(acia)).unwrap()
-        .ram_with_fill(AddressRange::new(0xDF04, 0xFFFF), 0).unwrap()
+        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0)
+        .unwrap()
+        .device(
+            AddressRange::new(0xDF00, 0xDF03),
+            DeviceId(1),
+            Box::new(acia),
+        )
+        .unwrap()
+        .ram_with_fill(AddressRange::new(0xDF04, 0xFFFF), 0)
+        .unwrap()
         .build();
 
     let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -423,12 +476,7 @@ fn _irq_driven_receive() {
     //   CLI         58          -- enable IRQ
     //   WAI         CB          -- suspend until IRQ fires
     //   STP         DB          -- RTI resumes here
-    let prog: &[u8] = &[
-        0xA9, 0x01, 0x8D, 0x02, 0xDF,
-        0x58,
-        0xCB,
-        0xDB,
-    ];
+    let prog: &[u8] = &[0xA9, 0x01, 0x8D, 0x02, 0xDF, 0x58, 0xCB, 0xDB];
     for (i, &b) in prog.iter().enumerate() {
         cpu.bus_mut().write(0x0200 + i as u16, b).unwrap();
     }
@@ -447,7 +495,8 @@ fn _irq_driven_receive() {
     step_to_stop_deadline(&mut cpu, deadline);
 
     assert_eq!(
-        cpu.bus_mut().peek(0x0300).unwrap(), 0x55,
+        cpu.bus_mut().peek(0x0300).unwrap(),
+        0x55,
         "ISR should have stored the received byte at $0300"
     );
 }
@@ -463,12 +512,22 @@ fn _irq_driven_transmit() {
     let (local, mut remote) = InternalPipeTransport::pair_direct().unwrap();
     let (_tx, rx) = crossbeam_channel::unbounded::<u8>();
     let mut acia = R6551::new("").with_address(0xDF00);
-    acia.attach_transport(Box::new(local), TransportRelay::Byte(ChannelRelay::spawn(rx, 256)));
+    acia.attach_transport(
+        Box::new(local),
+        TransportRelay::Byte(ChannelRelay::spawn(rx, 256)),
+    );
 
     let bus = Bus::config()
-        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0).unwrap()
-        .device(AddressRange::new(0xDF00, 0xDF03), DeviceId(1), Box::new(acia)).unwrap()
-        .ram_with_fill(AddressRange::new(0xDF04, 0xFFFF), 0).unwrap()
+        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0)
+        .unwrap()
+        .device(
+            AddressRange::new(0xDF00, 0xDF03),
+            DeviceId(1),
+            Box::new(acia),
+        )
+        .unwrap()
+        .ram_with_fill(AddressRange::new(0xDF04, 0xFFFF), 0)
+        .unwrap()
         .build();
 
     let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -495,16 +554,8 @@ fn _irq_driven_transmit() {
     //   STA $DF02     8D 02 DF
     //   done: RTI    40
     let isr: &[u8] = &[
-        0xA6, 0x01,
-        0xBD, 0x00, 0x03,
-        0x8D, 0x00, 0xDF,
-        0xE8,
-        0x86, 0x01,
-        0xC6, 0x00,
-        0xD0, 0x05,
-        0xA9, 0x02,
-        0x8D, 0x02, 0xDF,
-        0x40,
+        0xA6, 0x01, 0xBD, 0x00, 0x03, 0x8D, 0x00, 0xDF, 0xE8, 0x86, 0x01, 0xC6, 0x00, 0xD0, 0x05,
+        0xA9, 0x02, 0x8D, 0x02, 0xDF, 0x40,
     ];
     for (i, &b) in isr.iter().enumerate() {
         cpu.bus_mut().write(0x0400 + i as u16, b).unwrap();
@@ -527,13 +578,8 @@ fn _irq_driven_transmit() {
     //   BNE poll    D0 FD      -- loop until zero (offset -3)
     //   STP         DB
     let prog: &[u8] = &[
-        0xA9, 0x03, 0x85, 0x00,
-        0xA9, 0x00, 0x85, 0x01,
-        0xA9, 0x06, 0x8D, 0x02, 0xDF,
-        0x58,
-        0xA5, 0x00,
-        0xD0, 0xFD,
-        0xDB,
+        0xA9, 0x03, 0x85, 0x00, 0xA9, 0x00, 0x85, 0x01, 0xA9, 0x06, 0x8D, 0x02, 0xDF, 0x58, 0xA5,
+        0x00, 0xD0, 0xFD, 0xDB,
     ];
     for (i, &b) in prog.iter().enumerate() {
         cpu.bus_mut().write(0x0200 + i as u16, b).unwrap();
@@ -546,7 +592,11 @@ fn _irq_driven_transmit() {
 
     std::thread::sleep(std::time::Duration::from_millis(1));
     assert_eq!(remote.try_recv(), Some(0x41), "first TX byte should be 'A'");
-    assert_eq!(remote.try_recv(), Some(0x42), "second TX byte should be 'B'");
+    assert_eq!(
+        remote.try_recv(),
+        Some(0x42),
+        "second TX byte should be 'B'"
+    );
     assert_eq!(remote.try_recv(), Some(0x43), "third TX byte should be 'C'");
 }
 
@@ -561,12 +611,18 @@ fn mc6850_irq_driven_receive() {
     let (local, _remote) = InternalPipeTransport::pair_direct().unwrap();
     let (tx, rx) = crossbeam_channel::unbounded::<u8>();
     let mut mc = Mc6850::new("mc6850").with_address(0xDF00);
-    mc.attach_transport(Box::new(local), TransportRelay::Byte(ChannelRelay::spawn(rx, 256)));
+    mc.attach_transport(
+        Box::new(local),
+        TransportRelay::Byte(ChannelRelay::spawn(rx, 256)),
+    );
 
     let bus = Bus::config()
-        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0).unwrap()
-        .device(AddressRange::new(0xDF00, 0xDF01), DeviceId(1), Box::new(mc)).unwrap()
-        .ram_with_fill(AddressRange::new(0xDF02, 0xFFFF), 0).unwrap()
+        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0)
+        .unwrap()
+        .device(AddressRange::new(0xDF00, 0xDF01), DeviceId(1), Box::new(mc))
+        .unwrap()
+        .ram_with_fill(AddressRange::new(0xDF02, 0xFFFF), 0)
+        .unwrap()
         .build();
 
     let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -595,12 +651,7 @@ fn mc6850_irq_driven_receive() {
     //   CLI         58
     //   WAI         CB
     //   STP         DB
-    let prog: &[u8] = &[
-        0xA9, 0x81, 0x8D, 0x00, 0xDF,
-        0x58,
-        0xCB,
-        0xDB,
-    ];
+    let prog: &[u8] = &[0xA9, 0x81, 0x8D, 0x00, 0xDF, 0x58, 0xCB, 0xDB];
     for (i, &b) in prog.iter().enumerate() {
         cpu.bus_mut().write(0x0200 + i as u16, b).unwrap();
     }
@@ -619,7 +670,8 @@ fn mc6850_irq_driven_receive() {
     step_to_stop_deadline(&mut cpu, deadline);
 
     assert_eq!(
-        cpu.bus_mut().peek(0x0300).unwrap(), 0x77,
+        cpu.bus_mut().peek(0x0300).unwrap(),
+        0x77,
         "ISR should have stored the received byte at $0300"
     );
 }
@@ -635,12 +687,18 @@ fn mc6850_irq_driven_transmit() {
     let (local, mut remote) = InternalPipeTransport::pair_direct().unwrap();
     let (_tx, rx) = crossbeam_channel::unbounded::<u8>();
     let mut mc = Mc6850::new("mc6850").with_address(0xDF00);
-    mc.attach_transport(Box::new(local), TransportRelay::Byte(ChannelRelay::spawn(rx, 256)));
+    mc.attach_transport(
+        Box::new(local),
+        TransportRelay::Byte(ChannelRelay::spawn(rx, 256)),
+    );
 
     let bus = Bus::config()
-        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0).unwrap()
-        .device(AddressRange::new(0xDF00, 0xDF01), DeviceId(1), Box::new(mc)).unwrap()
-        .ram_with_fill(AddressRange::new(0xDF02, 0xFFFF), 0).unwrap()
+        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0)
+        .unwrap()
+        .device(AddressRange::new(0xDF00, 0xDF01), DeviceId(1), Box::new(mc))
+        .unwrap()
+        .ram_with_fill(AddressRange::new(0xDF02, 0xFFFF), 0)
+        .unwrap()
         .build();
 
     let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -667,16 +725,8 @@ fn mc6850_irq_driven_transmit() {
     //   STA $DF00     8D 00 DF
     //   done: RTI    40
     let isr: &[u8] = &[
-        0xA6, 0x01,
-        0xBD, 0x00, 0x03,
-        0x8D, 0x01, 0xDF,
-        0xE8,
-        0x86, 0x01,
-        0xC6, 0x00,
-        0xD0, 0x05,
-        0xA9, 0x02,
-        0x8D, 0x00, 0xDF,
-        0x40,
+        0xA6, 0x01, 0xBD, 0x00, 0x03, 0x8D, 0x01, 0xDF, 0xE8, 0x86, 0x01, 0xC6, 0x00, 0xD0, 0x05,
+        0xA9, 0x02, 0x8D, 0x00, 0xDF, 0x40,
     ];
     for (i, &b) in isr.iter().enumerate() {
         cpu.bus_mut().write(0x0400 + i as u16, b).unwrap();
@@ -699,13 +749,8 @@ fn mc6850_irq_driven_transmit() {
     //   BNE poll    D0 FD
     //   STP         DB
     let prog: &[u8] = &[
-        0xA9, 0x03, 0x85, 0x00,
-        0xA9, 0x00, 0x85, 0x01,
-        0xA9, 0x42, 0x8D, 0x00, 0xDF,
-        0x58,
-        0xA5, 0x00,
-        0xD0, 0xFD,
-        0xDB,
+        0xA9, 0x03, 0x85, 0x00, 0xA9, 0x00, 0x85, 0x01, 0xA9, 0x42, 0x8D, 0x00, 0xDF, 0x58, 0xA5,
+        0x00, 0xD0, 0xFD, 0xDB,
     ];
     for (i, &b) in prog.iter().enumerate() {
         cpu.bus_mut().write(0x0200 + i as u16, b).unwrap();
@@ -718,7 +763,11 @@ fn mc6850_irq_driven_transmit() {
 
     std::thread::sleep(std::time::Duration::from_millis(1));
     assert_eq!(remote.try_recv(), Some(0x41), "first TX byte should be 'A'");
-    assert_eq!(remote.try_recv(), Some(0x42), "second TX byte should be 'B'");
+    assert_eq!(
+        remote.try_recv(),
+        Some(0x42),
+        "second TX byte should be 'B'"
+    );
     assert_eq!(remote.try_recv(), Some(0x43), "third TX byte should be 'C'");
 }
 
@@ -732,9 +781,16 @@ fn via6522_timer1_sets_ifr() {
     let via = Via6522::new("via6522").with_address(0xE000);
 
     let bus = Bus::config()
-        .ram_with_fill(AddressRange::new(0x0000, 0xDFFF), 0).unwrap()
-        .device(AddressRange::new(0xE000, 0xE00F), DeviceId(1), Box::new(via)).unwrap()
-        .ram_with_fill(AddressRange::new(0xE010, 0xFFFF), 0).unwrap()
+        .ram_with_fill(AddressRange::new(0x0000, 0xDFFF), 0)
+        .unwrap()
+        .device(
+            AddressRange::new(0xE000, 0xE00F),
+            DeviceId(1),
+            Box::new(via),
+        )
+        .unwrap()
+        .ram_with_fill(AddressRange::new(0xE010, 0xFFFF), 0)
+        .unwrap()
         .build();
 
     let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -756,19 +812,9 @@ fn via6522_timer1_sets_ifr() {
     //   AND #$40       29 40
     //   BEQ poll       F0 F8
     //   STP            DB
-    let mut prog: Vec<u8> = vec![
-        0xA9, 0x14,
-        0x8D, 0x06, 0xE0,
-        0xA9, 0x00,
-        0x8D, 0x05, 0xE0,
-    ];
+    let mut prog: Vec<u8> = vec![0xA9, 0x14, 0x8D, 0x06, 0xE0, 0xA9, 0x00, 0x8D, 0x05, 0xE0];
     prog.extend(std::iter::repeat_n(0xEA, 10)); // 10× NOP
-    prog.extend_from_slice(&[
-        0xAD, 0x0D, 0xE0,
-        0x29, 0x40,
-        0xF0, 0xF8,
-        0xDB,
-    ]);
+    prog.extend_from_slice(&[0xAD, 0x0D, 0xE0, 0x29, 0x40, 0xF0, 0xF8, 0xDB]);
 
     for (i, &b) in prog.iter().enumerate() {
         cpu.bus_mut().write(0x0200 + i as u16, b).unwrap();
@@ -781,7 +827,11 @@ fn via6522_timer1_sets_ifr() {
 
     // IFR bit 6 should be set (T1 fired).
     let ifr = cpu.bus_mut().peek(0xE00D).unwrap();
-    assert_ne!(ifr & 0x40, 0, "VIA IFR bit 6 (T1) should be set after timer underflow, got IFR={ifr:#04X}");
+    assert_ne!(
+        ifr & 0x40,
+        0,
+        "VIA IFR bit 6 (T1) should be set after timer underflow, got IFR={ifr:#04X}"
+    );
 }
 
 /// Builds a CPU with a lone MC6840 PTM at $E000, runs `prog`, and returns the resulting
@@ -790,9 +840,16 @@ fn build_cpu_with_mc6840(prog: &[u8]) -> emma65::emulator::Cpu {
     let ptm = Mc6840::new("mc6840").with_address(0xE000);
 
     let bus = Bus::config()
-        .ram_with_fill(AddressRange::new(0x0000, 0xDFFF), 0).unwrap()
-        .device(AddressRange::new(0xE000, 0xE007), DeviceId(1), Box::new(ptm)).unwrap()
-        .ram_with_fill(AddressRange::new(0xE008, 0xFFFF), 0).unwrap()
+        .ram_with_fill(AddressRange::new(0x0000, 0xDFFF), 0)
+        .unwrap()
+        .device(
+            AddressRange::new(0xE000, 0xE007),
+            DeviceId(1),
+            Box::new(ptm),
+        )
+        .unwrap()
+        .ram_with_fill(AddressRange::new(0xE008, 0xFFFF), 0)
+        .unwrap()
         .build();
 
     let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -835,27 +892,21 @@ fn mc6840_continuous_timer_sets_irq() {
     //   BEQ poll       F0 F9
     //   STP            DB
     let mut prog: Vec<u8> = vec![
-        0xA9, 0x42,
-        0x8D, 0x01, 0xE0,
-        0xA9, 0x00,
-        0x8D, 0x04, 0xE0,
-        0xA9, 0x14,
-        0x8D, 0x05, 0xE0,
+        0xA9, 0x42, 0x8D, 0x01, 0xE0, 0xA9, 0x00, 0x8D, 0x04, 0xE0, 0xA9, 0x14, 0x8D, 0x05, 0xE0,
     ];
     prog.extend(std::iter::repeat_n(0xEA, 20)); // 20× NOP
-    prog.extend_from_slice(&[
-        0xAD, 0x01, 0xE0,
-        0x29, 0x80,
-        0xF0, 0xF9,
-        0xDB,
-    ]);
+    prog.extend_from_slice(&[0xAD, 0x01, 0xE0, 0x29, 0x80, 0xF0, 0xF9, 0xDB]);
 
     let mut cpu = build_cpu_with_mc6840(&prog);
 
     step_to_stop(&mut cpu);
 
     let status = cpu.bus_mut().peek(0xE001).unwrap();
-    assert_ne!(status & 0x80, 0, "MC6840 status composite IRQ bit should be set after Timer 2 underflow, got status={status:#04X}");
+    assert_ne!(
+        status & 0x80,
+        0,
+        "MC6840 status composite IRQ bit should be set after Timer 2 underflow, got status={status:#04X}"
+    );
 }
 
 /// MC6840 Timer 2 in single-shot mode fires exactly once after counting down from a known
@@ -879,25 +930,19 @@ fn mc6840_single_shot_timer_sets_irq() {
     //   BEQ poll       F0 F9
     //   STP            DB
     let mut prog: Vec<u8> = vec![
-        0xA9, 0x62,
-        0x8D, 0x01, 0xE0,
-        0xA9, 0x00,
-        0x8D, 0x04, 0xE0,
-        0xA9, 0x14,
-        0x8D, 0x05, 0xE0,
+        0xA9, 0x62, 0x8D, 0x01, 0xE0, 0xA9, 0x00, 0x8D, 0x04, 0xE0, 0xA9, 0x14, 0x8D, 0x05, 0xE0,
     ];
     prog.extend(std::iter::repeat_n(0xEA, 20)); // 20× NOP
-    prog.extend_from_slice(&[
-        0xAD, 0x01, 0xE0,
-        0x29, 0x80,
-        0xF0, 0xF9,
-        0xDB,
-    ]);
+    prog.extend_from_slice(&[0xAD, 0x01, 0xE0, 0x29, 0x80, 0xF0, 0xF9, 0xDB]);
 
     let mut cpu = build_cpu_with_mc6840(&prog);
 
     step_to_stop(&mut cpu);
 
     let status = cpu.bus_mut().peek(0xE001).unwrap();
-    assert_ne!(status & 0x80, 0, "MC6840 status composite IRQ bit should be set after Timer 2 fires, got status={status:#04X}");
+    assert_ne!(
+        status & 0x80,
+        0,
+        "MC6840 status composite IRQ bit should be set after Timer 2 fires, got status={status:#04X}"
+    );
 }

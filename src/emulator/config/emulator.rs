@@ -2,7 +2,9 @@ use super::CpuVariantSpec::{Cmos6502, Wdc6502};
 use super::{DeviceModuleError, DeviceRegistry, DeviceSpec, InstantiationContext};
 use crate::emulator::bus::DeviceIdAllocator;
 use crate::emulator::device::device_event_channel;
-use crate::emulator::{BusConfig, ClockSpeed, Cpu, CpuBuildError, CpuVariant, EmulatorSession, ErrorReceiver};
+use crate::emulator::{
+    BusConfig, ClockSpeed, Cpu, CpuBuildError, CpuVariant, EmulatorSession, ErrorReceiver,
+};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -17,14 +19,12 @@ pub enum CpuVariantSpec {
 }
 
 impl CpuVariantSpec {
-
     fn to_cpu_variant(&self) -> CpuVariant {
         match self {
             Cmos6502 => CpuVariant::Cmos65C02,
             Wdc6502 => CpuVariant::Wdc65C02,
         }
     }
-
 }
 
 impl Display for CpuVariantSpec {
@@ -62,7 +62,6 @@ impl FromStr for CpuVariantSpec {
             _ => Err(format!("Invalid CPU variant '{s}'")),
         }
     }
-
 }
 
 /// An error that occurs during emulator configuration or startup.
@@ -71,19 +70,27 @@ pub enum BuildError {
     /// An error that occurred while creating and configuring the CPU.
     Cpu(CpuBuildError),
     /// An error that occurred while instantiating a device module.
-    Device { module_name: String, address: u16, source: DeviceModuleError },
+    Device {
+        module_name: String,
+        address: u16,
+        source: DeviceModuleError,
+    },
 }
 
 impl Display for BuildError {
-
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             BuildError::Cpu(e) => write!(f, "CPU configuration error: {e}"),
-            BuildError::Device { module_name, address, source } =>
-                write!(f, "failed to configure device '{module_name}' at address {address:#06x}: {source}"),
+            BuildError::Device {
+                module_name,
+                address,
+                source,
+            } => write!(
+                f,
+                "failed to configure device '{module_name}' at address {address:#06x}: {source}"
+            ),
         }
     }
-
 }
 
 #[derive(Debug, Clone, Parser, Serialize, Deserialize)]
@@ -91,7 +98,6 @@ impl Display for BuildError {
 #[serde(rename_all = "kebab-case")]
 /// Configuration attributes for the emulator.
 pub struct Config {
-
     /// Selected CPU variant (e.g. 65C02, WDC65C02).
     #[serde(rename = "cpu-variant", skip_serializing_if = "Option::is_none")]
     #[clap(long = "cpu-variant")]
@@ -106,11 +112,9 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[clap(long = "device", num_args = 1..)]
     pub devices: Option<Vec<DeviceSpec>>,
-
 }
 
 impl Config {
-
     /// Builds an [`EmulatorSession`] using a default [`InstantiationContext`].
     pub async fn build(&self, registry: &DeviceRegistry) -> Result<EmulatorSession, BuildError> {
         let (error_sender, error_receiver) = device_event_channel();
@@ -127,7 +131,11 @@ impl Config {
     /// Use this when the caller needs to inject a pre-created console transport or
     /// supply a custom error sender before building. If `context.error_sender` is
     /// `None`, a new error channel is created and its receiver is stored in the session.
-    pub async fn build_with_context(&self, registry: &DeviceRegistry, context: InstantiationContext) -> Result<EmulatorSession, BuildError> {
+    pub async fn build_with_context(
+        &self,
+        registry: &DeviceRegistry,
+        context: InstantiationContext,
+    ) -> Result<EmulatorSession, BuildError> {
         let (error_sender, error_receiver) = device_event_channel();
         let context = InstantiationContext {
             error_sender: context.error_sender.or(Some(error_sender)),
@@ -136,11 +144,24 @@ impl Config {
         self.build_devices(registry, context, error_receiver).await
     }
 
-    async fn build_devices(&self, registry: &DeviceRegistry, context: InstantiationContext, error_receiver: ErrorReceiver) -> Result<EmulatorSession, BuildError> {
+    async fn build_devices(
+        &self,
+        registry: &DeviceRegistry,
+        context: InstantiationContext,
+        error_receiver: ErrorReceiver,
+    ) -> Result<EmulatorSession, BuildError> {
         let mut bus_config = BusConfig::new();
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
         for spec in self.devices.iter().flatten() {
-            bus_config = registry.instantiate(spec.module_name(), bus_config, spec.address(), spec.attributes(), &context, id_allocator.clone())
+            bus_config = registry
+                .instantiate(
+                    spec.module_name(),
+                    bus_config,
+                    spec.address(),
+                    spec.attributes(),
+                    &context,
+                    id_allocator.clone(),
+                )
                 .await
                 .map_err(|e| BuildError::Device {
                     module_name: spec.module_name().to_string(),
@@ -148,11 +169,17 @@ impl Config {
                     source: e,
                 })?;
         }
-        let variant = self.cpu_variant_spec.as_ref().map_or(CpuVariant::Cmos65C02, CpuVariantSpec::to_cpu_variant);
+        let variant = self
+            .cpu_variant_spec
+            .as_ref()
+            .map_or(CpuVariant::Cmos65C02, CpuVariantSpec::to_cpu_variant);
         let vector_resolver = bus_config.take_vector_resolver();
         let bus = bus_config.build();
         let mut builder = Cpu::builder(variant)
-            .clock_speed(self.clock_speed_hz.map_or(ClockSpeed::unlimited(), ClockSpeed::hz))
+            .clock_speed(
+                self.clock_speed_hz
+                    .map_or(ClockSpeed::unlimited(), ClockSpeed::hz),
+            )
             .bus(bus);
         if let Some(resolver) = vector_resolver {
             builder = builder.vector_resolver(resolver);
@@ -160,10 +187,11 @@ impl Config {
         let cpu = builder.build().map_err(BuildError::Cpu)?;
         let id_allocator = *id_allocator.lock().unwrap();
         Ok(EmulatorSession {
-            cpu, error_receiver, id_allocator
+            cpu,
+            error_receiver,
+            id_allocator,
         })
     }
-
 }
 
 #[cfg(test)]
@@ -185,11 +213,16 @@ mod tests {
             "resolver-installer"
         }
 
-        async fn instantiate(&self, bus_config: BusConfig, _address: u16,
-                             _attributes: &HashMap<String, Value>, _context: &InstantiationContext,
-                             _id_allocator: Arc<Mutex<DeviceIdAllocator>>)
-                -> Result<BusConfig, DeviceModuleError> {
-            bus_config.vector_resolver(Box::new(IdentityVectorResolver))
+        async fn instantiate(
+            &self,
+            bus_config: BusConfig,
+            _address: u16,
+            _attributes: &HashMap<String, Value>,
+            _context: &InstantiationContext,
+            _id_allocator: Arc<Mutex<DeviceIdAllocator>>,
+        ) -> Result<BusConfig, DeviceModuleError> {
+            bus_config
+                .vector_resolver(Box::new(IdentityVectorResolver))
                 .map_err(DeviceModuleError::BusConfig)
         }
     }
@@ -209,7 +242,10 @@ mod tests {
         let err = config.build(&registry).await.err().unwrap();
         assert!(matches!(
             err,
-            BuildError::Device { source: DeviceModuleError::BusConfig(BusConfigError::DuplicateVectorResolver), .. }
+            BuildError::Device {
+                source: DeviceModuleError::BusConfig(BusConfigError::DuplicateVectorResolver),
+                ..
+            }
         ));
     }
 

@@ -2,7 +2,7 @@
 //!
 //! The interrupt controller handles signaling and recognition of the three interrupt
 //! sources defined for the 6502: RESET, NMI, and IRQ.
-//! 
+//!
 //! Tne interrupt controller plays a crucial role in identifying interrupt sources
 //! during CPU step execution. As such the [`poll_devices`](InterruptController::poll_devices)
 //! method, which is called for each instruction executed, must be especially
@@ -32,7 +32,6 @@ use crate::emulator::device::DeviceId;
 /// highest), matching real PIC hardware conventions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct IrqSource(pub u32);
-
 
 impl From<DeviceId> for IrqSource {
     fn from(id: DeviceId) -> Self {
@@ -201,7 +200,6 @@ impl InterruptController {
         );
         source.0
     }
-
 }
 
 impl Default for InterruptController {
@@ -298,7 +296,12 @@ mod tests {
 
     /// Builds a `DeviceInterruptState` tersely for test iterators.
     fn dis(id: u32, irq_active: bool, nmi: bool, reset: bool) -> DeviceInterruptState {
-        DeviceInterruptState { id: DeviceId(id), irq_active, nmi, reset }
+        DeviceInterruptState {
+            id: DeviceId(id),
+            irq_active,
+            nmi,
+            reset,
+        }
     }
 
     #[test]
@@ -441,5 +444,4 @@ mod tests {
         assert!(IrqSource(0) < IrqSource(1));
         assert!(IrqSource(63) > IrqSource(0));
     }
-
 }

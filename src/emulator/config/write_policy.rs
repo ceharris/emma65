@@ -1,7 +1,7 @@
+use crate::emulator::RomWritePolicy;
+use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use serde::{Deserialize, Serialize};
-use crate::emulator::RomWritePolicy;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
@@ -11,14 +11,12 @@ pub enum WritePolicySpec {
 }
 
 impl WritePolicySpec {
-
     pub fn to_rom_write_policy(&self) -> RomWritePolicy {
         match self {
             WritePolicySpec::Ignore => RomWritePolicy::Ignore,
             WritePolicySpec::Error => RomWritePolicy::Error,
         }
     }
-
 }
 
 impl Display for WritePolicySpec {
@@ -31,13 +29,17 @@ impl Display for WritePolicySpec {
 }
 
 impl From<WritePolicySpec> for String {
-    fn from(v: WritePolicySpec) -> Self { v.to_string() }
+    fn from(v: WritePolicySpec) -> Self {
+        v.to_string()
+    }
 }
 
 impl TryFrom<String> for WritePolicySpec {
     type Error = String;
 
-    fn try_from(s: String) -> Result<Self, <WritePolicySpec as TryFrom<String>>::Error> { s.parse() }
+    fn try_from(s: String) -> Result<Self, <WritePolicySpec as TryFrom<String>>::Error> {
+        s.parse()
+    }
 }
 
 impl FromStr for WritePolicySpec {
@@ -49,8 +51,9 @@ impl FromStr for WritePolicySpec {
         match ls {
             "ignore" => Ok(WritePolicySpec::Ignore),
             "error" => Ok(WritePolicySpec::Error),
-            _ => Err(format!("Invalid write policy '{s}'; try 'ignore' or 'error'")),
+            _ => Err(format!(
+                "Invalid write policy '{s}'; try 'ignore' or 'error'"
+            )),
         }
     }
-
 }

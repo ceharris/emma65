@@ -10,10 +10,12 @@ pub struct Variables {
 }
 
 impl Variables {
-
     /// Creates a new variables collection.
     pub fn new() -> Self {
-        Self { map: HashMap::new(), names: Vec::new() }
+        Self {
+            map: HashMap::new(),
+            names: Vec::new(),
+        }
     }
 
     /// Gets the mapping for `name` to the corresponding [`Operand`], if any.
@@ -48,7 +50,6 @@ impl Variables {
     pub fn names(&self) -> &[String] {
         &self.names
     }
-
 }
 
 impl Default for Variables {

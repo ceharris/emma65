@@ -9,8 +9,8 @@ use tauri::State;
 
 use emma65::disassembler::{Disassembler, TraceBusOp, TraceRowAssembler};
 use emma65::emulator::{
-    BinaryTraceReader, BinaryTraceWriter, ChannelTraceCallback, OverflowPolicy,
-    TraceCallback, TraceKind, TraceRecord, spawn_trace_writer,
+    BinaryTraceReader, BinaryTraceWriter, ChannelTraceCallback, OverflowPolicy, TraceCallback,
+    TraceKind, TraceRecord, spawn_trace_writer,
 };
 
 use crate::CpuState;
@@ -39,7 +39,12 @@ pub struct TraceData {
 impl TraceData {
     /// Creates an empty, not-yet-recording state.
     pub fn new() -> Self {
-        Self { path: None, row_index: Arc::new(Mutex::new(Vec::new())), recording: false, writer_handle: None }
+        Self {
+            path: None,
+            row_index: Arc::new(Mutex::new(Vec::new())),
+            recording: false,
+            writer_handle: None,
+        }
     }
 }
 
@@ -145,7 +150,11 @@ pub struct TraceStatus {
 /// Starts recording an execution trace to `path`, spooling records to a
 /// dedicated writer thread. Only callable while the CPU is halted.
 #[tauri::command]
-pub fn record_trace(path: String, cpu_state: State<CpuState>, trace_state: State<TraceState>) -> Result<(), String> {
+pub fn record_trace(
+    path: String,
+    cpu_state: State<CpuState>,
+    trace_state: State<TraceState>,
+) -> Result<(), String> {
     let mut cpu_guard = cpu_state.0.lock().unwrap();
     let cpu = cpu_guard.as_mut().ok_or("CPU not ready")?;
 
@@ -161,8 +170,11 @@ pub fn record_trace(path: String, cpu_state: State<CpuState>, trace_state: State
         spawn_trace_writer(writer, TRACE_CHANNEL_CAPACITY, OverflowPolicy::BlockOnFull);
 
     let row_index = Arc::new(Mutex::new(Vec::new()));
-    let indexing_callback =
-        RowIndexingTraceCallback { inner: callback, row_index: Arc::clone(&row_index), record_count: 0 };
+    let indexing_callback = RowIndexingTraceCallback {
+        inner: callback,
+        row_index: Arc::clone(&row_index),
+        record_count: 0,
+    };
     cpu.set_trace_callback(Some(Box::new(indexing_callback)));
 
     let mut state = trace_state.0.lock().unwrap();
@@ -178,7 +190,10 @@ pub fn record_trace(path: String, cpu_state: State<CpuState>, trace_state: State
 /// writer thread to flush and exit. The recorded file stays browsable via
 /// `get_trace_window`; the next `record_trace` call requires a new path.
 #[tauri::command]
-pub fn stop_trace(cpu_state: State<CpuState>, trace_state: State<TraceState>) -> Result<(), String> {
+pub fn stop_trace(
+    cpu_state: State<CpuState>,
+    trace_state: State<TraceState>,
+) -> Result<(), String> {
     let mut cpu_guard = cpu_state.0.lock().unwrap();
     let cpu = cpu_guard.as_mut().ok_or("CPU not ready")?;
     cpu.set_trace_callback(None);
@@ -215,7 +230,10 @@ pub fn get_trace_window(
         let row_offsets = state.row_index.lock().unwrap();
         let total_rows = row_offsets.len();
         if total_rows == 0 {
-            return Ok(TraceWindowPage { rows: Vec::new(), total_rows: 0 });
+            return Ok(TraceWindowPage {
+                rows: Vec::new(),
+                total_rows: 0,
+            });
         }
         let start_row = start_row.min(total_rows - 1);
         (total_rows, start_row, row_offsets[start_row])
@@ -225,7 +243,9 @@ pub fn get_trace_window(
     // viewport-sized fetch is cheap relative to a UI-paced scroll/poll action.
     let file = File::open(path).map_err(|e| e.to_string())?;
     let mut reader = BinaryTraceReader::new(file).map_err(|e| e.to_string())?;
-    reader.seek_to_record(seek_record).map_err(|e| e.to_string())?;
+    reader
+        .seek_to_record(seek_record)
+        .map_err(|e| e.to_string())?;
 
     let mut assembler = TraceRowAssembler::new(cpu.variant(), cpu.bus().symbol_table().clone());
     let mut rows = Vec::with_capacity(count.min(total_rows - start_row));
@@ -257,7 +277,12 @@ pub fn get_trace_window(
             rows.push(TraceRowDto {
                 seq: row.instr_id + 1,
                 addr: row.line.addr,
-                bytes: row.line.raw_bytes.iter().map(|b| format!("{b:02X}")).collect(),
+                bytes: row
+                    .line
+                    .raw_bytes
+                    .iter()
+                    .map(|b| format!("{b:02X}"))
+                    .collect(),
                 labels: row.line.labels,
                 mnemonic: row.line.mnemonic.to_string(),
                 operand: row.line.operand_text,
@@ -283,5 +308,8 @@ pub fn get_trace_window(
 #[tauri::command]
 pub fn get_trace_status(trace_state: State<TraceState>) -> TraceStatus {
     let state = trace_state.0.lock().unwrap();
-    TraceStatus { recording: state.recording, path: state.path.as_ref().map(|p| p.display().to_string()) }
+    TraceStatus {
+        recording: state.recording,
+        path: state.path.as_ref().map(|p| p.display().to_string()),
+    }
 }

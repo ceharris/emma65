@@ -70,11 +70,16 @@ pub struct WatchpointsSnapshot {
 /// Loads and compiles `dir/watchpoints.emw` against `symbol_table`, along with
 /// each watchpoint's enabled state from `dir/watchpoints.enabled`. A missing
 /// `.emw` file means zero watchpoints, not an error.
-pub fn load_watchpoints_from(dir: &Path, symbol_table: &SymbolTable) -> Result<(WatchEvaluator, Vec<bool>), String> {
+pub fn load_watchpoints_from(
+    dir: &Path,
+    symbol_table: &SymbolTable,
+) -> Result<(WatchEvaluator, Vec<bool>), String> {
     let path = dir.join("watchpoints.emw");
     let source = match std::fs::read_to_string(&path) {
         Ok(s) => s,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((WatchEvaluator::new(), Vec::new())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok((WatchEvaluator::new(), Vec::new()));
+        }
         Err(e) => return Err(format!("{}: {e}", path.display())),
     };
     let table = symbol_table.clone();
@@ -84,8 +89,15 @@ pub fn load_watchpoints_from(dir: &Path, symbol_table: &SymbolTable) -> Result<(
     let mut evaluator = WatchEvaluator::new();
     let (watchpoints, errors) = compiler.compile_all(&source, &mut evaluator);
     if !errors.is_empty() {
-        let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("watchpoints.emw");
-        let message = errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("\n");
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("watchpoints.emw");
+        let message = errors
+            .iter()
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
         return Err(format!("{filename}: {message}"));
     }
     let count = watchpoints.len();
@@ -104,7 +116,11 @@ fn load_enabled_from(dir: &Path, count: usize) -> Vec<bool> {
     match std::fs::read_to_string(&path) {
         Ok(contents) => {
             let flags: Vec<bool> = contents.lines().map(|line| line.trim() == "1").collect();
-            if flags.len() == count { flags } else { vec![true; count] }
+            if flags.len() == count {
+                flags
+            } else {
+                vec![true; count]
+            }
         }
         Err(_) => vec![true; count],
     }
@@ -122,11 +138,19 @@ fn load_enabled_from(dir: &Path, count: usize) -> Vec<bool> {
 /// meaningless to the user.
 fn build_snapshot(cpu: Option<&Cpu>, watch: &mut WatchData) -> WatchpointsSnapshot {
     if let Some(err) = &watch.compile_error {
-        return WatchpointsSnapshot { compile_error: Some(err.clone()), rows: Vec::new(), variables: Vec::new() };
+        return WatchpointsSnapshot {
+            compile_error: Some(err.clone()),
+            rows: Vec::new(),
+            variables: Vec::new(),
+        };
     }
     let Some(cpu) = cpu else {
         let variables = collect_variables(&watch.evaluator);
-        return WatchpointsSnapshot { compile_error: None, rows: Vec::new(), variables };
+        return WatchpointsSnapshot {
+            compile_error: None,
+            rows: Vec::new(),
+            variables,
+        };
     };
     let results = cpu.evaluate_watchpoints(&mut watch.evaluator);
     let rows = watch
@@ -137,12 +161,20 @@ fn build_snapshot(cpu: Option<&Cpu>, watch: &mut WatchData) -> WatchpointsSnapsh
         .zip(watch.enabled.iter().copied())
         .map(|((wp, result), enabled)| {
             if !enabled {
-                return WatchpointRow { source: wp.source().to_string(), triggered: false, error: None, enabled };
+                return WatchpointRow {
+                    source: wp.source().to_string(),
+                    triggered: false,
+                    error: None,
+                    enabled,
+                };
             }
             match result {
-                Ok(value) => {
-                    WatchpointRow { source: wp.source().to_string(), triggered: value != 0, error: None, enabled }
-                }
+                Ok(value) => WatchpointRow {
+                    source: wp.source().to_string(),
+                    triggered: value != 0,
+                    error: None,
+                    enabled,
+                },
                 Err(e) => WatchpointRow {
                     source: wp.source().to_string(),
                     triggered: false,
@@ -153,13 +185,24 @@ fn build_snapshot(cpu: Option<&Cpu>, watch: &mut WatchData) -> WatchpointsSnapsh
         })
         .collect();
     let variables = collect_variables(&watch.evaluator);
-    WatchpointsSnapshot { compile_error: None, rows, variables }
+    WatchpointsSnapshot {
+        compile_error: None,
+        rows,
+        variables,
+    }
 }
 
 /// Snapshots `evaluator`'s current watch variables as owned `VariableRow`s,
 /// in the order each was first introduced by a walrus assignment.
 fn collect_variables(evaluator: &WatchEvaluator) -> Vec<VariableRow> {
-    evaluator.named_variables().into_iter().map(|(name, value)| VariableRow { name: name.to_string(), value }).collect()
+    evaluator
+        .named_variables()
+        .into_iter()
+        .map(|(name, value)| VariableRow {
+            name: name.to_string(),
+            value,
+        })
+        .collect()
 }
 
 /// Rebuilds `cpu`'s own watch evaluator — the one `Cpu::step()` consults to
@@ -172,7 +215,11 @@ fn collect_variables(evaluator: &WatchEvaluator) -> Vec<VariableRow> {
 /// `Watchpoint` values, since the two evaluators keep independent variable
 /// storage (`evaluator`'s display re-evaluation must never perturb the state
 /// `step()` relies on for real halting).
-pub fn sync_cpu_evaluator(cpu: &mut Cpu, evaluator: &WatchEvaluator, enabled: &[bool]) -> Result<(), String> {
+pub fn sync_cpu_evaluator(
+    cpu: &mut Cpu,
+    evaluator: &WatchEvaluator,
+    enabled: &[bool],
+) -> Result<(), String> {
     let table = cpu.bus().symbol_table().clone();
     let mut compiler = WatchCompiler::new(map_register_name, map_flag_name, move |name| {
         table.address_for(name).map(|a| a as u32)
@@ -187,7 +234,9 @@ pub fn sync_cpu_evaluator(cpu: &mut Cpu, evaluator: &WatchEvaluator, enabled: &[
     let exec_evaluator = cpu.evaluator_mut();
     exec_evaluator.clear();
     for source in sources {
-        let wp = compiler.compile(source, exec_evaluator).map_err(|e| e.to_string())?;
+        let wp = compiler
+            .compile(source, exec_evaluator)
+            .map_err(|e| e.to_string())?;
         exec_evaluator.add(wp);
     }
     Ok(())
@@ -197,20 +246,35 @@ pub fn sync_cpu_evaluator(cpu: &mut Cpu, evaluator: &WatchEvaluator, enabled: &[
 /// semicolon-terminated expression per line, and `enabled` to
 /// `dir/watchpoints.enabled`, one `1`/`0` line per watchpoint, both in
 /// display order.
-fn save_watchpoints_to(dir: &Path, evaluator: &WatchEvaluator, enabled: &[bool]) -> Result<(), String> {
+fn save_watchpoints_to(
+    dir: &Path,
+    evaluator: &WatchEvaluator,
+    enabled: &[bool],
+) -> Result<(), String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("Failed to create config directory: {e}"))?;
     let path = dir.join("watchpoints.emw");
-    let contents: String = evaluator.watchpoints().iter().map(|wp| format!("{};\n", wp.source())).collect();
+    let contents: String = evaluator
+        .watchpoints()
+        .iter()
+        .map(|wp| format!("{};\n", wp.source()))
+        .collect();
     std::fs::write(&path, contents).map_err(|e| format!("{}: {e}", path.display()))?;
     let enabled_path = dir.join("watchpoints.enabled");
-    let enabled_contents: String = enabled.iter().map(|&e| if e { "1\n" } else { "0\n" }).collect();
-    std::fs::write(&enabled_path, enabled_contents).map_err(|e| format!("{}: {e}", enabled_path.display()))
+    let enabled_contents: String = enabled
+        .iter()
+        .map(|&e| if e { "1\n" } else { "0\n" })
+        .collect();
+    std::fs::write(&enabled_path, enabled_contents)
+        .map_err(|e| format!("{}: {e}", enabled_path.display()))
 }
 
 /// Evaluates all loaded watchpoints against the current CPU state and
 /// returns a fresh snapshot for the panel to render.
 #[tauri::command]
-pub fn get_watchpoints(cpu_state: State<CpuState>, watch_state: State<WatchState>) -> WatchpointsSnapshot {
+pub fn get_watchpoints(
+    cpu_state: State<CpuState>,
+    watch_state: State<WatchState>,
+) -> WatchpointsSnapshot {
     let mut watch = watch_state.0.lock().unwrap();
     let cpu_guard = cpu_state.0.lock().unwrap();
     build_snapshot(cpu_guard.as_ref(), &mut watch)
@@ -230,7 +294,9 @@ pub fn add_watchpoint(
 ) -> Result<WatchpointsSnapshot, String> {
     let mut watch = watch_state.0.lock().unwrap();
     if watch.compile_error.is_some() {
-        return Err("watchpoints.emw has a compile error; fix it before adding watchpoints".to_string());
+        return Err(
+            "watchpoints.emw has a compile error; fix it before adding watchpoints".to_string(),
+        );
     }
     let mut cpu_guard = cpu_state.0.lock().unwrap();
     let cpu = cpu_guard.as_mut().ok_or("CPU not ready")?;
@@ -238,11 +304,17 @@ pub fn add_watchpoint(
     let mut compiler = WatchCompiler::new(map_register_name, map_flag_name, move |name| {
         table.address_for(name).map(|a| a as u32)
     });
-    let watchpoint = compiler.compile(&source, &mut watch.evaluator).map_err(|e| e.to_string())?;
+    let watchpoint = compiler
+        .compile(&source, &mut watch.evaluator)
+        .map_err(|e| e.to_string())?;
     watch.evaluator.add(watchpoint);
     watch.enabled.push(true);
     sync_cpu_evaluator(cpu, &watch.evaluator, &watch.enabled)?;
-    save_watchpoints_to(&profile_dir.0.lock().unwrap().clone(), &watch.evaluator, &watch.enabled)?;
+    save_watchpoints_to(
+        &profile_dir.0.lock().unwrap().clone(),
+        &watch.evaluator,
+        &watch.enabled,
+    )?;
     Ok(build_snapshot(Some(cpu), &mut watch))
 }
 
@@ -257,7 +329,9 @@ pub fn remove_watchpoint(
 ) -> Result<WatchpointsSnapshot, String> {
     let mut watch = watch_state.0.lock().unwrap();
     if watch.compile_error.is_some() {
-        return Err("watchpoints.emw has a compile error; fix it before removing watchpoints".to_string());
+        return Err(
+            "watchpoints.emw has a compile error; fix it before removing watchpoints".to_string(),
+        );
     }
     if index >= watch.evaluator.watchpoints().len() {
         return Err("Invalid watchpoint index".to_string());
@@ -268,7 +342,11 @@ pub fn remove_watchpoint(
     if let Some(cpu) = cpu_guard.as_mut() {
         sync_cpu_evaluator(cpu, &watch.evaluator, &watch.enabled)?;
     }
-    save_watchpoints_to(&profile_dir.0.lock().unwrap().clone(), &watch.evaluator, &watch.enabled)?;
+    save_watchpoints_to(
+        &profile_dir.0.lock().unwrap().clone(),
+        &watch.evaluator,
+        &watch.enabled,
+    )?;
     Ok(build_snapshot(cpu_guard.as_ref(), &mut watch))
 }
 
@@ -280,14 +358,19 @@ pub fn remove_watchpoint(
 /// place) keeps variable IDs consistent: the compiler assigns them by source
 /// order, and a walrus assignment in one watchpoint must resolve to the same
 /// ID when read by a later one.
-fn recompile_sources(sources: &[String], symbol_table: &SymbolTable) -> Result<WatchEvaluator, String> {
+fn recompile_sources(
+    sources: &[String],
+    symbol_table: &SymbolTable,
+) -> Result<WatchEvaluator, String> {
     let table = symbol_table.clone();
     let mut compiler = WatchCompiler::new(map_register_name, map_flag_name, move |name| {
         table.address_for(name).map(|a| a as u32)
     });
     let mut evaluator = WatchEvaluator::new();
     for source in sources {
-        let wp = compiler.compile(source, &mut evaluator).map_err(|e| e.to_string())?;
+        let wp = compiler
+            .compile(source, &mut evaluator)
+            .map_err(|e| e.to_string())?;
         evaluator.add(wp);
     }
     Ok(evaluator)
@@ -309,18 +392,29 @@ pub fn edit_watchpoint(
 ) -> Result<WatchpointsSnapshot, String> {
     let mut watch = watch_state.0.lock().unwrap();
     if watch.compile_error.is_some() {
-        return Err("watchpoints.emw has a compile error; fix it before editing watchpoints".to_string());
+        return Err(
+            "watchpoints.emw has a compile error; fix it before editing watchpoints".to_string(),
+        );
     }
     if index >= watch.evaluator.watchpoints().len() {
         return Err("Invalid watchpoint index".to_string());
     }
     let mut cpu_guard = cpu_state.0.lock().unwrap();
     let cpu = cpu_guard.as_mut().ok_or("CPU not ready")?;
-    let mut sources: Vec<String> = watch.evaluator.watchpoints().iter().map(|wp| wp.source().to_string()).collect();
+    let mut sources: Vec<String> = watch
+        .evaluator
+        .watchpoints()
+        .iter()
+        .map(|wp| wp.source().to_string())
+        .collect();
     sources[index] = source;
     watch.evaluator = recompile_sources(&sources, cpu.bus().symbol_table())?;
     sync_cpu_evaluator(cpu, &watch.evaluator, &watch.enabled)?;
-    save_watchpoints_to(&profile_dir.0.lock().unwrap().clone(), &watch.evaluator, &watch.enabled)?;
+    save_watchpoints_to(
+        &profile_dir.0.lock().unwrap().clone(),
+        &watch.evaluator,
+        &watch.enabled,
+    )?;
     Ok(build_snapshot(Some(cpu), &mut watch))
 }
 
@@ -339,7 +433,9 @@ pub fn toggle_watchpoint(
 ) -> Result<WatchpointsSnapshot, String> {
     let mut watch = watch_state.0.lock().unwrap();
     if watch.compile_error.is_some() {
-        return Err("watchpoints.emw has a compile error; fix it before editing watchpoints".to_string());
+        return Err(
+            "watchpoints.emw has a compile error; fix it before editing watchpoints".to_string(),
+        );
     }
     let Some(enabled) = watch.enabled.get_mut(index) else {
         return Err("Invalid watchpoint index".to_string());
@@ -349,7 +445,11 @@ pub fn toggle_watchpoint(
     if let Some(cpu) = cpu_guard.as_mut() {
         sync_cpu_evaluator(cpu, &watch.evaluator, &watch.enabled)?;
     }
-    save_watchpoints_to(&profile_dir.0.lock().unwrap().clone(), &watch.evaluator, &watch.enabled)?;
+    save_watchpoints_to(
+        &profile_dir.0.lock().unwrap().clone(),
+        &watch.evaluator,
+        &watch.enabled,
+    )?;
     Ok(build_snapshot(cpu_guard.as_ref(), &mut watch))
 }
 
@@ -361,7 +461,10 @@ mod tests {
 
     /// Builds a CPU with 64KB RAM and a reset vector pointing to `start`.
     fn make_cpu(start: u16) -> Cpu {
-        let mut bus = Bus::config().ram_with_fill(AddressRange::new(0x0000, 0xFFFF), 0).unwrap().build();
+        let mut bus = Bus::config()
+            .ram_with_fill(AddressRange::new(0x0000, 0xFFFF), 0)
+            .unwrap()
+            .build();
         bus.write(0xFFFC, (start & 0xFF) as u8).unwrap();
         bus.write(0xFFFD, (start >> 8) as u8).unwrap();
         let mut cpu = Cpu::builder(CpuVariant::Wdc65C02).bus(bus).build().unwrap();
@@ -439,7 +542,10 @@ mod tests {
                 break;
             }
         }
-        assert!(!halted, "a disabled watchpoint must not halt execution even though its expression is true");
+        assert!(
+            !halted,
+            "a disabled watchpoint must not halt execution even though its expression is true"
+        );
     }
 
     #[test]
@@ -449,7 +555,11 @@ mod tests {
         cpu.bus_mut().write(0x0201, 0x2A).unwrap();
         cpu.step(None, true);
 
-        let mut watch = WatchData { evaluator: evaluator_with(&["x := X"]), compile_error: None, enabled: vec![true] };
+        let mut watch = WatchData {
+            evaluator: evaluator_with(&["x := X"]),
+            compile_error: None,
+            enabled: vec![true],
+        };
         let snapshot = build_snapshot(Some(&cpu), &mut watch);
         assert_eq!(snapshot.variables.len(), 1);
         assert_eq!(snapshot.variables[0].name, "x");
@@ -458,14 +568,22 @@ mod tests {
 
     #[test]
     fn build_snapshot_omits_variables_on_compile_error() {
-        let mut watch = WatchData { evaluator: WatchEvaluator::new(), compile_error: Some("bad".to_string()), enabled: Vec::new() };
+        let mut watch = WatchData {
+            evaluator: WatchEvaluator::new(),
+            compile_error: Some("bad".to_string()),
+            enabled: Vec::new(),
+        };
         let snapshot = build_snapshot(None, &mut watch);
         assert!(snapshot.variables.is_empty());
     }
 
     #[test]
     fn build_snapshot_reports_variables_even_when_cpu_is_not_ready() {
-        let mut watch = WatchData { evaluator: evaluator_with(&["x := A"]), compile_error: None, enabled: vec![true] };
+        let mut watch = WatchData {
+            evaluator: evaluator_with(&["x := A"]),
+            compile_error: None,
+            enabled: vec![true],
+        };
         let snapshot = build_snapshot(None, &mut watch);
         assert!(snapshot.rows.is_empty());
         assert_eq!(snapshot.variables.len(), 1);
@@ -478,7 +596,11 @@ mod tests {
         // assignment must disappear from the panel's variables section once
         // the watchpoint that assigned it is removed, not linger with its
         // last value.
-        let mut watch = WatchData { evaluator: evaluator_with(&["x := A"]), compile_error: None, enabled: vec![true] };
+        let mut watch = WatchData {
+            evaluator: evaluator_with(&["x := A"]),
+            compile_error: None,
+            enabled: vec![true],
+        };
         watch.evaluator.remove(0);
         watch.enabled.remove(0);
         let snapshot = build_snapshot(None, &mut watch);
@@ -487,9 +609,17 @@ mod tests {
 
     #[test]
     fn recompile_sources_replaces_one_source_and_preserves_order() {
-        let sources = vec!["A == 0".to_string(), "X == 1".to_string(), "Y == 2".to_string()];
+        let sources = vec![
+            "A == 0".to_string(),
+            "X == 1".to_string(),
+            "Y == 2".to_string(),
+        ];
         let evaluator = recompile_sources(&sources, &SymbolTable::new()).unwrap();
-        let got: Vec<&str> = evaluator.watchpoints().iter().map(|wp| wp.source()).collect();
+        let got: Vec<&str> = evaluator
+            .watchpoints()
+            .iter()
+            .map(|wp| wp.source())
+            .collect();
         assert_eq!(got, sources);
     }
 
@@ -501,7 +631,10 @@ mod tests {
 
     /// Returns a fresh, uniquely-named temp directory for one test's config files.
     fn temp_dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("emma65-watchpoints-test-{name}-{:?}", std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!(
+            "emma65-watchpoints-test-{name}-{:?}",
+            std::thread::current().id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -551,7 +684,11 @@ mod tests {
         let evaluator = evaluator_with(&["A == 0", "X == 1"]);
         save_watchpoints_to(&dir, &evaluator, &[true, false]).unwrap();
         let (reloaded, enabled) = load_watchpoints_from(&dir, &SymbolTable::new()).unwrap();
-        let sources: Vec<&str> = reloaded.watchpoints().iter().map(|wp| wp.source()).collect();
+        let sources: Vec<&str> = reloaded
+            .watchpoints()
+            .iter()
+            .map(|wp| wp.source())
+            .collect();
         assert_eq!(sources, vec!["A == 0", "X == 1"]);
         assert_eq!(enabled, vec![true, false]);
         let _ = std::fs::remove_dir_all(&dir);

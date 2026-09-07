@@ -133,7 +133,9 @@ impl RecentMenuState {
     /// after either half of the gate changes.
     fn recompute_enabled(&self) {
         let gate = self.gate.lock().unwrap();
-        let _ = self.submenu.set_enabled(gate.has_recent && gate.cpu_stopped);
+        let _ = self
+            .submenu
+            .set_enabled(gate.has_recent && gate.cpu_stopped);
     }
 }
 
@@ -274,14 +276,31 @@ pub fn build_menu(
     // #351): the main window is the only one carrying this menu, and Ctrl+Q
     // is handled locally in `App.tsx` rather than via the cross-window
     // `APP_KEY_BINDINGS` array.
-    let new_profile_item = MenuItem::with_id(app, NEW_PROFILE_ID, "New Profile", true, Some("CmdOrCtrl+N"))?;
-    let open_profile_item = MenuItem::with_id(app, OPEN_PROFILE_ID, "Open Profile", true, Some("CmdOrCtrl+O"))?;
+    let new_profile_item = MenuItem::with_id(
+        app,
+        NEW_PROFILE_ID,
+        "New Profile",
+        true,
+        Some("CmdOrCtrl+N"),
+    )?;
+    let open_profile_item = MenuItem::with_id(
+        app,
+        OPEN_PROFILE_ID,
+        "Open Profile",
+        true,
+        Some("CmdOrCtrl+O"),
+    )?;
     // Enabled state (CPU must be stopped, since each of these tears down and
     // rebuilds the active session) is pushed from the frontend via
     // `set_profile_menu_enabled`, not tracked here — same pattern as the Run
     // menu's items above.
-    let reload_profile_item =
-        MenuItem::with_id(app, RELOAD_PROFILE_ID, "Reload Profile", true, Some("CmdOrCtrl+Shift+R"))?;
+    let reload_profile_item = MenuItem::with_id(
+        app,
+        RELOAD_PROFILE_ID,
+        "Reload Profile",
+        true,
+        Some("CmdOrCtrl+Shift+R"),
+    )?;
     let open_recent_submenu = Submenu::with_id(app, "open-recent", "Open Recent", false)?;
     let exit_item = MenuItem::with_id(app, EXIT_ID, "Exit", true, Some("CmdOrCtrl+Q"))?;
     let separator = PredefinedMenuItem::separator(app)?;
@@ -359,7 +378,13 @@ pub fn build_menu(
     ];
     let view_menu = Submenu::new(app, "View", true)?;
     for (id, label) in view_panels {
-        let item = MenuItem::with_id(app, format!("{VIEW_PANEL_ID_PREFIX}{id}"), label, true, None::<&str>)?;
+        let item = MenuItem::with_id(
+            app,
+            format!("{VIEW_PANEL_ID_PREFIX}{id}"),
+            label,
+            true,
+            None::<&str>,
+        )?;
         view_menu.append(&item)?;
     }
 
@@ -378,14 +403,27 @@ pub fn build_menu(
     let stop_item = MenuItem::with_id(app, STOP_CPU_ID, "Stop", true, Some("Shift+F5"))?;
     let step_into_item = MenuItem::with_id(app, STEP_INTO_ID, "Step Into", true, Some("F11"))?;
     let step_over_item = MenuItem::with_id(app, STEP_OVER_ID, "Step Over", true, Some("F10"))?;
-    let step_return_item = MenuItem::with_id(app, STEP_RETURN_ID, "Step Return", true, Some("Shift+F11"))?;
-    let toggle_auto_step_item =
-        MenuItem::with_id(app, TOGGLE_AUTO_STEP_ID, "Toggle Auto-Step", true, Some("CmdOrCtrl+Shift+F5"))?;
+    let step_return_item =
+        MenuItem::with_id(app, STEP_RETURN_ID, "Step Return", true, Some("Shift+F11"))?;
+    let toggle_auto_step_item = MenuItem::with_id(
+        app,
+        TOGGLE_AUTO_STEP_ID,
+        "Toggle Auto-Step",
+        true,
+        Some("CmdOrCtrl+Shift+F5"),
+    )?;
     let run_menu = Submenu::with_items(
         app,
         "Run",
         true,
-        &[&run_item, &stop_item, &step_into_item, &step_over_item, &step_return_item, &toggle_auto_step_item],
+        &[
+            &run_item,
+            &stop_item,
+            &step_into_item,
+            &step_over_item,
+            &step_return_item,
+            &toggle_auto_step_item,
+        ],
     )?;
 
     // Replaces the Memory panel's own header button row (issue #411) with a
@@ -398,10 +436,34 @@ pub fn build_menu(
     // (Load/Fill) are discarded outright rather than remapped, since Edit no
     // longer needs two separate entry points now that its dialog carries its
     // own Hexadecimal/ASCII-Unicode Text radio group.
-    let load_memory_item = MenuItem::with_id(app, LOAD_MEMORY_ID, "Load from File…", true, Some("CmdOrCtrl+L"))?;
-    let save_memory_item = MenuItem::with_id(app, SAVE_MEMORY_ID, "Save to File…", true, Some("CmdOrCtrl+S"))?;
-    let edit_memory_item = MenuItem::with_id(app, EDIT_MEMORY_ID, "Edit…", true, Some("CmdOrCtrl+Shift+E"))?;
-    let fill_memory_item = MenuItem::with_id(app, FILL_MEMORY_ID, "Fill…", true, Some("CmdOrCtrl+Shift+F"))?;
+    let load_memory_item = MenuItem::with_id(
+        app,
+        LOAD_MEMORY_ID,
+        "Load from File…",
+        true,
+        Some("CmdOrCtrl+L"),
+    )?;
+    let save_memory_item = MenuItem::with_id(
+        app,
+        SAVE_MEMORY_ID,
+        "Save to File…",
+        true,
+        Some("CmdOrCtrl+S"),
+    )?;
+    let edit_memory_item = MenuItem::with_id(
+        app,
+        EDIT_MEMORY_ID,
+        "Edit…",
+        true,
+        Some("CmdOrCtrl+Shift+E"),
+    )?;
+    let fill_memory_item = MenuItem::with_id(
+        app,
+        FILL_MEMORY_ID,
+        "Fill…",
+        true,
+        Some("CmdOrCtrl+Shift+F"),
+    )?;
     let memory_separator_1 = PredefinedMenuItem::separator(app)?;
     let memory_separator_2 = PredefinedMenuItem::separator(app)?;
     let memory_menu = Submenu::with_items(
@@ -446,27 +508,49 @@ pub fn build_menu(
     // at startup, if the persisted layout says Terminal was left detached). Bringing a
     // dismissed-while-docked Terminal tab back (issue #393) is instead View > Terminal's
     // job, alongside the other eight panels — see `on_menu_event` in `lib.rs`.
-    let terminal_item = MenuItem::with_id(app, TOGGLE_TERMINAL_ID, "Detach Terminal…", true, Some("Ctrl+Shift+T"))?;
+    let terminal_item = MenuItem::with_id(
+        app,
+        TOGGLE_TERMINAL_ID,
+        "Detach Terminal…",
+        true,
+        Some("Ctrl+Shift+T"),
+    )?;
 
     // Same toggle-label pattern as `terminal_item` above (memory-mapped display device plan,
     // Work Unit 4), with its own accelerator letter (`D`) to avoid colliding with Terminal's —
     // same GTK consumed-modifier reasoning documented on `terminal_item` rules out a
     // punctuation-based combo here too.
-    let display_item = MenuItem::with_id(app, TOGGLE_DISPLAY_ID, "Detach Display…", true, Some("Ctrl+Shift+D"))?;
+    let display_item = MenuItem::with_id(
+        app,
+        TOGGLE_DISPLAY_ID,
+        "Detach Display…",
+        true,
+        Some("Ctrl+Shift+D"),
+    )?;
 
     // Same toggle-label pattern as `terminal_item`/`display_item` above (memory-mapped LED
     // matrix device plan, Work Unit 4), with its own accelerator letter (`M`) to avoid colliding
     // with Terminal's/Display's — same GTK consumed-modifier reasoning documented on
     // `terminal_item` rules out a punctuation-based combo here too.
-    let led_matrix_item =
-        MenuItem::with_id(app, TOGGLE_LED_MATRIX_ID, "Detach LED Matrix…", true, Some("Ctrl+Shift+M"))?;
+    let led_matrix_item = MenuItem::with_id(
+        app,
+        TOGGLE_LED_MATRIX_ID,
+        "Detach LED Matrix…",
+        true,
+        Some("Ctrl+Shift+M"),
+    )?;
 
     // Same toggle-label pattern as `terminal_item`/`display_item`/`led_matrix_item` above
     // (memory-mapped LCD display device plan, Work Unit 4), with its own accelerator letter
     // (`I`, for "LCD") to avoid colliding with the others — same GTK consumed-modifier reasoning
     // documented on `terminal_item` rules out a punctuation-based combo here too.
-    let lcd_display_item =
-        MenuItem::with_id(app, TOGGLE_LCD_DISPLAY_ID, "Detach LCD Display…", true, Some("Ctrl+Shift+I"))?;
+    let lcd_display_item = MenuItem::with_id(
+        app,
+        TOGGLE_LCD_DISPLAY_ID,
+        "Detach LCD Display…",
+        true,
+        Some("Ctrl+Shift+I"),
+    )?;
 
     // Bottom of the Window menu, set off by its own separator (issue #398):
     // discards every panel's current position/size, restoring the same
@@ -475,7 +559,13 @@ pub fn build_menu(
     // confirmation modal; the actual reset happens via the `restore_dock_layout`
     // command once the user confirms (see `layout.rs`).
     let window_separator = PredefinedMenuItem::separator(app)?;
-    let restore_layout_item = MenuItem::with_id(app, RESTORE_LAYOUT_ID, "Restore Layout…", true, None::<&str>)?;
+    let restore_layout_item = MenuItem::with_id(
+        app,
+        RESTORE_LAYOUT_ID,
+        "Restore Layout…",
+        true,
+        None::<&str>,
+    )?;
     let window_menu = Submenu::with_items(
         app,
         "Window",
@@ -514,11 +604,15 @@ pub fn build_menu(
     // between this menu and the panel's own header button from Unit 3, both
     // funneled through `AssemblerPanel.tsx`'s single `runAssemble` handler.
     let new_assembler_item = MenuItem::with_id(app, NEW_ASSEMBLER_ID, "New", true, Some("Alt+N"))?;
-    let open_assembler_item = MenuItem::with_id(app, OPEN_ASSEMBLER_ID, "Open…", true, Some("Alt+O"))?;
-    let save_assembler_item = MenuItem::with_id(app, SAVE_ASSEMBLER_ID, "Save", true, Some("Alt+S"))?;
-    let save_as_assembler_item = MenuItem::with_id(app, SAVE_AS_ASSEMBLER_ID, "Save As…", true, None::<&str>)?;
+    let open_assembler_item =
+        MenuItem::with_id(app, OPEN_ASSEMBLER_ID, "Open…", true, Some("Alt+O"))?;
+    let save_assembler_item =
+        MenuItem::with_id(app, SAVE_ASSEMBLER_ID, "Save", true, Some("Alt+S"))?;
+    let save_as_assembler_item =
+        MenuItem::with_id(app, SAVE_AS_ASSEMBLER_ID, "Save As…", true, None::<&str>)?;
     let assembler_separator = PredefinedMenuItem::separator(app)?;
-    let assemble_load_item = MenuItem::with_id(app, ASSEMBLE_LOAD_ID, "Assemble…", true, Some("F9"))?;
+    let assemble_load_item =
+        MenuItem::with_id(app, ASSEMBLE_LOAD_ID, "Assemble…", true, Some("F9"))?;
     let assembler_menu = Submenu::with_items(
         app,
         "Assembler",
@@ -535,17 +629,42 @@ pub fn build_menu(
 
     let menu = Menu::with_items(
         app,
-        &[&file_menu, &edit_menu, &view_menu, &run_menu, &memory_menu, &assembler_menu, &window_menu, &help_menu],
+        &[
+            &file_menu,
+            &edit_menu,
+            &view_menu,
+            &run_menu,
+            &memory_menu,
+            &assembler_menu,
+            &window_menu,
+            &help_menu,
+        ],
     )?;
 
     Ok((
         menu,
-        WindowMenuState { exit_item, terminal_item, display_item, led_matrix_item, lcd_display_item },
+        WindowMenuState {
+            exit_item,
+            terminal_item,
+            display_item,
+            led_matrix_item,
+            lcd_display_item,
+        },
         RecentMenuState {
             submenu: open_recent_submenu,
-            gate: Mutex::new(RecentMenuGate { has_recent: false, cpu_stopped: true }),
+            gate: Mutex::new(RecentMenuGate {
+                has_recent: false,
+                cpu_stopped: true,
+            }),
         },
-        RunMenuState { run_item, stop_item, step_into_item, step_over_item, step_return_item, toggle_auto_step_item },
+        RunMenuState {
+            run_item,
+            stop_item,
+            step_into_item,
+            step_over_item,
+            step_return_item,
+            toggle_auto_step_item,
+        },
         MemoryMenuState {
             load_item: load_memory_item,
             save_item: save_memory_item,
@@ -553,8 +672,16 @@ pub fn build_menu(
             fill_item: fill_memory_item,
         },
         AssemblerMenuState { assemble_load_item },
-        EditMenuState { cut_item, copy_item, paste_item },
-        ProfileMenuState { new_item: new_profile_item, open_item: open_profile_item, reload_item: reload_profile_item },
+        EditMenuState {
+            cut_item,
+            copy_item,
+            paste_item,
+        },
+        ProfileMenuState {
+            new_item: new_profile_item,
+            open_item: open_profile_item,
+            reload_item: reload_profile_item,
+        },
     ))
 }
 
@@ -632,7 +759,9 @@ pub fn set_run_controls_enabled(flags: RunControlsEnabled, state: State<RunMenuS
     let _ = state.step_into_item.set_enabled(flags.step_into);
     let _ = state.step_over_item.set_enabled(flags.step_over);
     let _ = state.step_return_item.set_enabled(flags.step_return);
-    let _ = state.toggle_auto_step_item.set_enabled(flags.toggle_auto_step);
+    let _ = state
+        .toggle_auto_step_item
+        .set_enabled(flags.toggle_auto_step);
 }
 
 /// Updates the Window > Terminal item's label to reflect whether the
@@ -641,28 +770,44 @@ pub fn set_run_controls_enabled(flags: RunControlsEnabled, state: State<RunMenuS
 /// `rebuild_open_recent_submenu` uses for its submenu, rather than
 /// rebuilding the whole app menu.
 pub(crate) fn set_terminal_menu_label(state: &WindowMenuState, detached: bool) {
-    let label = if detached { "Attach Terminal" } else { "Detach Terminal…" };
+    let label = if detached {
+        "Attach Terminal"
+    } else {
+        "Detach Terminal…"
+    };
     let _ = state.terminal_item.set_text(label);
 }
 
 /// Updates the Window > Display item's label the same way `set_terminal_menu_label` does for
 /// Terminal.
 pub(crate) fn set_display_menu_label(state: &WindowMenuState, detached: bool) {
-    let label = if detached { "Attach Display" } else { "Detach Display…" };
+    let label = if detached {
+        "Attach Display"
+    } else {
+        "Detach Display…"
+    };
     let _ = state.display_item.set_text(label);
 }
 
 /// Updates the Window > LED Matrix item's label the same way `set_terminal_menu_label` does for
 /// Terminal.
 pub(crate) fn set_led_matrix_menu_label(state: &WindowMenuState, detached: bool) {
-    let label = if detached { "Attach LED Matrix" } else { "Detach LED Matrix…" };
+    let label = if detached {
+        "Attach LED Matrix"
+    } else {
+        "Detach LED Matrix…"
+    };
     let _ = state.led_matrix_item.set_text(label);
 }
 
 /// Updates the Window > LCD Display item's label the same way `set_terminal_menu_label` does for
 /// Terminal.
 pub(crate) fn set_lcd_display_menu_label(state: &WindowMenuState, detached: bool) {
-    let label = if detached { "Attach LCD Display" } else { "Detach LCD Display…" };
+    let label = if detached {
+        "Attach LCD Display"
+    } else {
+        "Detach LCD Display…"
+    };
     let _ = state.lcd_display_item.set_text(label);
 }
 
@@ -701,7 +846,8 @@ pub(crate) fn rebuild_open_recent_submenu(
         if !entries.is_empty() {
             submenu.append(&PredefinedMenuItem::separator(app)?)?;
         }
-        let clear_item = MenuItem::with_id(app, CLEAR_RECENT_ID, "Clear Recent…", true, None::<&str>)?;
+        let clear_item =
+            MenuItem::with_id(app, CLEAR_RECENT_ID, "Clear Recent…", true, None::<&str>)?;
         submenu.append(&clear_item)?;
     }
     state.gate.lock().unwrap().has_recent = has_recent;

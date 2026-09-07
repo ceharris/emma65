@@ -50,8 +50,16 @@ impl From<LcdDisplayGeometry> for LcdDisplayGeometryPayload {
         Self {
             columns: geometry.columns,
             rows: geometry.rows,
-            background: [geometry.background.r, geometry.background.g, geometry.background.b],
-            foreground: [geometry.foreground.r, geometry.foreground.g, geometry.foreground.b],
+            background: [
+                geometry.background.r,
+                geometry.background.g,
+                geometry.background.b,
+            ],
+            foreground: [
+                geometry.foreground.r,
+                geometry.foreground.g,
+                geometry.foreground.b,
+            ],
         }
     }
 }
@@ -67,7 +75,9 @@ pub struct LcdDisplayGeometryState(pub Mutex<Option<LcdDisplayGeometryPayload>>)
 /// Tauri command: returns the active session's LCD display geometry, or `None` if no
 /// `display/lcd` device is configured for the active profile.
 #[tauri::command]
-pub fn get_lcd_display_geometry(state: State<LcdDisplayGeometryState>) -> Option<LcdDisplayGeometryPayload> {
+pub fn get_lcd_display_geometry(
+    state: State<LcdDisplayGeometryState>,
+) -> Option<LcdDisplayGeometryPayload> {
     *state.0.lock().unwrap()
 }
 
@@ -95,7 +105,11 @@ impl From<LcdDisplayFrame> for LcdDisplayFramePayload {
 
 /// Reads the current `lcd-display-frame` target window's label.
 fn current_target(app: &AppHandle) -> String {
-    app.state::<LcdDisplayTargetWindow>().0.lock().unwrap().clone()
+    app.state::<LcdDisplayTargetWindow>()
+        .0
+        .lock()
+        .unwrap()
+        .clone()
 }
 
 /// The last composited frame delivered, if any. Since a frame is only ever pushed on an actual
@@ -112,7 +126,11 @@ pub struct LcdDisplayFrameCache(pub Mutex<Option<LcdDisplayFramePayload>>);
 
 /// The currently cached frame, cloned out from behind the lock.
 fn cached_frame(app: &AppHandle) -> Option<LcdDisplayFramePayload> {
-    app.state::<LcdDisplayFrameCache>().0.lock().unwrap().clone()
+    app.state::<LcdDisplayFrameCache>()
+        .0
+        .lock()
+        .unwrap()
+        .clone()
 }
 
 /// Tauri command: the last delivered frame, for a freshly-mounted panel to paint immediately
@@ -150,15 +168,25 @@ fn show_detached_lcd_display(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(LCD_DISPLAY_DETACHED_WINDOW_LABEL)
         .ok_or_else(|| "lcd-display-detached window not found".to_string())?;
-    let geometry = app.state::<crate::preferences::UiConfigState>().0.lock().unwrap().lcd_display_window_geometry;
+    let geometry = app
+        .state::<crate::preferences::UiConfigState>()
+        .0
+        .lock()
+        .unwrap()
+        .lcd_display_window_geometry;
     if let Some(geometry) = geometry {
         crate::preferences::apply_window_geometry(&window, &geometry);
     }
     window.show().map_err(|e| e.to_string())?;
     let _ = window.set_focus();
-    *app.state::<LcdDisplayTargetWindow>().0.lock().unwrap() = LCD_DISPLAY_DETACHED_WINDOW_LABEL.to_string();
+    *app.state::<LcdDisplayTargetWindow>().0.lock().unwrap() =
+        LCD_DISPLAY_DETACHED_WINDOW_LABEL.to_string();
     if let Some(payload) = cached_frame(app) {
-        let _ = app.emit_to(LCD_DISPLAY_DETACHED_WINDOW_LABEL, "lcd-display-frame", payload);
+        let _ = app.emit_to(
+            LCD_DISPLAY_DETACHED_WINDOW_LABEL,
+            "lcd-display-frame",
+            payload,
+        );
     }
     Ok(())
 }
@@ -187,9 +215,9 @@ pub fn detach_lcd_display(app: AppHandle) -> Result<(), String> {
 pub(crate) fn reattach_lcd_display(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(LCD_DISPLAY_DETACHED_WINDOW_LABEL) {
         let state = app.state::<crate::preferences::UiConfigState>();
-        if let Err(e) =
-            crate::preferences::save_window_geometry(&window, &state, |c, g| c.lcd_display_window_geometry = Some(g))
-        {
+        if let Err(e) = crate::preferences::save_window_geometry(&window, &state, |c, g| {
+            c.lcd_display_window_geometry = Some(g)
+        }) {
             eprintln!("Failed to save LCD display window geometry: {e}");
         }
         let _ = window.hide();
@@ -216,7 +244,9 @@ pub fn attach_lcd_display(app: AppHandle) {
 /// whether it's ever actually detached this run — mirrors `led_matrix::install_detached_window`
 /// exactly, including the app-menu strip and the Wayland/GTK resizable-toggle workaround.
 pub(crate) fn install_detached_window(app: &AppHandle) {
-    let Some(window) = app.get_webview_window(LCD_DISPLAY_DETACHED_WINDOW_LABEL) else { return };
+    let Some(window) = app.get_webview_window(LCD_DISPLAY_DETACHED_WINDOW_LABEL) else {
+        return;
+    };
     let _ = window.remove_menu();
     let window_for_events = window.clone();
     let app_for_events = app.clone();

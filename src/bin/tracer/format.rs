@@ -69,7 +69,10 @@ fn flags_field(p: StatusRegister) -> String {
         ('Z', StatusRegister::Z),
         ('C', StatusRegister::C),
     ];
-    let mut s: String = FLAGS.iter().map(|&(c, bit)| if p.contains(bit) { c } else { ' ' }).collect();
+    let mut s: String = FLAGS
+        .iter()
+        .map(|&(c, bit)| if p.contains(bit) { c } else { ' ' })
+        .collect();
     s.insert(2, ' ');
     s
 }
@@ -85,7 +88,12 @@ pub fn label_line(label: &str) -> String {
 
 /// Formats one instruction row: sequence number, cycle count, registers,
 /// flags, and the disassembled instruction's address/code/mnemonic/operand/comment.
-pub fn instruction_row(seq: u64, cycles: Option<u8>, regs: &Registers, line: &DisassembledLine) -> String {
+pub fn instruction_row(
+    seq: u64,
+    cycles: Option<u8>,
+    regs: &Registers,
+    line: &DisassembledLine,
+) -> String {
     let mut row = Row::new();
     row.put(0, &format!("{seq:>10}"));
     if let Some(c) = cycles {
@@ -98,7 +106,12 @@ pub fn instruction_row(seq: u64, cycles: Option<u8>, regs: &Registers, line: &Di
     row.put(P_COL, &format!("{:02X}", regs.p.to_byte()));
     row.put(FLAGS_COL, &flags_field(regs.p));
     row.put(ADDR_COL, &format!("{:04X}", line.addr));
-    let code = line.raw_bytes.iter().map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ");
+    let code = line
+        .raw_bytes
+        .iter()
+        .map(|b| format!("{b:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ");
     row.put(CODE_COL, &code);
     // Left unpadded: `Row::put`'s own gap-fill positions the operand at
     // `OPERAND_COL` regardless of the mnemonic's length (3 or 4 letters).

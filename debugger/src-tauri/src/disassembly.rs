@@ -9,7 +9,11 @@ use crate::memory::MemoryViewAddr;
 use crate::registers::{ChangedFlagsState, RegisterSnapshot};
 use emma65::disassembler::Disassembler;
 use emma65::emulator::cpu::StepResult;
-use emma65::emulator::{Cpu, CpuLiveSnapshot, RunHandle, RunStopper, run_from as exec_run_from, step_into as exec_step_into, step_over_breakpoint as exec_step_over_breakpoint, step_over_subroutine as exec_step_over_subroutine, step_return as exec_step_return};
+use emma65::emulator::{
+    Cpu, CpuLiveSnapshot, RunHandle, RunStopper, run_from as exec_run_from,
+    step_into as exec_step_into, step_over_breakpoint as exec_step_over_breakpoint,
+    step_over_subroutine as exec_step_over_subroutine, step_return as exec_step_return,
+};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Interval between `debugger-running-tick` events emitted during free-run.
@@ -83,7 +87,10 @@ pub fn step_into(
     let cpu_stopped = matches!(result, StepResult::Stopped);
     let cpu_waiting = matches!(result, StepResult::Waiting);
     let breakpoint_hit = matches!(result, StepResult::Breakpoint(_));
-    let watch_triggered = matches!(result, StepResult::WatchTriggered { .. } | StepResult::WatchError { .. });
+    let watch_triggered = matches!(
+        result,
+        StepResult::WatchTriggered { .. } | StepResult::WatchError { .. }
+    );
 
     // Record the halted PC if a breakpoint or watch triggered, so the next
     // step_into call knows to skip the check there.
@@ -124,15 +131,18 @@ pub fn get_disassembly(
     let disasm = disasm_guard.as_ref().ok_or("Disassembler not ready")?;
 
     let lines = disasm.disassemble_range(cpu.bus(), addr, 0, count);
-    let rows = lines.into_iter().map(|line| DisassembledRow {
-        addr: line.addr,
-        bytes: line.raw_bytes.iter().map(|b| format!("{b:02X}")).collect(),
-        labels: line.labels,
-        mnemonic: line.mnemonic.to_string(),
-        operand: line.operand_text,
-        comment: line.comment_text.unwrap_or("".to_string()),
-        is_valid: line.is_valid,
-    }).collect();
+    let rows = lines
+        .into_iter()
+        .map(|line| DisassembledRow {
+            addr: line.addr,
+            bytes: line.raw_bytes.iter().map(|b| format!("{b:02X}")).collect(),
+            labels: line.labels,
+            mnemonic: line.mnemonic.to_string(),
+            operand: line.operand_text,
+            comment: line.comment_text.unwrap_or("".to_string()),
+            is_valid: line.is_valid,
+        })
+        .collect();
 
     Ok(rows)
 }
@@ -184,8 +194,7 @@ pub fn run_cpu(
     // user having to press Run again.
     let handle = exec_run_from(cpu, skip_pc, Arc::clone(&mem_view_addr), true);
     *run_stopper_state.0.lock().unwrap() = Some(handle.stopper());
-    *app.state::<LiveSnapshotRx>().0.lock().unwrap() =
-        Some(handle.subscribe_live());
+    *app.state::<LiveSnapshotRx>().0.lock().unwrap() = Some(handle.subscribe_live());
 
     spawn_running_tick(app.clone());
 
@@ -201,8 +210,17 @@ pub fn run_cpu(
                 handle = restart_run_after_reset(&app, cpu, &mem_view_addr);
                 continue;
             }
-            let (cpu_stopped, cpu_waiting, breakpoint_hit, skip_pc) = flags_from_result(&result, pc);
-            finish_run(&app, cpu, 0, cpu_stopped, cpu_waiting, breakpoint_hit, skip_pc);
+            let (cpu_stopped, cpu_waiting, breakpoint_hit, skip_pc) =
+                flags_from_result(&result, pc);
+            finish_run(
+                &app,
+                cpu,
+                0,
+                cpu_stopped,
+                cpu_waiting,
+                breakpoint_hit,
+                skip_pc,
+            );
             break;
         }
     });
@@ -267,12 +285,21 @@ pub fn step_over(
     let addr_arc = Arc::clone(&mem_view_addr.0);
     std::thread::spawn(move || {
         let mut cpu = cpu;
-        let result = exec_step_over_subroutine(&mut cpu, &stop_rx, &mut cmd_rx, Some(&live_tx), &addr_arc);
+        let result =
+            exec_step_over_subroutine(&mut cpu, &stop_rx, &mut cmd_rx, Some(&live_tx), &addr_arc);
         let pc = cpu.registers().pc;
         let changed = p_before ^ cpu.registers().p.to_byte();
         clear_ui_interrupts_on_reset(&app, &mut cpu, &result);
         let (cpu_stopped, cpu_waiting, breakpoint_hit, skip_pc) = flags_from_result(&result, pc);
-        finish_run(&app, cpu, changed, cpu_stopped, cpu_waiting, breakpoint_hit, skip_pc);
+        finish_run(
+            &app,
+            cpu,
+            changed,
+            cpu_stopped,
+            cpu_waiting,
+            breakpoint_hit,
+            skip_pc,
+        );
     });
 
     Ok(())
@@ -310,7 +337,15 @@ pub fn step_return(
         let changed = p_before ^ cpu.registers().p.to_byte();
         clear_ui_interrupts_on_reset(&app, &mut cpu, &result);
         let (cpu_stopped, cpu_waiting, breakpoint_hit, skip_pc) = flags_from_result(&result, pc);
-        finish_run(&app, cpu, changed, cpu_stopped, cpu_waiting, breakpoint_hit, skip_pc);
+        finish_run(
+            &app,
+            cpu,
+            changed,
+            cpu_stopped,
+            cpu_waiting,
+            breakpoint_hit,
+            skip_pc,
+        );
     });
 
     Ok(())
@@ -347,7 +382,11 @@ fn flags_from_result(result: &Option<StepResult>, pc: u16) -> (bool, bool, bool,
         result,
         Some(StepResult::WatchTriggered { .. } | StepResult::WatchError { .. })
     );
-    let skip_pc = if breakpoint_hit || watch_triggered { Some(pc) } else { None };
+    let skip_pc = if breakpoint_hit || watch_triggered {
+        Some(pc)
+    } else {
+        None
+    };
     (cpu_stopped, cpu_waiting, breakpoint_hit, skip_pc)
 }
 
@@ -374,8 +413,12 @@ fn finish_run(
     *app.state::<CpuState>().0.lock().unwrap() = Some(cpu);
 
     let snapshot = RegisterSnapshot {
-        a: regs.a, x: regs.x, y: regs.y, s: regs.s,
-        pc: regs.pc, p: regs.p.to_byte(),
+        a: regs.a,
+        x: regs.x,
+        y: regs.y,
+        s: regs.s,
+        pc: regs.pc,
+        p: regs.p.to_byte(),
         changed_flags,
         cpu_stopped,
         cpu_waiting,

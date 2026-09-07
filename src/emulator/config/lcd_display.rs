@@ -1,5 +1,8 @@
 use super::palette::parse_color;
-use super::{DeviceModule, DeviceModuleError, ExpandedPathBuf, InstantiationContext, LcdDisplayGeometry, TransportSpec, TransportSpecFormat};
+use super::{
+    DeviceModule, DeviceModuleError, ExpandedPathBuf, InstantiationContext, LcdDisplayGeometry,
+    TransportSpec, TransportSpecFormat,
+};
 use crate::emulator::bus::DeviceIdAllocator;
 use crate::emulator::device::lcd_display::cgrom::CgRom;
 use crate::emulator::device::lcd_display::compositing::Rgb24;
@@ -51,10 +54,30 @@ const DEFAULT_BACKLIGHT: &str = "yellow";
 /// correspond to hardware that's actually commonly available; the rest are intentionally left
 /// unmapped and rejected at configuration time rather than guessed at.
 const COLOR_PRESETS: &[(Polarity, &str, Rgb24, Rgb24)] = &[
-    (Polarity::Positive, "yellow", Rgb24::new(0x9A, 0xCD, 0x32), Rgb24::new(0x00, 0x00, 0x00)),
-    (Polarity::Positive, "white", Rgb24::new(0xFF, 0xFF, 0xFF), Rgb24::new(0x00, 0x00, 0x00)),
-    (Polarity::Positive, "amber", Rgb24::new(0xFF, 0xB0, 0x00), Rgb24::new(0x00, 0x00, 0x00)),
-    (Polarity::Positive, "blue", Rgb24::new(0x87, 0xCE, 0xEB), Rgb24::new(0x00, 0x00, 0x00)),
+    (
+        Polarity::Positive,
+        "yellow",
+        Rgb24::new(0x9A, 0xCD, 0x32),
+        Rgb24::new(0x00, 0x00, 0x00),
+    ),
+    (
+        Polarity::Positive,
+        "white",
+        Rgb24::new(0xFF, 0xFF, 0xFF),
+        Rgb24::new(0x00, 0x00, 0x00),
+    ),
+    (
+        Polarity::Positive,
+        "amber",
+        Rgb24::new(0xFF, 0xB0, 0x00),
+        Rgb24::new(0x00, 0x00, 0x00),
+    ),
+    (
+        Polarity::Positive,
+        "blue",
+        Rgb24::new(0x87, 0xCE, 0xEB),
+        Rgb24::new(0x00, 0x00, 0x00),
+    ),
     // Sampled from a real negative-blue HD44780 module's backlit background (issue #583 review
     // feedback) -- the classic saturated royal blue these modules ship with, not a generic navy
     // -- then darkened slightly from the raw sample: unlike the other negative presets' near-
@@ -62,20 +85,45 @@ const COLOR_PRESETS: &[(Polarity, &str, Rgb24, Rgb24)] = &[
     // blend toward `foreground` (`OFF_DOT_BLEND` in `LcdDisplayPanel.tsx`/`lcd-display/main.rs`,
     // issue #569) was making inactive dots noticeably lighter than the sampled photo -- too "hot"
     // (review feedback) for a state meant to read as barely-there.
-    (Polarity::Negative, "blue", Rgb24::new(0x00, 0x19, 0x66), Rgb24::new(0xFF, 0xFF, 0xFF)),
-    (Polarity::Negative, "white", Rgb24::new(0x0A, 0x0A, 0x0A), Rgb24::new(0xFF, 0xFF, 0xFF)),
-    (Polarity::Negative, "amber", Rgb24::new(0x0A, 0x0A, 0x0A), Rgb24::new(0xFF, 0xB0, 0x00)),
-    (Polarity::Negative, "red", Rgb24::new(0x0A, 0x0A, 0x0A), Rgb24::new(0xFF, 0x24, 0x00)),
+    (
+        Polarity::Negative,
+        "blue",
+        Rgb24::new(0x00, 0x19, 0x66),
+        Rgb24::new(0xFF, 0xFF, 0xFF),
+    ),
+    (
+        Polarity::Negative,
+        "white",
+        Rgb24::new(0x0A, 0x0A, 0x0A),
+        Rgb24::new(0xFF, 0xFF, 0xFF),
+    ),
+    (
+        Polarity::Negative,
+        "amber",
+        Rgb24::new(0x0A, 0x0A, 0x0A),
+        Rgb24::new(0xFF, 0xB0, 0x00),
+    ),
+    (
+        Polarity::Negative,
+        "red",
+        Rgb24::new(0x0A, 0x0A, 0x0A),
+        Rgb24::new(0xFF, 0x24, 0x00),
+    ),
 ];
 
 fn color_preset(polarity: Polarity, backlight: &str) -> Option<(Rgb24, Rgb24)> {
-    COLOR_PRESETS.iter()
+    COLOR_PRESETS
+        .iter()
         .find(|(p, b, _, _)| *p == polarity && *b == backlight)
         .map(|(_, _, background, foreground)| (*background, *foreground))
 }
 
 fn supported_backlights_for(polarity: Polarity) -> Vec<&'static str> {
-    COLOR_PRESETS.iter().filter(|(p, _, _, _)| *p == polarity).map(|(_, b, _, _)| *b).collect()
+    COLOR_PRESETS
+        .iter()
+        .filter(|(p, _, _, _)| *p == polarity)
+        .map(|(_, b, _, _)| *b)
+        .collect()
 }
 
 /// The 10 supported geometries (spec §7.1), looked up by the config's `geometry` string. This is
@@ -90,32 +138,102 @@ fn supported_backlights_for(polarity: Polarity) -> Vec<&'static str> {
 /// `~/Documents/Retro/HD44780/geometries.md`, a hardware-constraints writeup derived from the
 /// datasheet and real module surveys, for the full analysis).
 const GEOMETRIES: &[(&str, Geometry)] = &[
-    ("8-character-5x10", Geometry { rows: 1, columns: 8, segments: &[&[(0x00, 8)]], supports_5x10: true }),
-    ("16-character-5x10", Geometry { rows: 1, columns: 16, segments: &[&[(0x00, 16)]], supports_5x10: true }),
-    ("40x1", Geometry { rows: 1, columns: 40, segments: &[&[(0x00, 40)]], supports_5x10: false }),
-    ("8x2", Geometry { rows: 2, columns: 8, segments: &[&[(0x00, 8)], &[(0x40, 8)]], supports_5x10: false }),
-    ("16x2", Geometry { rows: 2, columns: 16, segments: &[&[(0x00, 16)], &[(0x40, 16)]], supports_5x10: false }),
-    ("20x2", Geometry { rows: 2, columns: 20, segments: &[&[(0x00, 20)], &[(0x40, 20)]], supports_5x10: false }),
-    ("40x2", Geometry { rows: 2, columns: 40, segments: &[&[(0x00, 40)], &[(0x40, 40)]], supports_5x10: false }),
+    (
+        "8-character-5x10",
+        Geometry {
+            rows: 1,
+            columns: 8,
+            segments: &[&[(0x00, 8)]],
+            supports_5x10: true,
+        },
+    ),
+    (
+        "16-character-5x10",
+        Geometry {
+            rows: 1,
+            columns: 16,
+            segments: &[&[(0x00, 16)]],
+            supports_5x10: true,
+        },
+    ),
+    (
+        "40x1",
+        Geometry {
+            rows: 1,
+            columns: 40,
+            segments: &[&[(0x00, 40)]],
+            supports_5x10: false,
+        },
+    ),
+    (
+        "8x2",
+        Geometry {
+            rows: 2,
+            columns: 8,
+            segments: &[&[(0x00, 8)], &[(0x40, 8)]],
+            supports_5x10: false,
+        },
+    ),
+    (
+        "16x2",
+        Geometry {
+            rows: 2,
+            columns: 16,
+            segments: &[&[(0x00, 16)], &[(0x40, 16)]],
+            supports_5x10: false,
+        },
+    ),
+    (
+        "20x2",
+        Geometry {
+            rows: 2,
+            columns: 20,
+            segments: &[&[(0x00, 20)], &[(0x40, 20)]],
+            supports_5x10: false,
+        },
+    ),
+    (
+        "40x2",
+        Geometry {
+            rows: 2,
+            columns: 40,
+            segments: &[&[(0x00, 40)], &[(0x40, 40)]],
+            supports_5x10: false,
+        },
+    ),
     // A documented real-world quirk, not a simplification (spec §7.1): one visible row made of
     // two 8-byte segments, one from each internal 40-byte DDRAM line. Despite the "16" in its
     // name referring to its 16-character width, this bare-chip module has no more common lines
     // than any other 2-row layout, so it is not 5×10-capable.
-    ("16x1", Geometry { rows: 1, columns: 16, segments: &[&[(0x00, 8), (0x40, 8)]], supports_5x10: false }),
+    (
+        "16x1",
+        Geometry {
+            rows: 1,
+            columns: 16,
+            segments: &[&[(0x00, 8), (0x40, 8)]],
+            supports_5x10: false,
+        },
+    ),
     // Four-row modules split each of the two internal 40-byte lines into two visible rows (spec
     // §7.1); rows 1 & 3 share one line, rows 2 & 4 share the other.
-    ("16x4", Geometry {
-        rows: 4,
-        columns: 16,
-        segments: &[&[(0x00, 16)], &[(0x40, 16)], &[(0x10, 16)], &[(0x50, 16)]],
-        supports_5x10: false,
-    }),
-    ("20x4", Geometry {
-        rows: 4,
-        columns: 20,
-        segments: &[&[(0x00, 20)], &[(0x40, 20)], &[(0x14, 20)], &[(0x54, 20)]],
-        supports_5x10: false,
-    }),
+    (
+        "16x4",
+        Geometry {
+            rows: 4,
+            columns: 16,
+            segments: &[&[(0x00, 16)], &[(0x40, 16)], &[(0x10, 16)], &[(0x50, 16)]],
+            supports_5x10: false,
+        },
+    ),
+    (
+        "20x4",
+        Geometry {
+            rows: 4,
+            columns: 20,
+            segments: &[&[(0x00, 20)], &[(0x40, 20)], &[(0x14, 20)], &[(0x54, 20)]],
+            supports_5x10: false,
+        },
+    ),
 ];
 
 fn geometry_for(name: &str) -> Option<&'static Geometry> {
@@ -170,16 +288,18 @@ struct LcdDisplayAttributes {
 }
 
 impl DeviceModule for LcdDisplayModule {
-
     fn name(&self) -> &'static str {
         DEVICE_TYPE
     }
 
-    async fn instantiate(&self, bus_config: BusConfig, address: u16,
-                         attributes: &HashMap<String, Value>, context: &InstantiationContext,
-                         id_allocator: Arc<Mutex<DeviceIdAllocator>>)
-            -> Result<BusConfig, DeviceModuleError> {
-
+    async fn instantiate(
+        &self,
+        bus_config: BusConfig,
+        address: u16,
+        attributes: &HashMap<String, Value>,
+        context: &InstantiationContext,
+        id_allocator: Arc<Mutex<DeviceIdAllocator>>,
+    ) -> Result<BusConfig, DeviceModuleError> {
         let attrs = Dict::from_iter(attributes.clone());
         let config: LcdDisplayAttributes = figment::Figment::new()
             .merge(Serialized::defaults(attrs))
@@ -187,9 +307,12 @@ impl DeviceModule for LcdDisplayModule {
             .map_err(|e| DeviceModuleError::Config(format!("configuration error: {e}")))?;
 
         let geometry_name = config.geometry.as_deref().unwrap_or(DEFAULT_GEOMETRY);
-        let geometry = geometry_for(geometry_name).ok_or_else(|| DeviceModuleError::Config(format!(
-            "display/lcd: geometry must be one of {:?}, got {geometry_name:?}",
-            supported_geometry_names())))?;
+        let geometry = geometry_for(geometry_name).ok_or_else(|| {
+            DeviceModuleError::Config(format!(
+                "display/lcd: geometry must be one of {:?}, got {geometry_name:?}",
+                supported_geometry_names()
+            ))
+        })?;
 
         let cgrom = match &config.cgrom {
             Some(path) => match path.to_str().map(str::to_ascii_lowercase).as_deref() {
@@ -197,7 +320,8 @@ impl DeviceModule for LcdDisplayModule {
                 Some("a02") => CgRom::a02(),
                 _ => {
                     let data = tokio::fs::read(path).await.map_err(DeviceModuleError::Io)?;
-                    CgRom::from_bytes(&data).map_err(|e| DeviceModuleError::Config(e.to_string()))?
+                    CgRom::from_bytes(&data)
+                        .map_err(|e| DeviceModuleError::Config(e.to_string()))?
                 }
             },
             None => CgRom::default(),
@@ -224,7 +348,8 @@ impl DeviceModule for LcdDisplayModule {
             None => preset_foreground,
         };
 
-        let transport_spec = config.transport
+        let transport_spec = config
+            .transport
             .map(TransportSpec::try_from)
             .transpose()
             .map_err(DeviceModuleError::Config)?;
@@ -239,7 +364,8 @@ impl DeviceModule for LcdDisplayModule {
             return Err(DeviceModuleError::Config(
                 "display/lcd requires a pipe transport; \
                  tcp/unix/pty transports don't support the atomic bulk-send this protocol needs"
-                    .to_string()));
+                    .to_string(),
+            ));
         }
 
         let device_id = id_allocator.lock().unwrap().next_available();
@@ -265,8 +391,12 @@ impl DeviceModule for LcdDisplayModule {
         // `display_geometry_sink` are: present only when a host (the debugger) wants to receive
         // this device's output, absent (a no-op here) for the plain `emma65` CLI.
         if let Some(slot) = &context.lcd_display_geometry_sink {
-            *slot.lock().unwrap() =
-                Some(LcdDisplayGeometry { columns: geometry.columns, rows: geometry.rows, background, foreground });
+            *slot.lock().unwrap() = Some(LcdDisplayGeometry {
+                columns: geometry.columns,
+                rows: geometry.rows,
+                background,
+                foreground,
+            });
         }
         if let Some(slot) = &context.lcd_display_frame_sink
             && let Some(sender) = slot.lock().unwrap().take()
@@ -283,24 +413,27 @@ impl DeviceModule for LcdDisplayModule {
             // the peripheral falls behind; `LcdDisplay::tick` retries a frame that doesn't fit
             // here rather than losing it, so this capacity only needs to fit one frame, not a
             // backlog.
-            let capacity = 4
-                + geometry.columns as usize * MAX_CELL_WIDTH_PX
-                * geometry.rows as usize * MAX_CELL_HEIGHT_PX * 4;
+            let capacity = 4 + geometry.columns as usize
+                * MAX_CELL_WIDTH_PX
+                * geometry.rows as usize
+                * MAX_CELL_HEIGHT_PX
+                * 4;
 
             let (transport, _relay) = transport_spec
                 .to_transport_with_reporter_and_capacity(
                     context.transport_reporter(device.identity()),
                     context.pipe_exit_reporter(device.identity()),
-                    Some(capacity))
+                    Some(capacity),
+                )
                 .await
                 .map_err(DeviceModuleError::Transport)?;
             device.attach_external_transport(transport);
         }
 
-        bus_config.device(address_range, device_id, Box::new(device))
+        bus_config
+            .device(address_range, device_id, Box::new(device))
             .map_err(DeviceModuleError::BusConfig)
     }
-
 }
 
 #[cfg(test)]
@@ -313,7 +446,8 @@ mod tests {
 
     /// A context whose `lcd_display_geometry_sink` is wired up, so a test can read back the
     /// device's computed `background`/`foreground` (design doc §7) after `instantiate`.
-    fn context_with_geometry_sink() -> (InstantiationContext, Arc<Mutex<Option<LcdDisplayGeometry>>>) {
+    fn context_with_geometry_sink() -> (InstantiationContext, Arc<Mutex<Option<LcdDisplayGeometry>>>)
+    {
         let sink = Arc::new(Mutex::new(None));
         let ctx = InstantiationContext {
             lcd_display_geometry_sink: Some(sink.clone()),
@@ -325,8 +459,16 @@ mod tests {
     #[tokio::test]
     async fn instantiate_without_attributes_uses_default_geometry_and_colors() {
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
-        let bus_config = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &HashMap::new(), &context(), id_allocator).await.unwrap();
+        let bus_config = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &HashMap::new(),
+                &context(),
+                id_allocator,
+            )
+            .await
+            .unwrap();
         let mut bus = bus_config.build();
 
         // Round-trips through the instruction register prove the device is live at the
@@ -342,8 +484,15 @@ mod tests {
             attributes.insert("geometry".to_string(), Value::from(*name));
             let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-            let result = LcdDisplayModule.instantiate(
-                BusConfig::new(), 0xD000, &attributes, &context(), id_allocator).await;
+            let result = LcdDisplayModule
+                .instantiate(
+                    BusConfig::new(),
+                    0xD000,
+                    &attributes,
+                    &context(),
+                    id_allocator,
+                )
+                .await;
 
             assert!(result.is_ok(), "geometry {name:?} should be accepted");
         }
@@ -355,12 +504,21 @@ mod tests {
         attributes.insert("geometry".to_string(), Value::from("not-a-geometry"));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let result = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &attributes, &context(), id_allocator).await;
+        let result = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         match result {
             Err(DeviceModuleError::Config(message)) => assert!(message.contains("geometry")),
-            Err(other) => panic!("expected DeviceModuleError::Config, got a different error variant: {other}"),
+            Err(other) => {
+                panic!("expected DeviceModuleError::Config, got a different error variant: {other}")
+            }
             Ok(_) => panic!("expected DeviceModuleError::Config, got Ok"),
         }
     }
@@ -371,12 +529,21 @@ mod tests {
         attributes.insert("background".to_string(), Value::from("not-a-color"));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let result = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &attributes, &context(), id_allocator).await;
+        let result = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         match result {
             Err(DeviceModuleError::Config(message)) => assert!(message.contains("background")),
-            Err(other) => panic!("expected DeviceModuleError::Config, got a different error variant: {other}"),
+            Err(other) => {
+                panic!("expected DeviceModuleError::Config, got a different error variant: {other}")
+            }
             Ok(_) => panic!("expected DeviceModuleError::Config, got Ok"),
         }
     }
@@ -387,8 +554,15 @@ mod tests {
         attributes.insert("foreground".to_string(), Value::from("#zzzzzz"));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let result = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &attributes, &context(), id_allocator).await;
+        let result = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         assert!(matches!(result, Err(DeviceModuleError::Config(_))));
     }
@@ -400,8 +574,15 @@ mod tests {
         attributes.insert("foreground".to_string(), Value::from("F0F0F0"));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let result = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &attributes, &context(), id_allocator).await;
+        let result = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         assert!(result.is_ok());
     }
@@ -411,8 +592,16 @@ mod tests {
         let (ctx, sink) = context_with_geometry_sink();
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &HashMap::new(), &ctx, id_allocator).await.unwrap();
+        LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &HashMap::new(),
+                &ctx,
+                id_allocator,
+            )
+            .await
+            .unwrap();
 
         let geometry = sink.lock().unwrap().unwrap();
         assert_eq!(geometry.background, Rgb24::new(0x9A, 0xCD, 0x32));
@@ -423,21 +612,34 @@ mod tests {
     async fn instantiate_with_each_color_preset_succeeds_and_yields_expected_colors() {
         for (polarity, backlight, background, foreground) in COLOR_PRESETS {
             let mut attributes = HashMap::new();
-            attributes.insert("polarity".to_string(), Value::from(match polarity {
-                Polarity::Positive => "positive",
-                Polarity::Negative => "negative",
-            }));
+            attributes.insert(
+                "polarity".to_string(),
+                Value::from(match polarity {
+                    Polarity::Positive => "positive",
+                    Polarity::Negative => "negative",
+                }),
+            );
             attributes.insert("backlight".to_string(), Value::from(*backlight));
             let (ctx, sink) = context_with_geometry_sink();
             let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-            let result = LcdDisplayModule.instantiate(
-                BusConfig::new(), 0xD000, &attributes, &ctx, id_allocator).await;
+            let result = LcdDisplayModule
+                .instantiate(BusConfig::new(), 0xD000, &attributes, &ctx, id_allocator)
+                .await;
 
-            assert!(result.is_ok(), "polarity {polarity:?} backlight {backlight:?} should be accepted");
+            assert!(
+                result.is_ok(),
+                "polarity {polarity:?} backlight {backlight:?} should be accepted"
+            );
             let geometry = sink.lock().unwrap().unwrap();
-            assert_eq!(geometry.background, *background, "background for {polarity:?}/{backlight:?}");
-            assert_eq!(geometry.foreground, *foreground, "foreground for {polarity:?}/{backlight:?}");
+            assert_eq!(
+                geometry.background, *background,
+                "background for {polarity:?}/{backlight:?}"
+            );
+            assert_eq!(
+                geometry.foreground, *foreground,
+                "foreground for {polarity:?}/{backlight:?}"
+            );
         }
     }
 
@@ -447,12 +649,21 @@ mod tests {
         attributes.insert("polarity".to_string(), Value::from("sideways"));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let result = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &attributes, &context(), id_allocator).await;
+        let result = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         match result {
             Err(DeviceModuleError::Config(message)) => assert!(message.contains("polarity")),
-            Err(other) => panic!("expected DeviceModuleError::Config, got a different error variant: {other}"),
+            Err(other) => {
+                panic!("expected DeviceModuleError::Config, got a different error variant: {other}")
+            }
             Ok(_) => panic!("expected DeviceModuleError::Config, got Ok"),
         }
     }
@@ -466,12 +677,21 @@ mod tests {
         attributes.insert("backlight".to_string(), Value::from("red"));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let result = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &attributes, &context(), id_allocator).await;
+        let result = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         match result {
             Err(DeviceModuleError::Config(message)) => assert!(message.contains("backlight")),
-            Err(other) => panic!("expected DeviceModuleError::Config, got a different error variant: {other}"),
+            Err(other) => {
+                panic!("expected DeviceModuleError::Config, got a different error variant: {other}")
+            }
             Ok(_) => panic!("expected DeviceModuleError::Config, got Ok"),
         }
     }
@@ -485,8 +705,10 @@ mod tests {
         let (ctx, sink) = context_with_geometry_sink();
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &attributes, &ctx, id_allocator).await.unwrap();
+        LcdDisplayModule
+            .instantiate(BusConfig::new(), 0xD000, &attributes, &ctx, id_allocator)
+            .await
+            .unwrap();
 
         let geometry = sink.lock().unwrap().unwrap();
         // background still comes from the negative/red preset...
@@ -505,8 +727,15 @@ mod tests {
         attributes.insert("cgrom".to_string(), Value::from(path.to_str().unwrap()));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let result = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &attributes, &context(), id_allocator).await;
+        let result = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         let _ = tokio::fs::remove_file(&path).await;
         assert!(matches!(result, Err(DeviceModuleError::Config(_))));
@@ -516,14 +745,26 @@ mod tests {
     async fn instantiate_with_valid_cgrom_file_succeeds() {
         let dir = std::env::temp_dir();
         let path = dir.join("emma65_test_lcd_display_good_cgrom.bin");
-        tokio::fs::write(&path, vec![0u8; crate::emulator::device::lcd_display::cgrom::CGROM_BYTES]).await.unwrap();
+        tokio::fs::write(
+            &path,
+            vec![0u8; crate::emulator::device::lcd_display::cgrom::CGROM_BYTES],
+        )
+        .await
+        .unwrap();
 
         let mut attributes = HashMap::new();
         attributes.insert("cgrom".to_string(), Value::from(path.to_str().unwrap()));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let result = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &attributes, &context(), id_allocator).await;
+        let result = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         let _ = tokio::fs::remove_file(&path).await;
         assert!(result.is_ok());
@@ -537,8 +778,15 @@ mod tests {
         attributes.insert("cgrom".to_string(), Value::from("a00"));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let result = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &attributes, &context(), id_allocator).await;
+        let result = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         assert!(result.is_ok());
     }
@@ -549,8 +797,15 @@ mod tests {
         attributes.insert("cgrom".to_string(), Value::from("A02")); // case-insensitive
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let result = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &attributes, &context(), id_allocator).await;
+        let result = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         assert!(result.is_ok());
     }
@@ -558,8 +813,16 @@ mod tests {
     #[tokio::test]
     async fn device_id_is_not_irq_capable() {
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
-        let _bus_config = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &HashMap::new(), &context(), id_allocator.clone()).await.unwrap();
+        let _bus_config = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &HashMap::new(),
+                &context(),
+                id_allocator.clone(),
+            )
+            .await
+            .unwrap();
 
         assert!(id_allocator.lock().unwrap().for_irq(0).is_ok());
     }
@@ -567,8 +830,15 @@ mod tests {
     #[tokio::test]
     async fn instantiate_without_transport_attribute_succeeds() {
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
-        let result = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &HashMap::new(), &context(), id_allocator).await;
+        let result = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &HashMap::new(),
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         assert!(result.is_ok());
     }
@@ -576,15 +846,27 @@ mod tests {
     #[tokio::test]
     async fn rejects_non_pipe_transport_spec() {
         let mut attributes = HashMap::new();
-        attributes.insert("transport".to_string(), Value::from("unix:/tmp/emma65_test_lcd_display.sock"));
+        attributes.insert(
+            "transport".to_string(),
+            Value::from("unix:/tmp/emma65_test_lcd_display.sock"),
+        );
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let result = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &attributes, &context(), id_allocator).await;
+        let result = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         match result {
             Err(DeviceModuleError::Config(message)) => assert!(message.contains("pipe transport")),
-            Err(other) => panic!("expected DeviceModuleError::Config, got a different error variant: {other}"),
+            Err(other) => {
+                panic!("expected DeviceModuleError::Config, got a different error variant: {other}")
+            }
             Ok(_) => panic!("expected DeviceModuleError::Config, got Ok"),
         }
     }
@@ -595,8 +877,15 @@ mod tests {
         attributes.insert("transport".to_string(), Value::from("pipe:/usr/bin/cat"));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let result = LcdDisplayModule.instantiate(
-            BusConfig::new(), 0xD000, &attributes, &context(), id_allocator).await;
+        let result = LcdDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0xD000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         // End-to-end smoke test with a real spawned child: confirms the computed ring capacity
         // is accepted by `PipeTransport::spawn_with_capacity` and `attach_external_transport`'s
@@ -624,7 +913,9 @@ mod tests {
         let (sender, _receiver) = crate::emulator::device_event_channel();
         let reporter = crate::emulator::TransportReporter::pending(Some(sender));
 
-        let spec = TransportSpec::Pipe { command: vec!["/usr/bin/cat".to_string()] };
+        let spec = TransportSpec::Pipe {
+            command: vec!["/usr/bin/cat".to_string()],
+        };
         let (mut transport, _relay) = spec
             .to_transport_with_reporter_and_capacity(reporter, |_| {}, Some(capacity))
             .await

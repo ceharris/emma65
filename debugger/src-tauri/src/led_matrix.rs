@@ -39,7 +39,10 @@ pub struct LedMatrixGeometryPayload {
 
 impl From<LedMatrixGeometry> for LedMatrixGeometryPayload {
     fn from(geometry: LedMatrixGeometry) -> Self {
-        Self { matrices: geometry.matrices, columns: geometry.columns }
+        Self {
+            matrices: geometry.matrices,
+            columns: geometry.columns,
+        }
     }
 }
 
@@ -54,7 +57,9 @@ pub struct LedMatrixGeometryState(pub Mutex<Option<LedMatrixGeometryPayload>>);
 /// Tauri command: returns the active session's LED matrix geometry, or `None` if no
 /// `display/matrix` device is configured for the active profile.
 #[tauri::command]
-pub fn get_led_matrix_geometry(state: State<LedMatrixGeometryState>) -> Option<LedMatrixGeometryPayload> {
+pub fn get_led_matrix_geometry(
+    state: State<LedMatrixGeometryState>,
+) -> Option<LedMatrixGeometryPayload> {
     *state.0.lock().unwrap()
 }
 
@@ -80,7 +85,11 @@ impl From<LedMatrixFrame> for LedMatrixFramePayload {
 
 /// Reads the current `led-matrix-frame` target window's label.
 fn current_target(app: &AppHandle) -> String {
-    app.state::<LedMatrixTargetWindow>().0.lock().unwrap().clone()
+    app.state::<LedMatrixTargetWindow>()
+        .0
+        .lock()
+        .unwrap()
+        .clone()
 }
 
 /// The last composited frame delivered for each matrix index, keyed by `matrix_index`. Since a
@@ -102,7 +111,13 @@ pub struct LedMatrixFrameCache(pub Mutex<HashMap<u8, LedMatrixFramePayload>>);
 
 /// Every matrix's currently cached frame, cloned out from behind the lock.
 fn cached_frames(app: &AppHandle) -> Vec<LedMatrixFramePayload> {
-    app.state::<LedMatrixFrameCache>().0.lock().unwrap().values().cloned().collect()
+    app.state::<LedMatrixFrameCache>()
+        .0
+        .lock()
+        .unwrap()
+        .values()
+        .cloned()
+        .collect()
 }
 
 /// Tauri command: every matrix's last delivered frame, for a freshly-mounted panel to paint
@@ -126,7 +141,11 @@ pub async fn run_led_matrix_bridge(mut rx: mpsc::Receiver<LedMatrixFrame>, app: 
     while let Some(frame) = rx.recv().await {
         let target = current_target(&app);
         let payload: LedMatrixFramePayload = frame.into();
-        app.state::<LedMatrixFrameCache>().0.lock().unwrap().insert(payload.matrix_index, payload.clone());
+        app.state::<LedMatrixFrameCache>()
+            .0
+            .lock()
+            .unwrap()
+            .insert(payload.matrix_index, payload.clone());
         let _ = app.emit_to(target, "led-matrix-frame", payload);
     }
 }
@@ -142,15 +161,25 @@ fn show_detached_led_matrix(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(LED_MATRIX_DETACHED_WINDOW_LABEL)
         .ok_or_else(|| "led-matrix-detached window not found".to_string())?;
-    let geometry = app.state::<crate::preferences::UiConfigState>().0.lock().unwrap().led_matrix_window_geometry;
+    let geometry = app
+        .state::<crate::preferences::UiConfigState>()
+        .0
+        .lock()
+        .unwrap()
+        .led_matrix_window_geometry;
     if let Some(geometry) = geometry {
         crate::preferences::apply_window_geometry(&window, &geometry);
     }
     window.show().map_err(|e| e.to_string())?;
     let _ = window.set_focus();
-    *app.state::<LedMatrixTargetWindow>().0.lock().unwrap() = LED_MATRIX_DETACHED_WINDOW_LABEL.to_string();
+    *app.state::<LedMatrixTargetWindow>().0.lock().unwrap() =
+        LED_MATRIX_DETACHED_WINDOW_LABEL.to_string();
     for payload in cached_frames(app) {
-        let _ = app.emit_to(LED_MATRIX_DETACHED_WINDOW_LABEL, "led-matrix-frame", payload);
+        let _ = app.emit_to(
+            LED_MATRIX_DETACHED_WINDOW_LABEL,
+            "led-matrix-frame",
+            payload,
+        );
     }
     Ok(())
 }
@@ -179,9 +208,9 @@ pub fn detach_led_matrix(app: AppHandle) -> Result<(), String> {
 pub(crate) fn reattach_led_matrix(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(LED_MATRIX_DETACHED_WINDOW_LABEL) {
         let state = app.state::<crate::preferences::UiConfigState>();
-        if let Err(e) =
-            crate::preferences::save_window_geometry(&window, &state, |c, g| c.led_matrix_window_geometry = Some(g))
-        {
+        if let Err(e) = crate::preferences::save_window_geometry(&window, &state, |c, g| {
+            c.led_matrix_window_geometry = Some(g)
+        }) {
             eprintln!("Failed to save LED matrix window geometry: {e}");
         }
         let _ = window.hide();
@@ -207,7 +236,9 @@ pub fn attach_led_matrix(app: AppHandle) {
 /// whether it's ever actually detached this run — mirrors `display::install_detached_window`
 /// exactly, including the app-menu strip and the Wayland/GTK resizable-toggle workaround.
 pub(crate) fn install_detached_window(app: &AppHandle) {
-    let Some(window) = app.get_webview_window(LED_MATRIX_DETACHED_WINDOW_LABEL) else { return };
+    let Some(window) = app.get_webview_window(LED_MATRIX_DETACHED_WINDOW_LABEL) else {
+        return;
+    };
     let _ = window.remove_menu();
     let window_for_events = window.clone();
     let app_for_events = app.clone();

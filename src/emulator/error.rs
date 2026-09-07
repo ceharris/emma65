@@ -30,13 +30,21 @@ pub enum BusError {
 /// An error detected while building or configuring the memory bus.
 #[derive(Debug, Error)]
 pub enum BusConfigError {
-    #[error("ambiguous overlap at {range:?}: two regions of identical size covering the same address")]
+    #[error(
+        "ambiguous overlap at {range:?}: two regions of identical size covering the same address"
+    )]
     AmbiguousOverlap { range: AddressRange },
     #[error("ROM data length {data_len} does not match range {range:?} (expected {expected})")]
-    RomSizeMismatch { range: AddressRange, data_len: usize, expected: usize },
+    RomSizeMismatch {
+        range: AddressRange,
+        data_len: usize,
+        expected: usize,
+    },
     #[error("duplicate device ID {0:?}")]
     DuplicateDeviceId(DeviceId),
-    #[error("extend_device references unknown device ID {0:?}: call .device() to register it first")]
+    #[error(
+        "extend_device references unknown device ID {0:?}: call .device() to register it first"
+    )]
     UnknownDeviceId(DeviceId),
     #[error("IRQ {actual:?} must be between 0 and {max:?}")]
     UndefinedIrq { actual: u32, max: u32 },

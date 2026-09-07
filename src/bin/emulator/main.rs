@@ -6,7 +6,9 @@ use std::sync::{Arc, Mutex};
 
 use crate::config::{AppConfig, apply_default_if_unconfigured, apply_named_profile};
 use emma65::emulator::cpu::StepResult;
-use emma65::emulator::{InstantiationContext, InternalPipeTransport, Transport, TransportReporter, log_device_event};
+use emma65::emulator::{
+    InstantiationContext, InternalPipeTransport, Transport, TransportReporter, log_device_event,
+};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -18,7 +20,9 @@ async fn main() -> ExitCode {
     // leading '\r' before '\n' as a no-op cursor return.
     let mut log_format = env_logger::fmt::ConfigurableFormat::default();
     log_format.suffix("\r\n");
-    env_logger::Builder::from_default_env().format(move |buf, record| log_format.format(buf, record)).init();
+    env_logger::Builder::from_default_env()
+        .format(move |buf, record| log_format.format(buf, record))
+        .init();
     let loaded = AppConfig::load().unwrap_or_else(|e| {
         eprintln!("error: {e}");
         std::process::exit(1);
@@ -46,7 +50,11 @@ async fn main() -> ExitCode {
         eprintln!("error: failed to attach console to stdin/stdout: {e}");
         std::process::exit(1);
     });
-    let console_transport_slot = Arc::new(Mutex::new(Some((Box::new(transport) as Box<dyn Transport>, relay, reporter))));
+    let console_transport_slot = Arc::new(Mutex::new(Some((
+        Box::new(transport) as Box<dyn Transport>,
+        relay,
+        reporter,
+    ))));
 
     // Always one concrete `LogSender`, cloned into `context`, the CPU, and the event-logging
     // loop below, so every clone shares the same underlying cycle-count `Arc` (see
@@ -107,7 +115,9 @@ async fn main() -> ExitCode {
 
     // Enter raw mode only if the console took the stdio transport — and only after startup has
     // fully succeeded, so no error exit above ever needs to restore the terminal first.
-    let stdio_in_use = console_transport_slot.lock().is_ok_and(|slot| slot.is_none());
+    let stdio_in_use = console_transport_slot
+        .lock()
+        .is_ok_and(|slot| slot.is_none());
     let _raw_mode_guard = if stdio_in_use {
         tty::enter_raw_mode(config.keep_isig)
     } else {
@@ -122,7 +132,7 @@ async fn main() -> ExitCode {
     );
     let (cpu_done_tx, mut cpu_done_rx) = tokio::sync::oneshot::channel::<StepResult>();
     tokio::spawn(async move {
-       let _ = cpu_done_tx.send(run_handle.wait().await);
+        let _ = cpu_done_tx.send(run_handle.wait().await);
     });
 
     let mut events_open = true;
@@ -154,7 +164,7 @@ async fn main() -> ExitCode {
         let _ = handle.join();
     }
 
-    print!("\r\n");     // canonical newline to delineate emulator output from user's shell prompt
+    print!("\r\n"); // canonical newline to delineate emulator output from user's shell prompt
 
     // Falling off the end here (rather than calling std::process::exit) lets `_raw_mode_guard`
     // drop normally, restoring the terminal before the process actually exits.

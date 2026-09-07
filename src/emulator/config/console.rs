@@ -4,7 +4,9 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use super::{DeviceModule, DeviceModuleError, InstantiationContext, TransportSpec, TransportSpecFormat};
+use super::{
+    DeviceModule, DeviceModuleError, InstantiationContext, TransportSpec, TransportSpecFormat,
+};
 use crate::emulator::bus::DeviceIdAllocator;
 use crate::emulator::device::Console;
 use crate::emulator::transport::TransportRelay;
@@ -24,35 +26,40 @@ pub struct ConsoleModule;
 #[serde(rename_all = "kebab-case")]
 pub struct ConsoleAttributes {
     #[serde(rename = "break", skip_serializing_if = "Option::is_none")]
-    break_key: Option <u8>,
+    break_key: Option<u8>,
     transport: Option<TransportSpecFormat>,
     irq: Option<u32>,
 }
 
 impl DeviceModule for ConsoleModule {
+    fn name(&self) -> &'static str {
+        "console"
+    }
 
-    fn name(&self) -> &'static str { "console" }
-
-    async fn instantiate(&self,
-                         bus_config: BusConfig, address: u16,
-                         attributes: &HashMap<String, Value>,
-                         context: &InstantiationContext,
-                         id_allocator: Arc<Mutex<DeviceIdAllocator>>)
-            -> Result<BusConfig, DeviceModuleError> {
-
+    async fn instantiate(
+        &self,
+        bus_config: BusConfig,
+        address: u16,
+        attributes: &HashMap<String, Value>,
+        context: &InstantiationContext,
+        id_allocator: Arc<Mutex<DeviceIdAllocator>>,
+    ) -> Result<BusConfig, DeviceModuleError> {
         let attrs = Dict::from_iter(attributes.clone());
         let config: ConsoleAttributes = figment::Figment::new()
             .merge(Serialized::defaults(attrs))
             .extract()
             .map_err(|e| DeviceModuleError::Config(format!("configuration error: {e}")))?;
 
-        let transport_spec = config.transport
+        let transport_spec = config
+            .transport
             .map(TransportSpec::try_from)
             .transpose()
             .map_err(DeviceModuleError::Config)?;
 
         let irq = config.irq.unwrap_or(DEFAULT_IRQ);
-        let device_id = id_allocator.lock().unwrap()
+        let device_id = id_allocator
+            .lock()
+            .unwrap()
             .for_irq(irq)
             .map_err(DeviceModuleError::BusConfig)?;
 
@@ -60,11 +67,18 @@ impl DeviceModule for ConsoleModule {
             let mut dev = Console::new(self.name()).with_address(address);
             if let Some(transport_spec) = transport_spec {
                 let (transport, relay) = transport_spec
-                    .to_transport_with_reporter(context.transport_reporter(dev.identity()), context.pipe_exit_reporter(dev.identity())).await
+                    .to_transport_with_reporter(
+                        context.transport_reporter(dev.identity()),
+                        context.pipe_exit_reporter(dev.identity()),
+                    )
+                    .await
                     .map_err(DeviceModuleError::Transport)?;
                 dev.attach_transport(transport, relay);
-            } else if let Some((transport, relay, reporter)) = context.console_transport.as_ref()
-                    .and_then(|slot| slot.lock().ok()?.take()) {
+            } else if let Some((transport, relay, reporter)) = context
+                .console_transport
+                .as_ref()
+                .and_then(|slot| slot.lock().ok()?.take())
+            {
                 // The reporter was constructed via `TransportReporter::pending`
                 // before this device existed (the `TransportSlot`
                 // injection path builds its transport ahead of
@@ -83,12 +97,14 @@ impl DeviceModule for ConsoleModule {
             dev
         };
 
-        bus_config.device(
-            AddressRange::new(address, address + (BUS_SIZE - 1)),
-            device_id, Box::new(console))
+        bus_config
+            .device(
+                AddressRange::new(address, address + (BUS_SIZE - 1)),
+                device_id,
+                Box::new(console),
+            )
             .map_err(DeviceModuleError::BusConfig)
     }
-
 }
 
 #[cfg(test)]
@@ -106,17 +122,32 @@ mod tests {
     fn injected_slot() -> (TransportSlot, TransportReporter, InternalPipeTransport) {
         let reporter = TransportReporter::pending(None);
         let ((local, relay), remote) = InternalPipeTransport::pair(reporter.clone()).unwrap();
-        let slot = Arc::new(Mutex::new(Some((Box::new(local) as Box<dyn Transport>, relay, reporter.clone()))));
+        let slot = Arc::new(Mutex::new(Some((
+            Box::new(local) as Box<dyn Transport>,
+            relay,
+            reporter.clone(),
+        ))));
         (slot, reporter, remote)
     }
 
     #[tokio::test]
     async fn instantiate_with_injected_transport() {
         let (slot, _reporter, mut remote) = injected_slot();
-        let context = InstantiationContext { console_transport: Some(slot), ..Default::default() };
+        let context = InstantiationContext {
+            console_transport: Some(slot),
+            ..Default::default()
+        };
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
-        let bus_config = ConsoleModule.instantiate(
-            BusConfig::new(), 0xFFF8, &HashMap::new(), &context, id_allocator).await.unwrap();
+        let bus_config = ConsoleModule
+            .instantiate(
+                BusConfig::new(),
+                0xFFF8,
+                &HashMap::new(),
+                &context,
+                id_allocator,
+            )
+            .await
+            .unwrap();
 
         let mut bus = bus_config.build();
         bus.write(0xFFF8, 0x41).unwrap();
@@ -127,12 +158,26 @@ mod tests {
     #[tokio::test]
     async fn injected_transport_is_consumed() {
         let (slot, _reporter, _remote) = injected_slot();
-        let context = InstantiationContext { console_transport: Some(Arc::clone(&slot)), ..Default::default() };
+        let context = InstantiationContext {
+            console_transport: Some(Arc::clone(&slot)),
+            ..Default::default()
+        };
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
-        let _bus_config = ConsoleModule.instantiate(
-            BusConfig::new(), 0xFFF8, &HashMap::new(), &context, id_allocator).await.unwrap();
+        let _bus_config = ConsoleModule
+            .instantiate(
+                BusConfig::new(),
+                0xFFF8,
+                &HashMap::new(),
+                &context,
+                id_allocator,
+            )
+            .await
+            .unwrap();
 
-        assert!(slot.lock().unwrap().is_none(), "transport should be taken after instantiation");
+        assert!(
+            slot.lock().unwrap().is_none(),
+            "transport should be taken after instantiation"
+        );
     }
 
     #[tokio::test]
@@ -142,16 +187,26 @@ mod tests {
         let (slot, _reporter, _remote) = injected_slot();
         let mut attributes = HashMap::new();
         // pipe transport is the only variant we can create without an OS resource in a unit test
-        attributes.insert(
-            "transport".to_string(),
-            Value::from("pipe:/usr/bin/cat"),
-        );
-        let context = InstantiationContext { console_transport: Some(Arc::clone(&slot)), ..Default::default() };
+        attributes.insert("transport".to_string(), Value::from("pipe:/usr/bin/cat"));
+        let context = InstantiationContext {
+            console_transport: Some(Arc::clone(&slot)),
+            ..Default::default()
+        };
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
-        let _result = ConsoleModule.instantiate(
-            BusConfig::new(), 0xFFF8, &attributes, &context, id_allocator).await;
+        let _result = ConsoleModule
+            .instantiate(
+                BusConfig::new(),
+                0xFFF8,
+                &attributes,
+                &context,
+                id_allocator,
+            )
+            .await;
 
-        assert!(slot.lock().unwrap().is_some(), "context transport should not be consumed when transport_spec is set");
+        assert!(
+            slot.lock().unwrap().is_some(),
+            "context transport should not be consumed when transport_spec is set"
+        );
     }
 
     #[tokio::test]
@@ -161,21 +216,32 @@ mod tests {
         let ((local, relay), _remote) = InternalPipeTransport::pair(reporter.clone()).unwrap();
         let context = InstantiationContext {
             console_transport: Some(Arc::new(Mutex::new(Some((
-                Box::new(local) as Box<dyn Transport>, relay, reporter.clone(),
+                Box::new(local) as Box<dyn Transport>,
+                relay,
+                reporter.clone(),
             ))))),
             ..Default::default()
         };
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
-        let _bus_config = ConsoleModule.instantiate(
-            BusConfig::new(), 0xFFF8, &HashMap::new(), &context, id_allocator).await.unwrap();
+        let _bus_config = ConsoleModule
+            .instantiate(
+                BusConfig::new(),
+                0xFFF8,
+                &HashMap::new(),
+                &context,
+                id_allocator,
+            )
+            .await
+            .unwrap();
 
         // Before `instantiate` runs, this reporter is unbound (the device doesn't exist yet at
         // construction) so every reporting call is a silent no-op; `instantiate` must call
         // `bind` on the copy it pulls out of the slot for this clone to start reporting too.
         reporter.report_connected(Some("test-peer".to_string()));
         match error_receiver.recv().await {
-            Some(crate::emulator::DeviceEvent::TransportConnected { peer, .. }) =>
-                assert_eq!(peer, Some("test-peer".to_string())),
+            Some(crate::emulator::DeviceEvent::TransportConnected { peer, .. }) => {
+                assert_eq!(peer, Some("test-peer".to_string()))
+            }
             other => panic!("expected TransportConnected event, got {other:?}"),
         }
     }
@@ -184,13 +250,20 @@ mod tests {
     async fn instantiate_without_injected_transport_and_no_spec() {
         let context = InstantiationContext::default();
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
-        let bus_config = ConsoleModule.instantiate(
-            BusConfig::new(), 0xFFF8, &HashMap::new(), &context, id_allocator).await.unwrap();
+        let bus_config = ConsoleModule
+            .instantiate(
+                BusConfig::new(),
+                0xFFF8,
+                &HashMap::new(),
+                &context,
+                id_allocator,
+            )
+            .await
+            .unwrap();
 
         let mut bus = bus_config.build();
         // Console with no transport: write is silent, read returns 0
         bus.write(0xFFF8, 0x42).unwrap();
         assert_eq!(bus.read(0xFFF9).unwrap(), 0);
     }
-
 }

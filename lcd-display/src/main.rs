@@ -72,7 +72,11 @@ const EDGE_GAP_PITCHES: u32 = 1;
 /// — mirrors `LcdDisplayPanel.tsx`'s `blendColor`.
 fn blend_color(from: Rgb24, to: Rgb24, t: f64) -> Color {
     let blend = |a: u8, b: u8| (a as f64 + (b as f64 - a as f64) * t).round() as u8;
-    Color::RGB(blend(from.r, to.r), blend(from.g, to.g), blend(from.b, to.b))
+    Color::RGB(
+        blend(from.r, to.r),
+        blend(from.g, to.g),
+        blend(from.b, to.b),
+    )
 }
 
 #[derive(Parser)]
@@ -101,7 +105,12 @@ fn read_exact_or_eof<R: Read>(reader: &mut R, buf: &mut [u8]) -> io::Result<bool
     while filled < buf.len() {
         match reader.read(&mut buf[filled..]) {
             Ok(0) if filled == 0 => return Ok(false),
-            Ok(0) => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "stream closed mid-message")),
+            Ok(0) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "stream closed mid-message",
+                ));
+            }
             Ok(n) => filled += n,
             Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
             Err(e) => return Err(e),
@@ -115,7 +124,10 @@ fn read_exact_or_eof<R: Read>(reader: &mut R, buf: &mut [u8]) -> io::Result<bool
 fn read_header<R: Read>(reader: &mut R) -> io::Result<Header> {
     let mut buf = vec![0u8; protocol::HEADER_LEN];
     if !read_exact_or_eof(reader, &mut buf)? {
-        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "stream closed before sending a header"));
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "stream closed before sending a header",
+        ));
     }
     protocol::decode_header(&buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
@@ -131,9 +143,16 @@ fn read_frame<R: Read>(reader: &mut R) -> io::Result<Option<Frame>> {
     let (width_px, height_px) = protocol::decode_frame_dimensions(&dims_buf);
     let mut pixels = vec![0u8; width_px as usize * height_px as usize * 4];
     if !read_exact_or_eof(reader, &mut pixels)? {
-        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "stream closed before sending a frame's pixels"));
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "stream closed before sending a frame's pixels",
+        ));
     }
-    Ok(Some(Frame { width_px: width_px as u32, height_px: height_px as u32, pixels }))
+    Ok(Some(Frame {
+        width_px: width_px as u32,
+        height_px: height_px as u32,
+        pixels,
+    }))
 }
 
 /// Spawns a thread that reads frames from stdin and forwards them over a bounded (capacity 1)
@@ -168,11 +187,16 @@ fn spawn_frame_reader() -> mpsc::Receiver<Frame> {
 /// the bezel) for a given `cell_height_dots`, at `pitch` pixels per dot — mirrors
 /// `LcdDisplayPanel.tsx`'s `drawFrame` sizing math.
 fn window_size(header: &Header, cell_height_dots: u32, pitch: u32) -> (u32, u32) {
-    let total_dots_wide = header.columns as u32 * DOTS_PER_CELL_WIDTH + (header.columns as u32 - 1) * CELL_GAP_PITCHES;
-    let total_dots_high = header.rows as u32 * cell_height_dots + (header.rows as u32 - 1) * CELL_GAP_PITCHES;
+    let total_dots_wide = header.columns as u32 * DOTS_PER_CELL_WIDTH
+        + (header.columns as u32 - 1) * CELL_GAP_PITCHES;
+    let total_dots_high =
+        header.rows as u32 * cell_height_dots + (header.rows as u32 - 1) * CELL_GAP_PITCHES;
     let bezel_px = 2 * BEZEL_PITCHES * pitch;
     let edge_gap_px = 2 * EDGE_GAP_PITCHES * pitch;
-    (total_dots_wide * pitch + edge_gap_px + bezel_px, total_dots_high * pitch + edge_gap_px + bezel_px)
+    (
+        total_dots_wide * pitch + edge_gap_px + bezel_px,
+        total_dots_high * pitch + edge_gap_px + bezel_px,
+    )
 }
 
 /// Renders the current `frame` (or a blank `background` grid before the first one arrives, per
@@ -185,7 +209,11 @@ fn render<T: sdl2::render::RenderTarget>(
     frame: Option<&Frame>,
     pitch: u32,
 ) -> Result<(), String> {
-    let background = Color::RGB(header.background.r, header.background.g, header.background.b);
+    let background = Color::RGB(
+        header.background.r,
+        header.background.g,
+        header.background.b,
+    );
     let off_color = blend_color(header.background, header.foreground, OFF_DOT_BLEND);
     let bezel_px = BEZEL_PITCHES * pitch;
     let edge_gap_px = EDGE_GAP_PITCHES * pitch;
@@ -194,10 +222,12 @@ fn render<T: sdl2::render::RenderTarget>(
     canvas.set_draw_color(BEZEL_COLOR);
     canvas.clear();
 
-    let total_dots_wide = header.columns as u32 * DOTS_PER_CELL_WIDTH + (header.columns as u32 - 1) * CELL_GAP_PITCHES;
+    let total_dots_wide = header.columns as u32 * DOTS_PER_CELL_WIDTH
+        + (header.columns as u32 - 1) * CELL_GAP_PITCHES;
 
     let Some(frame) = frame else {
-        let total_dots_high = header.rows as u32 * DEFAULT_CELL_HEIGHT_DOTS + (header.rows as u32 - 1) * CELL_GAP_PITCHES;
+        let total_dots_high = header.rows as u32 * DEFAULT_CELL_HEIGHT_DOTS
+            + (header.rows as u32 - 1) * CELL_GAP_PITCHES;
         canvas.set_draw_color(background);
         canvas.fill_rect(Rect::new(
             bezel_px as i32,
@@ -209,13 +239,18 @@ fn render<T: sdl2::render::RenderTarget>(
         return Ok(());
     };
 
-    let cell_height_dots = if header.rows == 0 { 0 } else { frame.height_px / header.rows as u32 };
+    let cell_height_dots = if header.rows == 0 {
+        0
+    } else {
+        frame.height_px / header.rows as u32
+    };
     if cell_height_dots == 0 {
         canvas.present();
         return Ok(());
     }
 
-    let total_dots_high = header.rows as u32 * cell_height_dots + (header.rows as u32 - 1) * CELL_GAP_PITCHES;
+    let total_dots_high =
+        header.rows as u32 * cell_height_dots + (header.rows as u32 - 1) * CELL_GAP_PITCHES;
     canvas.set_draw_color(background);
     canvas.fill_rect(Rect::new(
         bezel_px as i32,
@@ -230,15 +265,29 @@ fn render<T: sdl2::render::RenderTarget>(
     for row in 0..header.rows as u32 {
         for dot_row in 0..cell_height_dots {
             let raw_y = row * cell_height_dots + dot_row;
-            let cy = (grid_origin_px + (row * (cell_height_dots + CELL_GAP_PITCHES) + dot_row) * pitch + pitch / 2) as i32;
+            let cy = (grid_origin_px
+                + (row * (cell_height_dots + CELL_GAP_PITCHES) + dot_row) * pitch
+                + pitch / 2) as i32;
             for col in 0..header.columns as u32 {
                 for dot_col in 0..DOTS_PER_CELL_WIDTH {
                     let raw_x = col * DOTS_PER_CELL_WIDTH + dot_col;
                     let offset = ((raw_y * frame.width_px + raw_x) * 4) as usize;
-                    let (r, g, b) = (frame.pixels[offset], frame.pixels[offset + 1], frame.pixels[offset + 2]);
-                    let is_background = r == header.background.r && g == header.background.g && b == header.background.b;
-                    let color = if is_background { off_color } else { Color::RGB(r, g, b) };
-                    let cx = (grid_origin_px + (col * (DOTS_PER_CELL_WIDTH + CELL_GAP_PITCHES) + dot_col) * pitch + pitch / 2) as i32;
+                    let (r, g, b) = (
+                        frame.pixels[offset],
+                        frame.pixels[offset + 1],
+                        frame.pixels[offset + 2],
+                    );
+                    let is_background = r == header.background.r
+                        && g == header.background.g
+                        && b == header.background.b;
+                    let color = if is_background {
+                        off_color
+                    } else {
+                        Color::RGB(r, g, b)
+                    };
+                    let cx = (grid_origin_px
+                        + (col * (DOTS_PER_CELL_WIDTH + CELL_GAP_PITCHES) + dot_col) * pitch
+                        + pitch / 2) as i32;
                     canvas.set_draw_color(color);
                     canvas.fill_rect(Rect::new(cx - half, cy - half, dot_size, dot_size))?;
                 }
@@ -266,18 +315,31 @@ fn main() {
     let rx = spawn_frame_reader();
 
     let sdl_context = sdl2::init().expect("SDL2 init failed");
-    let video = sdl_context.video().expect("SDL2 video subsystem init failed");
+    let video = sdl_context
+        .video()
+        .expect("SDL2 video subsystem init failed");
     let window = video
-        .window(&format!("emma65 LCD display - {}x{}", header.columns, header.rows), pixel_width, pixel_height)
+        .window(
+            &format!("emma65 LCD display - {}x{}", header.columns, header.rows),
+            pixel_width,
+            pixel_height,
+        )
         .resizable()
         .position_centered()
         .build()
         .expect("failed to create SDL2 window");
 
-    let mut canvas = window.into_canvas().build().expect("failed to create SDL2 canvas");
-    canvas.set_logical_size(pixel_width, pixel_height).expect("failed to set logical render size");
+    let mut canvas = window
+        .into_canvas()
+        .build()
+        .expect("failed to create SDL2 canvas");
+    canvas
+        .set_logical_size(pixel_width, pixel_height)
+        .expect("failed to set logical render size");
 
-    let mut event_pump = sdl_context.event_pump().expect("failed to obtain SDL2 event pump");
+    let mut event_pump = sdl_context
+        .event_pump()
+        .expect("failed to obtain SDL2 event pump");
 
     let mut current_frame: Option<Frame> = None;
     let mut logical_size = (pixel_width, pixel_height);
@@ -302,8 +364,13 @@ fn main() {
             .unwrap_or(DEFAULT_CELL_HEIGHT_DOTS);
         let wanted_size = window_size(&header, cell_height_dots, args.pitch);
         if wanted_size != logical_size {
-            canvas.window_mut().set_size(wanted_size.0, wanted_size.1).expect("failed to resize SDL2 window");
-            canvas.set_logical_size(wanted_size.0, wanted_size.1).expect("failed to set logical render size");
+            canvas
+                .window_mut()
+                .set_size(wanted_size.0, wanted_size.1)
+                .expect("failed to resize SDL2 window");
+            canvas
+                .set_logical_size(wanted_size.0, wanted_size.1)
+                .expect("failed to set logical render size");
             logical_size = wanted_size;
         }
 
@@ -318,7 +385,12 @@ mod tests {
     use sdl2::surface::Surface;
 
     fn sample_header() -> Header {
-        Header { columns: 2, rows: 1, background: Rgb24::new(0, 0, 0), foreground: Rgb24::new(255, 255, 255) }
+        Header {
+            columns: 2,
+            rows: 1,
+            background: Rgb24::new(0, 0, 0),
+            foreground: Rgb24::new(255, 255, 255),
+        }
     }
 
     /// Reads back the `(r, g, b, a)` bytes at `(x, y)` from an `RGBA32` surface — same approach as
@@ -328,7 +400,12 @@ mod tests {
         let pitch = surface.pitch() as usize;
         let bytes = surface.without_lock().expect("surface must not be locked");
         let offset = y as usize * pitch + x as usize * 4;
-        (bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3])
+        (
+            bytes[offset],
+            bytes[offset + 1],
+            bytes[offset + 2],
+            bytes[offset + 3],
+        )
     }
 
     #[test]
@@ -338,8 +415,14 @@ mod tests {
 
         // 2 columns * 5 dots + 1 gap = 11 dots wide; 1 row * 8 dots + 0 gaps = 8 dots high; plus an
         // EDGE_GAP_PITCHES-wide margin and a BEZEL_PITCHES-wide bezel on every side.
-        assert_eq!(width, 11 * 10 + 2 * EDGE_GAP_PITCHES * 10 + 2 * BEZEL_PITCHES * 10);
-        assert_eq!(height, 8 * 10 + 2 * EDGE_GAP_PITCHES * 10 + 2 * BEZEL_PITCHES * 10);
+        assert_eq!(
+            width,
+            11 * 10 + 2 * EDGE_GAP_PITCHES * 10 + 2 * BEZEL_PITCHES * 10
+        );
+        assert_eq!(
+            height,
+            8 * 10 + 2 * EDGE_GAP_PITCHES * 10 + 2 * BEZEL_PITCHES * 10
+        );
     }
 
     #[test]
@@ -377,7 +460,11 @@ mod tests {
         // Mark the dot at raw (2, 1) -- the middle column of an 'A' glyph's row 1 -- as foreground.
         let offset = ((width_px + 2) * 4) as usize;
         pixels[offset..offset + 4].copy_from_slice(&[255, 255, 255, 255]);
-        let frame = Frame { width_px, height_px, pixels };
+        let frame = Frame {
+            width_px,
+            height_px,
+            pixels,
+        };
 
         let surface = Surface::new(200, 200, PixelFormatEnum::RGBA32).unwrap();
         let mut canvas = surface.into_canvas().unwrap();

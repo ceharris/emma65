@@ -15,7 +15,6 @@ pub struct Parser {
 }
 
 impl Parser {
-
     pub fn from(
         map_register: impl Fn(&str) -> Option<Operand> + 'static,
         map_flag: impl Fn(&str) -> Option<Operand> + 'static,
@@ -28,22 +27,39 @@ impl Parser {
         }
     }
 
-    pub fn parse<'a>(&self, source: &'a str, vars: &mut Variables) -> Result<Option<Expr<'a>>, Error> {
+    pub fn parse<'a>(
+        &self,
+        source: &'a str,
+        vars: &mut Variables,
+    ) -> Result<Option<Expr<'a>>, Error> {
         let tokens = Scanner::new(source).scan()?;
         if tokens.is_empty() {
             return Ok(None);
         }
-        let mut state = ParseState { source, tokens, current: 0, parser: self };
+        let mut state = ParseState {
+            source,
+            tokens,
+            current: 0,
+            parser: self,
+        };
         let (_, expr) = state.parse_statement(vars)?;
         if !state.is_at_end() {
             let token = state.peek().unwrap();
-            Err(Error::from(token.location.line, token.location.column, "unexpected token"))
+            Err(Error::from(
+                token.location.line,
+                token.location.column,
+                "unexpected token",
+            ))
         } else {
             Ok(Some(expr))
         }
     }
 
-    pub fn parse_all<'a>(&self, source: &'a str, vars: &mut Variables) -> Vec<Result<(&'a str, Expr<'a>), Error>> {
+    pub fn parse_all<'a>(
+        &self,
+        source: &'a str,
+        vars: &mut Variables,
+    ) -> Vec<Result<(&'a str, Expr<'a>), Error>> {
         let tokens = match Scanner::new(source).scan() {
             Ok(t) => t,
             Err(e) => return vec![Err(e)],
@@ -51,7 +67,12 @@ impl Parser {
         if tokens.is_empty() {
             return vec![];
         }
-        let mut state = ParseState { source, tokens, current: 0, parser: self };
+        let mut state = ParseState {
+            source,
+            tokens,
+            current: 0,
+            parser: self,
+        };
         let mut results = Vec::new();
         while !state.is_at_end() {
             match state.parse_statement(vars) {
@@ -74,7 +95,6 @@ struct ParseState<'a, 'p> {
 }
 
 impl<'a, 'p> ParseState<'a, 'p> {
-
     fn parse_statement(&mut self, vars: &mut Variables) -> Result<(&'a str, Expr<'a>), Error> {
         let start = self.current;
         let expr = self.parse_assignment(vars)?;
@@ -86,13 +106,15 @@ impl<'a, 'p> ParseState<'a, 'p> {
     fn parse_assignment(&mut self, vars: &mut Variables) -> Result<Expr<'a>, Error> {
         if let (Some(name_token), true) = (
             self.peek().cloned(),
-            self.peek_next().is_some_and(|t| t.token_type() == TokenType::Walrus),
-        ) && let TokenType::Symbol(name) = name_token.token_type().clone() {
-                self.advance(); // consume symbol
-                self.advance(); // consume :=
-                let id = vars.get_or_create(&name);
-                let rhs = self.parse_next(vars)?;
-                return Ok(Expr::assign(&name_token, id, rhs));
+            self.peek_next()
+                .is_some_and(|t| t.token_type() == TokenType::Walrus),
+        ) && let TokenType::Symbol(name) = name_token.token_type().clone()
+        {
+            self.advance(); // consume symbol
+            self.advance(); // consume :=
+            let id = vars.get_or_create(&name);
+            let rhs = self.parse_next(vars)?;
+            return Ok(Expr::assign(&name_token, id, rhs));
         }
         self.parse_logical_or(vars)
     }
@@ -106,7 +128,13 @@ impl<'a, 'p> ParseState<'a, 'p> {
         while let Some(op) = self.match_token(&[TokenType::BarBar]) {
             let right = self.parse_logical_and(vars)?;
             let signed = left.is_signed() || right.is_signed();
-            left = Expr::binary(&op, Self::binary_operator(op.token_type()), left, right, signed);
+            left = Expr::binary(
+                &op,
+                Self::binary_operator(op.token_type()),
+                left,
+                right,
+                signed,
+            );
         }
         Ok(left)
     }
@@ -116,7 +144,13 @@ impl<'a, 'p> ParseState<'a, 'p> {
         while let Some(op) = self.match_token(&[TokenType::AmperAmper]) {
             let right = self.parse_bitwise_or(vars)?;
             let signed = left.is_signed() || right.is_signed();
-            left = Expr::binary(&op, Self::binary_operator(op.token_type()), left, right, signed);
+            left = Expr::binary(
+                &op,
+                Self::binary_operator(op.token_type()),
+                left,
+                right,
+                signed,
+            );
         }
         Ok(left)
     }
@@ -126,7 +160,13 @@ impl<'a, 'p> ParseState<'a, 'p> {
         while let Some(op) = self.match_token(&[TokenType::Bar]) {
             let right = self.parse_bitwise_xor(vars)?;
             let signed = left.is_signed() || right.is_signed();
-            left = Expr::binary(&op, Self::binary_operator(op.token_type()), left, right, signed);
+            left = Expr::binary(
+                &op,
+                Self::binary_operator(op.token_type()),
+                left,
+                right,
+                signed,
+            );
         }
         Ok(left)
     }
@@ -136,7 +176,13 @@ impl<'a, 'p> ParseState<'a, 'p> {
         while let Some(op) = self.match_token(&[TokenType::Caret]) {
             let right = self.parse_bitwise_and(vars)?;
             let signed = left.is_signed() || right.is_signed();
-            left = Expr::binary(&op, Self::binary_operator(op.token_type()), left, right, signed);
+            left = Expr::binary(
+                &op,
+                Self::binary_operator(op.token_type()),
+                left,
+                right,
+                signed,
+            );
         }
         Ok(left)
     }
@@ -146,37 +192,71 @@ impl<'a, 'p> ParseState<'a, 'p> {
         while let Some(op) = self.match_token(&[TokenType::Amper]) {
             let right = self.parse_equality(vars)?;
             let signed = left.is_signed() || right.is_signed();
-            left = Expr::binary(&op, Self::binary_operator(op.token_type()), left, right, signed);
+            left = Expr::binary(
+                &op,
+                Self::binary_operator(op.token_type()),
+                left,
+                right,
+                signed,
+            );
         }
         Ok(left)
     }
 
     fn parse_equality(&mut self, vars: &mut Variables) -> Result<Expr<'a>, Error> {
         let mut left = self.parse_relational(vars)?;
-        while let Some(op) = self.match_token(&[TokenType::EqualEqual, TokenType::BangEqual, TokenType::Equal]) {
+        while let Some(op) = self.match_token(&[
+            TokenType::EqualEqual,
+            TokenType::BangEqual,
+            TokenType::Equal,
+        ]) {
             let right = self.parse_relational(vars)?;
             let signed = left.is_signed() || right.is_signed();
-            left = Expr::binary(&op, Self::binary_operator(op.token_type()), left, right, signed);
+            left = Expr::binary(
+                &op,
+                Self::binary_operator(op.token_type()),
+                left,
+                right,
+                signed,
+            );
         }
         Ok(left)
     }
 
     fn parse_relational(&mut self, vars: &mut Variables) -> Result<Expr<'a>, Error> {
         let mut left = self.parse_shift(vars)?;
-        while let Some(op) = self.match_token(&[TokenType::Greater, TokenType::GreaterEqual, TokenType::Lesser, TokenType::LesserEqual]) {
+        while let Some(op) = self.match_token(&[
+            TokenType::Greater,
+            TokenType::GreaterEqual,
+            TokenType::Lesser,
+            TokenType::LesserEqual,
+        ]) {
             let right = self.parse_shift(vars)?;
             let signed = left.is_signed() || right.is_signed();
-            left = Expr::binary(&op, Self::binary_operator(op.token_type()), left, right, signed);
+            left = Expr::binary(
+                &op,
+                Self::binary_operator(op.token_type()),
+                left,
+                right,
+                signed,
+            );
         }
         Ok(left)
     }
 
     fn parse_shift(&mut self, vars: &mut Variables) -> Result<Expr<'a>, Error> {
         let mut left = self.parse_term(vars)?;
-        while let Some(op) = self.match_token(&[TokenType::GreaterGreater, TokenType::LesserLesser]) {
+        while let Some(op) = self.match_token(&[TokenType::GreaterGreater, TokenType::LesserLesser])
+        {
             let right = self.parse_term(vars)?;
             let signed = left.is_signed() || right.is_signed();
-            left = Expr::binary(&op, Self::binary_operator(op.token_type()), left, right, signed);
+            left = Expr::binary(
+                &op,
+                Self::binary_operator(op.token_type()),
+                left,
+                right,
+                signed,
+            );
         }
         Ok(left)
     }
@@ -186,17 +266,31 @@ impl<'a, 'p> ParseState<'a, 'p> {
         while let Some(op) = self.match_token(&[TokenType::Plus, TokenType::Minus]) {
             let right = self.parse_factor(vars)?;
             let signed = left.is_signed() || right.is_signed();
-            left = Expr::binary(&op, Self::binary_operator(op.token_type()), left, right, signed);
+            left = Expr::binary(
+                &op,
+                Self::binary_operator(op.token_type()),
+                left,
+                right,
+                signed,
+            );
         }
         Ok(left)
     }
 
     fn parse_factor(&mut self, vars: &mut Variables) -> Result<Expr<'a>, Error> {
         let mut left = self.parse_unary(vars)?;
-        while let Some(op) = self.match_token(&[TokenType::Percent, TokenType::Slash, TokenType::Star]) {
+        while let Some(op) =
+            self.match_token(&[TokenType::Percent, TokenType::Slash, TokenType::Star])
+        {
             let right = self.parse_unary(vars)?;
             let signed = left.is_signed() || right.is_signed();
-            left = Expr::binary(&op, Self::binary_operator(op.token_type()), left, right, signed);
+            left = Expr::binary(
+                &op,
+                Self::binary_operator(op.token_type()),
+                left,
+                right,
+                signed,
+            );
         }
         Ok(left)
     }
@@ -228,13 +322,21 @@ impl<'a, 'p> ParseState<'a, 'p> {
     fn parse_unary(&mut self, vars: &mut Variables) -> Result<Expr<'a>, Error> {
         if let Some(op) = self.match_token(&[TokenType::Bang, TokenType::Tilde]) {
             let operand = self.parse_unary(vars)?;
-            Ok(Expr::unary(&op, Self::unary_operator(op.token_type()), operand, false))
-        }
-        else if let Some(op) = self.match_token(&[TokenType::Minus, TokenType::Plus]) {
+            Ok(Expr::unary(
+                &op,
+                Self::unary_operator(op.token_type()),
+                operand,
+                false,
+            ))
+        } else if let Some(op) = self.match_token(&[TokenType::Minus, TokenType::Plus]) {
             let operand = self.parse_unary(vars)?;
-            Ok(Expr::unary(&op, Self::unary_operator(op.token_type()), operand, true))
-        }
-        else {
+            Ok(Expr::unary(
+                &op,
+                Self::unary_operator(op.token_type()),
+                operand,
+                true,
+            ))
+        } else {
             self.parse_primary(vars)
         }
     }
@@ -251,74 +353,101 @@ impl<'a, 'p> ParseState<'a, 'p> {
 
     fn parse_primary(&mut self, vars: &mut Variables) -> Result<Expr<'a>, Error> {
         match self.peek().cloned() {
-            Some(token) => {
-                match token.token_type() {
-                    TokenType::Symbol(name) => {
-                        self.advance();
-                        self.resolve_symbol(name, &token, vars)
-                    },
-                    TokenType::Number(n) => {
-                        self.advance();
-                        Ok(Expr::number(&token, *n))
-                    },
-                    TokenType::LeftParen => self.parse_grouping(vars),
-                    TokenType::LeftBBracket
-                    | TokenType::LeftWBracket
-                    | TokenType::LeftDBracket => self.parse_memory_operator(vars),
-                    TokenType::Backtick => self.parse_flag_operator(),
-                    _ => Err(Error::from(token.location.line, token.location.column,
-                                         "misplaced or unrecognized token")),
+            Some(token) => match token.token_type() {
+                TokenType::Symbol(name) => {
+                    self.advance();
+                    self.resolve_symbol(name, &token, vars)
                 }
-            }
+                TokenType::Number(n) => {
+                    self.advance();
+                    Ok(Expr::number(&token, *n))
+                }
+                TokenType::LeftParen => self.parse_grouping(vars),
+                TokenType::LeftBBracket | TokenType::LeftWBracket | TokenType::LeftDBracket => {
+                    self.parse_memory_operator(vars)
+                }
+                TokenType::Backtick => self.parse_flag_operator(),
+                _ => Err(Error::from(
+                    token.location.line,
+                    token.location.column,
+                    "misplaced or unrecognized token",
+                )),
+            },
             None => Err(Error::from(0, 0, "expected operand")),
         }
     }
 
-    fn resolve_symbol(&self, name: &str, token: &Token<'a>, vars: &Variables) -> Result<Expr<'a>, Error> {
+    fn resolve_symbol(
+        &self,
+        name: &str,
+        token: &Token<'a>,
+        vars: &Variables,
+    ) -> Result<Expr<'a>, Error> {
         match (self.parser.map_register)(name) {
             Some(operand) => Ok(Expr::register(token, operand)),
             None => match (self.parser.map_symbol)(name) {
                 Some(operand) => Ok(Expr::number(token, operand)),
                 None => match vars.get(name) {
                     Some(id) => Ok(Expr::variable(token, id)),
-                    None => Err(Error::from(token.location.line, token.location.column,
-                                            &format!("unresolved symbol '{}'", name)))
-                }
-            }
+                    None => Err(Error::from(
+                        token.location.line,
+                        token.location.column,
+                        &format!("unresolved symbol '{}'", name),
+                    )),
+                },
+            },
         }
     }
 
     fn parse_grouping(&mut self, vars: &mut Variables) -> Result<Expr<'a>, Error> {
-        let op = self.advance().unwrap();  // consume the opening parenthesis
+        let op = self.advance().unwrap(); // consume the opening parenthesis
         let operand = self.parse_next(vars)?;
         match self.advance() {
             Some(token) if token.token_type() == TokenType::RightParen => {
                 let signed = operand.is_signed();
-                Ok(Expr::unary(&op, UnaryOperatorType::Grouping, operand, signed))
+                Ok(Expr::unary(
+                    &op,
+                    UnaryOperatorType::Grouping,
+                    operand,
+                    signed,
+                ))
             }
             Some(token) => Err(Error::from(
-                token.location.line, token.location.column,
-                "expected closing parenthesis")),
+                token.location.line,
+                token.location.column,
+                "expected closing parenthesis",
+            )),
             None => Err(Error::from(
-                op.location.line, op.location.column,
-                "expected closing parenthesis")),
+                op.location.line,
+                op.location.column,
+                "expected closing parenthesis",
+            )),
         }
     }
 
     fn parse_memory_operator(&mut self, vars: &mut Variables) -> Result<Expr<'a>, Error> {
-        let op = self.advance().unwrap();  // consume the bracket operator
+        let op = self.advance().unwrap(); // consume the bracket operator
         let operand = self.parse_next(vars)?;
         match self.advance() {
             Some(token) if token.token_type() == TokenType::RightBracket => {
                 let width = Self::memory_operand_width(op.token_type());
-                Ok(Expr::unary(&op, UnaryOperatorType::Fetch(width), operand, false))
+                Ok(Expr::unary(
+                    &op,
+                    UnaryOperatorType::Fetch(width),
+                    operand,
+                    false,
+                ))
             }
             Some(token) => Err(Error::from(
-                token.location.line, token.location.column,
-                "expected closing bracket")),
+                token.location.line,
+                token.location.column,
+                "expected closing bracket",
+            )),
             None => Err(Error::from(
-                op.location.line, op.location.column,
-                "expected closing bracket")),
+                op.location.line,
+                op.location.column,
+                "expected closing bracket",
+            )),
         }
     }
 
@@ -335,24 +464,34 @@ impl<'a, 'p> ParseState<'a, 'p> {
         let op = self.advance().unwrap(); // consume backtick
         match self.advance() {
             Some(token) => match token.token_type() {
-                TokenType::Symbol(name) =>
-                    match (self.parser.map_flag)(name) {
-                        Some(flag) => Ok(Expr::flag(&token, flag)),
-                        None => Err(Error::from(token.location.line, token.location.column,
-                                                &format!("unrecognized flag '{}'", name)))
-                    }
+                TokenType::Symbol(name) => match (self.parser.map_flag)(name) {
+                    Some(flag) => Ok(Expr::flag(&token, flag)),
+                    None => Err(Error::from(
+                        token.location.line,
+                        token.location.column,
+                        &format!("unrecognized flag '{}'", name),
+                    )),
+                },
                 _ => Err(Error::from(
-                    token.location.line, token.location.column,
-                    "expected flag name after '`'")),
-            }
+                    token.location.line,
+                    token.location.column,
+                    "expected flag name after '`'",
+                )),
+            },
             None => Err(Error::from(
-                op.location.line, op.location.column,
-                "expected flag name after '`'")),
+                op.location.line,
+                op.location.column,
+                "expected flag name after '`'",
+            )),
         }
     }
 
     fn match_token(&mut self, types: &[TokenType]) -> Option<Token<'a>> {
-        if !self.is_at_end() && types.iter().any(|t| t == self.tokens[self.current].token_type()) {
+        if !self.is_at_end()
+            && types
+                .iter()
+                .any(|t| t == self.tokens[self.current].token_type())
+        {
             self.advance()
         } else {
             None
@@ -362,8 +501,7 @@ impl<'a, 'p> ParseState<'a, 'p> {
     fn advance(&mut self) -> Option<Token<'a>> {
         if self.is_at_end() {
             None
-        }
-        else {
+        } else {
             let token = self.tokens[self.current].clone();
             self.current += 1;
             Some(token)
@@ -373,8 +511,7 @@ impl<'a, 'p> ParseState<'a, 'p> {
     fn peek(&self) -> Option<&Token<'a>> {
         if self.is_at_end() {
             None
-        }
-        else {
+        } else {
             Some(&self.tokens[self.current])
         }
     }
@@ -382,8 +519,7 @@ impl<'a, 'p> ParseState<'a, 'p> {
     fn peek_next(&self) -> Option<&Token<'a>> {
         if self.current + 1 >= self.tokens.len() {
             None
-        }
-        else {
+        } else {
             Some(&self.tokens[self.current + 1])
         }
     }
@@ -406,7 +542,10 @@ impl<'a, 'p> ParseState<'a, 'p> {
 
     fn synchronize(&mut self) {
         while !self.is_at_end() {
-            if self.advance().is_some_and(|t| t.token_type() == TokenType::Semicolon) {
+            if self
+                .advance()
+                .is_some_and(|t| t.token_type() == TokenType::Semicolon)
+            {
                 return;
             }
         }
@@ -419,21 +558,39 @@ mod tests {
     use super::*;
 
     const REGISTERS: [(&str, Operand); 2] = [("A", 1), ("PC", 2)];
-    const FLAGS: [(&str, Operand) ; 2] = [("C", 1), ("Z", 2)];
-    const SYMBOLS: [(&str, Operand) ; 2] = [("foo", 42), ("bar", 69)];
+    const FLAGS: [(&str, Operand); 2] = [("C", 1), ("Z", 2)];
+    const SYMBOLS: [(&str, Operand); 2] = [("foo", 42), ("bar", 69)];
 
     fn register_mapper(s: &str) -> Option<Operand> {
-        let operand = REGISTERS.iter().find_map(|(name, value)| if s.eq_ignore_ascii_case(name) { Some(value) } else { None });
+        let operand = REGISTERS.iter().find_map(|(name, value)| {
+            if s.eq_ignore_ascii_case(name) {
+                Some(value)
+            } else {
+                None
+            }
+        });
         operand.copied()
     }
 
     fn flag_mapper(s: &str) -> Option<Operand> {
-        let operand = FLAGS.iter().find_map(|(name, value)| if s.eq_ignore_ascii_case(name) { Some(value) } else { None });
+        let operand = FLAGS.iter().find_map(|(name, value)| {
+            if s.eq_ignore_ascii_case(name) {
+                Some(value)
+            } else {
+                None
+            }
+        });
         operand.copied()
     }
 
     fn symbol_mapper(s: &str) -> Option<Operand> {
-        let operand = SYMBOLS.iter().find_map(|(name, value)| if s.eq_ignore_ascii_case(name) { Some(value) } else { None });
+        let operand = SYMBOLS.iter().find_map(|(name, value)| {
+            if s.eq_ignore_ascii_case(name) {
+                Some(value)
+            } else {
+                None
+            }
+        });
         operand.copied()
     }
 
@@ -458,8 +615,14 @@ mod tests {
     #[test]
     fn parse_symbol() {
         let symbol_text = "foo";
-        let expr = parser().parse(symbol_text, &mut no_vars()).unwrap().unwrap();
-        assert_eq!(expr.token().token_type(), &TokenType::Symbol(String::from(symbol_text)));
+        let expr = parser()
+            .parse(symbol_text, &mut no_vars())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            expr.token().token_type(),
+            &TokenType::Symbol(String::from(symbol_text))
+        );
         assert_eq!(expr.expr_type(), &ExprType::Number(42));
         assert!(!expr.is_signed());
     }
@@ -468,7 +631,10 @@ mod tests {
     fn parse_number() {
         let number = 42;
         let number_text = number.to_string();
-        let expr = parser().parse(&number_text, &mut no_vars()).unwrap().unwrap();
+        let expr = parser()
+            .parse(&number_text, &mut no_vars())
+            .unwrap()
+            .unwrap();
         assert_eq!(expr.token().token_type(), &TokenType::Number(number));
         assert_eq!(expr.expr_type(), &ExprType::Number(number));
         assert!(!expr.is_signed());
@@ -502,9 +668,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_group_signedness() {
-
-    }
+    fn parse_group_signedness() {}
 
     fn validate_memory_operator(operator_width: &str, expected_operand_width: &FetchWidth) {
         let source = format!("{operator_width}[0]");
@@ -516,7 +680,7 @@ mod tests {
                     UnaryOperatorType::Fetch(w) => {
                         assert_eq!(w, expected_operand_width);
                     }
-                    _ => panic!("expected operator type: {operator_type:?}")
+                    _ => panic!("expected operator type: {operator_type:?}"),
                 }
                 assert_eq!(operand.expr_type(), &ExprType::Number(0));
             }
@@ -558,7 +722,7 @@ mod tests {
         let expr = result.unwrap().unwrap();
         match expr.expr_type() {
             ExprType::Flag(operand) => {
-                assert_eq!(*operand, 1);     // C = 1 in our mapper
+                assert_eq!(*operand, 1); // C = 1 in our mapper
             }
             _ => panic!("expected Flag, got {:?}", expr),
         }
@@ -701,7 +865,10 @@ mod tests {
         let mut vars = Variables::new();
         let expr = parser().parse("x := 42", &mut vars).unwrap().unwrap();
         let id = vars.get("x").unwrap();
-        assert_eq!(expr.expr_type(), &ExprType::Assign(id, Box::new(Expr::number(expr.token(), 42))));
+        assert_eq!(
+            expr.expr_type(),
+            &ExprType::Assign(id, Box::new(Expr::number(expr.token(), 42)))
+        );
     }
 
     #[test]
@@ -737,7 +904,8 @@ mod tests {
     fn parse_nested_walrus() {
         let mut vars = Variables::new();
         let _prev_a_id = vars.get_or_create("prev_A");
-        parser().parse("(prev_A := A) != prev_A", &mut vars).unwrap();
+        parser()
+            .parse("(prev_A := A) != prev_A", &mut vars)
+            .unwrap();
     }
-
 }

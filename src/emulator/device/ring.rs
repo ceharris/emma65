@@ -1,6 +1,5 @@
-
 /// Capacity of the ring (number of elements); must be a power of two.
-pub const RING_CAPACITY: usize = 65536;      // any smallish power of two
+pub const RING_CAPACITY: usize = 65536; // any smallish power of two
 
 /// A ring buffer of fixed capacity.
 pub struct Ring<T> {
@@ -10,7 +9,6 @@ pub struct Ring<T> {
 }
 
 impl<T: Copy> Ring<T> {
-
     /// Initializes a new empty ring.
     pub fn new(init_value: T) -> Self {
         Self {
@@ -62,7 +60,6 @@ impl<T: Copy> Ring<T> {
     pub fn clear(&mut self) {
         self.head = self.tail;
     }
-
 }
 
 #[cfg(test)]
@@ -87,7 +84,10 @@ mod tests {
     fn get_put_value() {
         let mut ring = Ring::new(0);
         ring.put(42);
-        assert!(matches!(ring.get(), Some(42)), "expected to get the value put");
+        assert!(
+            matches!(ring.get(), Some(42)),
+            "expected to get the value put"
+        );
     }
 
     #[test]
@@ -95,8 +95,14 @@ mod tests {
         let mut ring = Ring::new(0);
         assert!(ring.put(42), "expected ring to accept offered value");
         assert!(ring.put(43), "expected ring to accept offered value");
-        assert!(matches!(ring.get(), Some(42)), "expected to get the first value put");
-        assert!(matches!(ring.get(), Some(43)), "expected to get the next value put");
+        assert!(
+            matches!(ring.get(), Some(42)),
+            "expected to get the first value put"
+        );
+        assert!(
+            matches!(ring.get(), Some(43)),
+            "expected to get the next value put"
+        );
     }
 
     #[test]
@@ -104,7 +110,10 @@ mod tests {
         let mut ring = Ring::new(0);
         assert!(ring.put(42), "expected ring to accept offered value");
         assert!(ring.put(43), "expected ring to accept offered value");
-        assert!(matches!(ring.peek(), Some(42)), "expected to get the first value put");
+        assert!(
+            matches!(ring.peek(), Some(42)),
+            "expected to get the first value put"
+        );
         assert!(matches!(ring.peek(), Some(42)), "expected same value");
     }
 
@@ -115,5 +124,4 @@ mod tests {
         ring.clear();
         assert!(ring.is_empty(), "expected empty ring");
     }
-
 }

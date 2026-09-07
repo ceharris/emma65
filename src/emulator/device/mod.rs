@@ -1,20 +1,20 @@
 //! IO device trait, device identification, and async device event channel, built-in devices.
-pub mod r6551;
 pub mod console;
+pub mod display;
 pub mod finch;
 pub(crate) mod input_buffer;
+pub mod lcd_display;
+pub mod led_matrix;
 pub mod lfsr;
 pub mod mc6840;
 pub mod mc6850;
 pub mod phoebe;
 pub mod pic_finch;
-pub mod via6522;
-mod ring;
-pub mod vireo;
 pub mod protocol;
-pub mod led_matrix;
-pub mod display;
-pub mod lcd_display;
+pub mod r6551;
+mod ring;
+pub mod via6522;
+pub mod vireo;
 
 pub use self::console::Console;
 pub use self::finch::Finch;
@@ -24,12 +24,18 @@ pub use self::mc6840::Mc6840;
 pub use self::mc6850::Mc6850;
 pub use self::phoebe::Phoebe;
 pub use self::pic_finch::PicFinch;
-pub use protocol::{ProtocolMessageDecoder, ProtocolMessageEncoder, ProtocolMessageEncoding};
-pub use protocol::ptm::{PtmAsciiProtocolDecoder, PtmAsciiProtocolEncoder, PtmBinaryProtocolDecoder, PtmBinaryProtocolEncoder, PtmProtocolMessage};
 pub use self::r6551::R6551;
 pub use self::via6522::Via6522;
-pub use protocol::via::{ViaAsciiProtocolDecoder, ViaAsciiProtocolEncoder, ViaBinaryProtocolDecoder, ViaBinaryProtocolEncoder, ViaProtocolMessage};
 pub use self::vireo::Vireo;
+pub use protocol::ptm::{
+    PtmAsciiProtocolDecoder, PtmAsciiProtocolEncoder, PtmBinaryProtocolDecoder,
+    PtmBinaryProtocolEncoder, PtmProtocolMessage,
+};
+pub use protocol::via::{
+    ViaAsciiProtocolDecoder, ViaAsciiProtocolEncoder, ViaBinaryProtocolDecoder,
+    ViaBinaryProtocolEncoder, ViaProtocolMessage,
+};
+pub use protocol::{ProtocolMessageDecoder, ProtocolMessageEncoder, ProtocolMessageEncoding};
 
 use tokio::sync::mpsc;
 
@@ -133,24 +139,71 @@ pub fn device_event_channel() -> (ErrorSender, ErrorReceiver) {
 /// still gets these messages via the log facility instead of losing them entirely.
 pub fn log_device_event(sender: &LogSender, event: &DeviceEvent) {
     match event {
-        DeviceEvent::TransportConnected { device, peer: Some(peer) } =>
-            log_msg!(sender, LogLevel::Info, LogCategory::Transport, "{device} connected: {peer}"),
-        DeviceEvent::TransportConnected { device, peer: None } =>
-            log_msg!(sender, LogLevel::Info, LogCategory::Transport, "{device} connected"),
-        DeviceEvent::TransportDisconnected { device, peer: Some(peer), reason } =>
-            log_msg!(sender, LogLevel::Warn, LogCategory::Transport, "{device} disconnected: {peer} ({reason})"),
-        DeviceEvent::TransportDisconnected { device, peer: None, reason } =>
-            log_msg!(sender, LogLevel::Warn, LogCategory::Transport, "{device} disconnected: {reason}"),
-        DeviceEvent::TransportError { device, error } =>
-            log_msg!(sender, LogLevel::Error, LogCategory::Transport, "{device} transport error: {error}"),
-        DeviceEvent::DeviceInfo { device, message } =>
-            log_msg!(sender, LogLevel::Info, LogCategory::Transport, "{device}: {message}"),
-        DeviceEvent::RejectedWrite { device, address } =>
-            log_msg!(sender, LogLevel::Warn, LogCategory::Transport, "{device} rejected write at 0x{address:04x}"),
-        DeviceEvent::OutboundBytesDropped { device, count } =>
-            log_msg!(sender, LogLevel::Warn, LogCategory::Transport, "{device} dropped {count} outbound bytes"),
-        DeviceEvent::InboundEventsDropped { device, count } =>
-            log_msg!(sender, LogLevel::Warn, LogCategory::Transport, "{device} dropped {count} inbound events"),
+        DeviceEvent::TransportConnected {
+            device,
+            peer: Some(peer),
+        } => log_msg!(
+            sender,
+            LogLevel::Info,
+            LogCategory::Transport,
+            "{device} connected: {peer}"
+        ),
+        DeviceEvent::TransportConnected { device, peer: None } => log_msg!(
+            sender,
+            LogLevel::Info,
+            LogCategory::Transport,
+            "{device} connected"
+        ),
+        DeviceEvent::TransportDisconnected {
+            device,
+            peer: Some(peer),
+            reason,
+        } => log_msg!(
+            sender,
+            LogLevel::Warn,
+            LogCategory::Transport,
+            "{device} disconnected: {peer} ({reason})"
+        ),
+        DeviceEvent::TransportDisconnected {
+            device,
+            peer: None,
+            reason,
+        } => log_msg!(
+            sender,
+            LogLevel::Warn,
+            LogCategory::Transport,
+            "{device} disconnected: {reason}"
+        ),
+        DeviceEvent::TransportError { device, error } => log_msg!(
+            sender,
+            LogLevel::Error,
+            LogCategory::Transport,
+            "{device} transport error: {error}"
+        ),
+        DeviceEvent::DeviceInfo { device, message } => log_msg!(
+            sender,
+            LogLevel::Info,
+            LogCategory::Transport,
+            "{device}: {message}"
+        ),
+        DeviceEvent::RejectedWrite { device, address } => log_msg!(
+            sender,
+            LogLevel::Warn,
+            LogCategory::Transport,
+            "{device} rejected write at 0x{address:04x}"
+        ),
+        DeviceEvent::OutboundBytesDropped { device, count } => log_msg!(
+            sender,
+            LogLevel::Warn,
+            LogCategory::Transport,
+            "{device} dropped {count} outbound bytes"
+        ),
+        DeviceEvent::InboundEventsDropped { device, count } => log_msg!(
+            sender,
+            LogLevel::Warn,
+            LogCategory::Transport,
+            "{device} dropped {count} inbound events"
+        ),
     }
 }
 
@@ -165,7 +218,6 @@ pub async fn log_device_events(mut receiver: ErrorReceiver, sender: LogSender) {
 
 /// A device that can be mapped into the bus address space.
 pub trait IoDevice: Send {
-
     /// Reads a byte at the absolute bus address `address`, with side effects.
     fn read(&mut self, address: u16) -> u8;
 
@@ -187,7 +239,9 @@ pub trait IoDevice: Send {
     /// unmapped-address policy if none remain.
     ///
     /// Default implementation always claims (unconditional chip-select).
-    fn claims(&self, _addr: u16) -> bool { true }
+    fn claims(&self, _addr: u16) -> bool {
+        true
+    }
 
     /// Advances device state by `cycles` clock cycles. Called after each CPU instruction.
     fn tick(&mut self, _cycles: u32) {}
@@ -196,13 +250,17 @@ pub trait IoDevice: Send {
     fn reset(&mut self) {}
 
     /// Returns `true` if this device is currently asserting an IRQ.
-    fn irq_active(&self) -> bool { false }
+    fn irq_active(&self) -> bool {
+        false
+    }
 
     /// Consumes a pending NMI edge event from this device, returning `true` if one was pending.
     ///
     /// Called once per CPU step. Implementations set an internal flag on the triggering write and
     /// clear it here. The default returns `false` (no NMI capability).
-    fn take_nmi(&mut self) -> bool { false }
+    fn take_nmi(&mut self) -> bool {
+        false
+    }
 
     /// Consumes a pending device-initiated CPU RESET request, returning `true` if one was pending.
     ///
@@ -210,10 +268,14 @@ pub trait IoDevice: Send {
     /// the device wants to reset the CPU (e.g. a watchdog timer or reset-button peripheral) and
     /// clear it here. The default returns `false` (no reset capability); none of this crate's
     /// built-in devices use it.
-    fn take_reset(&mut self) -> bool { false }
+    fn take_reset(&mut self) -> bool {
+        false
+    }
 
     /// Returns a human-readable name for this device, used in diagnostics and tracing.
-    fn name(&self) -> &str { "unknown" }
+    fn name(&self) -> &str {
+        "unknown"
+    }
 
     /// Returns the address that best distinguishes this device instance from other instances of
     /// the same type — typically its mapped base address. Devices that span the whole bus (e.g.
@@ -241,7 +303,6 @@ pub trait IoDevice: Send {
     ///
     /// Default no-op, so devices without a transport need no changes.
     fn shutdown(&mut self) {}
-
 }
 
 #[cfg(test)]
@@ -255,11 +316,18 @@ mod tests {
         let name = "test-device".to_string();
 
         let handle = thread::spawn(move || {
-            sender.send(DeviceEvent::TransportConnected { device: name.clone(), peer: None }).unwrap();
-            sender.send(DeviceEvent::DeviceInfo {
-                device: name,
-                message: "hello".to_string(),
-            }).unwrap();
+            sender
+                .send(DeviceEvent::TransportConnected {
+                    device: name.clone(),
+                    peer: None,
+                })
+                .unwrap();
+            sender
+                .send(DeviceEvent::DeviceInfo {
+                    device: name,
+                    message: "hello".to_string(),
+                })
+                .unwrap();
         });
 
         handle.join().unwrap();
@@ -279,15 +347,21 @@ mod tests {
         let (sender, rx) = crate::emulator::logging::test_channel_sender(4);
         let device = "test-device".to_string();
 
-        log_device_event(&sender, &DeviceEvent::TransportError {
-            device: device.clone(),
-            error: crate::emulator::TransportError::Disconnected,
-        });
+        log_device_event(
+            &sender,
+            &DeviceEvent::TransportError {
+                device: device.clone(),
+                error: crate::emulator::TransportError::Disconnected,
+            },
+        );
 
         let received = rx.recv().unwrap();
         assert_eq!(received.level, LogLevel::Error);
         assert_eq!(received.category, LogCategory::Transport);
-        assert_eq!(received.message, format!("{device} transport error: disconnected"));
+        assert_eq!(
+            received.message,
+            format!("{device} transport error: disconnected")
+        );
     }
 
     #[test]
@@ -295,10 +369,25 @@ mod tests {
         let (sender, rx) = crate::emulator::logging::test_channel_sender(4);
         let device = "test-device".to_string();
 
-        log_device_event(&sender, &DeviceEvent::TransportConnected { device: device.clone(), peer: Some("client-1".to_string()) });
-        log_device_event(&sender, &DeviceEvent::TransportConnected { device: device.clone(), peer: None });
+        log_device_event(
+            &sender,
+            &DeviceEvent::TransportConnected {
+                device: device.clone(),
+                peer: Some("client-1".to_string()),
+            },
+        );
+        log_device_event(
+            &sender,
+            &DeviceEvent::TransportConnected {
+                device: device.clone(),
+                peer: None,
+            },
+        );
 
-        assert_eq!(rx.recv().unwrap().message, format!("{device} connected: client-1"));
+        assert_eq!(
+            rx.recv().unwrap().message,
+            format!("{device} connected: client-1")
+        );
         assert_eq!(rx.recv().unwrap().message, format!("{device} connected"));
     }
 
@@ -308,7 +397,12 @@ mod tests {
         let (log_tx, log_rx) = crate::emulator::logging::test_channel_sender(4);
         let device = "test-device".to_string();
 
-        event_tx.send(DeviceEvent::DeviceInfo { device: device.clone(), message: "hello".to_string() }).unwrap();
+        event_tx
+            .send(DeviceEvent::DeviceInfo {
+                device: device.clone(),
+                message: "hello".to_string(),
+            })
+            .unwrap();
         drop(event_tx);
 
         log_device_events(event_rx, log_tx).await;
@@ -317,5 +411,4 @@ mod tests {
         assert_eq!(received.message, format!("{device}: hello"));
         assert!(log_rx.try_recv().is_err());
     }
-
 }

@@ -66,7 +66,6 @@ pub struct Console {
 }
 
 impl Console {
-
     /// Creates a new `BufferedConsole` with no transport attached.
     pub fn new(name: &'static str) -> Self {
         Self {
@@ -100,11 +99,9 @@ impl Console {
     pub fn set_log_sender(&mut self, sender: LogSender) {
         self.log_sender = sender;
     }
-
 }
 
 impl IoDevice for Console {
-
     fn read(&mut self, address: u16) -> u8 {
         match address - self.address {
             0 => self.input.read_data(),
@@ -115,12 +112,13 @@ impl IoDevice for Console {
 
     fn write(&mut self, address: u16, value: u8) {
         match address - self.address {
-            0 => {          // data register
+            0 => {
+                // data register
                 // send value to transport if we have one, otherwise write is a no-op
                 if let Some(transport) = self.transport.as_mut() {
                     transport.send(value);
                 }
-            },
+            }
             1 => self.input.write_latch(value),
             _ => (),
         }
@@ -143,21 +141,32 @@ impl IoDevice for Console {
 
     fn reset(&mut self) {
         self.input.reset();
-        log_msg!(self.log_sender, LogLevel::Info, LogCategory::Device, "{} reset", self.identity());
+        log_msg!(
+            self.log_sender,
+            LogLevel::Info,
+            LogCategory::Device,
+            "{} reset",
+            self.identity()
+        );
     }
 
-    fn irq_active(&self) -> bool { self.input.irq_active() }
+    fn irq_active(&self) -> bool {
+        self.input.irq_active()
+    }
 
-    fn name(&self) -> &str { self.name }
+    fn name(&self) -> &str {
+        self.name
+    }
 
-    fn identity_address(&self) -> u16 { self.address }
+    fn identity_address(&self) -> u16 {
+        self.address
+    }
 
     fn shutdown(&mut self) {
         if let Some(transport) = self.transport.as_mut() {
             transport.shutdown();
         }
     }
-
 }
 
 #[cfg(test)]
@@ -243,7 +252,11 @@ mod tests {
         let mut device = device();
         device.input.push(0x42);
         assert_eq!(device.peek(0), 0x42);
-        assert_eq!(device.peek(0), 0x42, "peek must not consume the buffered byte");
+        assert_eq!(
+            device.peek(0),
+            0x42,
+            "peek must not consume the buffered byte"
+        );
     }
 
     #[test]
@@ -281,9 +294,16 @@ mod tests {
         // Map all of RAM (including reset vector region) plus console at 0xF000.
         // Using RAM for 0xFF00–0xFFFF lets us write the reset vector after build().
         let bus = BusConfig::new()
-            .ram_with_fill(AddressRange::new(0x0000, 0xEFFF), 0).unwrap()
-            .device(AddressRange::new(0xF000, 0xF001), DeviceId(1), Box::new(console)).unwrap()
-            .ram_with_fill(AddressRange::new(0xFF00, 0xFFFF), 0).unwrap()
+            .ram_with_fill(AddressRange::new(0x0000, 0xEFFF), 0)
+            .unwrap()
+            .device(
+                AddressRange::new(0xF000, 0xF001),
+                DeviceId(1),
+                Box::new(console),
+            )
+            .unwrap()
+            .ram_with_fill(AddressRange::new(0xFF00, 0xFFFF), 0)
+            .unwrap()
             .build();
 
         let mut cpu = crate::emulator::Cpu::builder(CpuVariant::Wdc65C02)
@@ -298,11 +318,7 @@ mod tests {
         //   STA $F000  ; 8D 00 F0  -- write 'B'
         //   STP        ; DB
         let prog: &[u8] = &[
-            0xA9, 0x41,
-            0x8D, 0x00, 0xF0,
-            0xA9, 0x42,
-            0x8D, 0x00, 0xF0,
-            0xDB,
+            0xA9, 0x41, 0x8D, 0x00, 0xF0, 0xA9, 0x42, 0x8D, 0x00, 0xF0, 0xDB,
         ];
         for (i, &b) in prog.iter().enumerate() {
             let _ = cpu.bus_mut().write(0x0200 + i as u16, b);
@@ -338,9 +354,16 @@ mod tests {
         console.attach_transport(Box::new(local), TransportRelay::Byte(relay));
 
         let bus = BusConfig::new()
-            .ram_with_fill(AddressRange::new(0x0000, 0xEFFF), 0).unwrap()
-            .device(AddressRange::new(0xF000, 0xF001), DeviceId(1), Box::new(console)).unwrap()
-            .ram_with_fill(AddressRange::new(0xFF00, 0xFFFF), 0).unwrap()
+            .ram_with_fill(AddressRange::new(0x0000, 0xEFFF), 0)
+            .unwrap()
+            .device(
+                AddressRange::new(0xF000, 0xF001),
+                DeviceId(1),
+                Box::new(console),
+            )
+            .unwrap()
+            .ram_with_fill(AddressRange::new(0xFF00, 0xFFFF), 0)
+            .unwrap()
             .build();
 
         let mut cpu = crate::emulator::Cpu::builder(CpuVariant::Wdc65C02)
@@ -353,12 +376,7 @@ mod tests {
         //   LDA $F001  ; AD 01 F0  -- latch a byte from transport (latch reg)
         //   STA $0300  ; 8D 00 03  -- store it in RAM
         //   STP        ; DB
-        let prog: &[u8] = &[
-            0xEA,
-            0xAD, 0x01, 0xF0,
-            0x8D, 0x00, 0x03,
-            0xDB,
-        ];
+        let prog: &[u8] = &[0xEA, 0xAD, 0x01, 0xF0, 0x8D, 0x00, 0x03, 0xDB];
         for (i, &b) in prog.iter().enumerate() {
             let _ = cpu.bus_mut().write(0x0200 + i as u16, b);
         }
@@ -399,5 +417,4 @@ mod tests {
         assert_eq!(received.category, LogCategory::Device);
         assert_eq!(received.message, format!("{DEVICE_NAME}@0xf000 reset"));
     }
-
 }

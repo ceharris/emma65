@@ -30,13 +30,17 @@ pub const STANDARD_GLYPH_COUNT: usize = GLYPH_COUNT - EXTENDED_GLYPH_COUNT;
 /// Total size in bytes of a table's raw data: [`STANDARD_GLYPH_COUNT`] glyphs of
 /// [`ROWS_PER_GLYPH`] bytes, followed by [`EXTENDED_GLYPH_COUNT`] glyphs of
 /// [`EXTENDED_ROWS_PER_GLYPH`] bytes.
-pub const CGROM_BYTES: usize = STANDARD_GLYPH_COUNT * ROWS_PER_GLYPH + EXTENDED_GLYPH_COUNT * EXTENDED_ROWS_PER_GLYPH;
+pub const CGROM_BYTES: usize =
+    STANDARD_GLYPH_COUNT * ROWS_PER_GLYPH + EXTENDED_GLYPH_COUNT * EXTENDED_ROWS_PER_GLYPH;
 
 /// Byte offset and row count of `index`'s glyph within a table's raw [`CGROM_BYTES`]-long data.
 fn glyph_location(index: u8) -> (usize, usize) {
     if index >= EXTENDED_RANGE_START {
         let extended_index = (index - EXTENDED_RANGE_START) as usize;
-        (STANDARD_GLYPH_COUNT * ROWS_PER_GLYPH + extended_index * EXTENDED_ROWS_PER_GLYPH, EXTENDED_ROWS_PER_GLYPH)
+        (
+            STANDARD_GLYPH_COUNT * ROWS_PER_GLYPH + extended_index * EXTENDED_ROWS_PER_GLYPH,
+            EXTENDED_ROWS_PER_GLYPH,
+        )
     } else {
         (index as usize * ROWS_PER_GLYPH, ROWS_PER_GLYPH)
     }
@@ -105,8 +109,12 @@ impl CgRom {
     /// Builds a table from raw bytes (the `cgrom=` config attribute's file format, spec §3).
     /// `data` must be exactly [`CGROM_BYTES`] long.
     pub fn from_bytes(data: &[u8]) -> Result<Self, CgRomError> {
-        let array: [u8; CGROM_BYTES] = data.try_into().map_err(|_| CgRomError { actual_len: data.len() })?;
-        Ok(Self { data: Box::new(array) })
+        let array: [u8; CGROM_BYTES] = data.try_into().map_err(|_| CgRomError {
+            actual_len: data.len(),
+        })?;
+        Ok(Self {
+            data: Box::new(array),
+        })
     }
 
     /// Returns the row bytes for `index` (the DDRAM byte value being resolved, spec §8.1): 8 bytes
@@ -237,17 +245,28 @@ mod tests {
         assert_eq!(&table.glyph(0xF0)[8..10], &[0b10000, 0b10000], "p");
         assert_eq!(&table.glyph(0xF1)[8..10], &[0b00001, 0b00001], "q");
         assert_eq!(&table.glyph(0xF9)[8..10], &[0b00001, 0b01110], "y");
-        assert_eq!(&table.glyph(0xFF)[8..10], &[0b11111, 0b11111], "solid block");
+        assert_eq!(
+            &table.glyph(0xFF)[8..10],
+            &[0b11111, 0b11111],
+            "solid block"
+        );
     }
 
     #[test]
     fn a00_table_other_extended_glyphs_leave_rows_8_and_9_blank() {
         let table = CgRom::a00();
         for index in EXTENDED_RANGE_START..=0xFF {
-            if matches!(index, 0xE2 | 0xE4 | 0xE6 | 0xE7 | 0xEA | 0xF0 | 0xF1 | 0xF9 | 0xFF) {
+            if matches!(
+                index,
+                0xE2 | 0xE4 | 0xE6 | 0xE7 | 0xEA | 0xF0 | 0xF1 | 0xF9 | 0xFF
+            ) {
                 continue;
             }
-            assert_eq!(&table.glyph(index)[8..10], &[0, 0], "0x{index:02x} should be blank in rows 8/9");
+            assert_eq!(
+                &table.glyph(index)[8..10],
+                &[0, 0],
+                "0x{index:02x} should be blank in rows 8/9"
+            );
         }
     }
 
@@ -263,10 +282,18 @@ mod tests {
         // A00 also leaves 0xA0 itself blank -- its populated extended range starts at 0xA1.
         let table = CgRom::a00();
         for index in 0x10..=0x1F {
-            assert_eq!(table.glyph(index), &[0u8; ROWS_PER_GLYPH], "0x{index:02x} should be blank");
+            assert_eq!(
+                table.glyph(index),
+                &[0u8; ROWS_PER_GLYPH],
+                "0x{index:02x} should be blank"
+            );
         }
         for index in 0x80..=0xA0 {
-            assert_eq!(table.glyph(index), &[0u8; ROWS_PER_GLYPH], "0x{index:02x} should be blank");
+            assert_eq!(
+                table.glyph(index),
+                &[0u8; ROWS_PER_GLYPH],
+                "0x{index:02x} should be blank"
+            );
         }
     }
 
@@ -298,10 +325,18 @@ mod tests {
         // spec §8.1: 0x10..=0x1F and 0x80..=0x9F are gaps in the standard Hitachi ROM table.
         let table = CgRom::a02();
         for index in 0x10..=0x1F {
-            assert_eq!(table.glyph(index), &[0u8; ROWS_PER_GLYPH], "0x{index:02x} should be blank");
+            assert_eq!(
+                table.glyph(index),
+                &[0u8; ROWS_PER_GLYPH],
+                "0x{index:02x} should be blank"
+            );
         }
         for index in 0x80..=0x9F {
-            assert_eq!(table.glyph(index), &[0u8; ROWS_PER_GLYPH], "0x{index:02x} should be blank");
+            assert_eq!(
+                table.glyph(index),
+                &[0u8; ROWS_PER_GLYPH],
+                "0x{index:02x} should be blank"
+            );
         }
     }
 
@@ -318,7 +353,11 @@ mod tests {
         // Unlike A00, A02 has no glyphs whose real hardware shape extends past row 7.
         let table = CgRom::a02();
         for index in EXTENDED_RANGE_START..=0xFF {
-            assert_eq!(&table.glyph(index)[8..10], &[0, 0], "0x{index:02x} should be blank in rows 8/9");
+            assert_eq!(
+                &table.glyph(index)[8..10],
+                &[0, 0],
+                "0x{index:02x} should be blank in rows 8/9"
+            );
         }
     }
 }

@@ -87,7 +87,12 @@ pub struct PicFinch {
 impl PicFinch {
     /// Creates a new `PicFinch` with all slots disabled and no IER address assigned.
     pub fn new(name: &'static str) -> Self {
-        Self { name, address: 0, ier: Arc::new(AtomicU8::new(DEFAULT_IER_STATE)), log_sender: LogSender::default() }
+        Self {
+            name,
+            address: 0,
+            ier: Arc::new(AtomicU8::new(DEFAULT_IER_STATE)),
+            log_sender: LogSender::default(),
+        }
     }
 
     /// Sets the bus address of the IER register.
@@ -105,7 +110,9 @@ impl PicFinch {
     /// installing on the `Cpu` (e.g. via `BusConfig::vector_resolver`) alongside
     /// registering this `PicFinch` itself as a bus device (e.g. via `BusConfig::device`).
     pub fn vector_resolver(&self) -> PicFinchVectorResolver {
-        PicFinchVectorResolver { ier: Arc::clone(&self.ier) }
+        PicFinchVectorResolver {
+            ier: Arc::clone(&self.ier),
+        }
     }
 }
 
@@ -124,7 +131,13 @@ impl super::IoDevice for PicFinch {
 
     fn reset(&mut self) {
         self.ier.store(DEFAULT_IER_STATE, Ordering::Relaxed);
-        log_msg!(self.log_sender, LogLevel::Info, LogCategory::Device, "{} reset", self.identity());
+        log_msg!(
+            self.log_sender,
+            LogLevel::Info,
+            LogCategory::Device,
+            "{} reset",
+            self.identity()
+        );
     }
 
     fn name(&self) -> &str {
@@ -185,7 +198,11 @@ fn resolve_vector(ier: u8, vector_addr: u16, interrupts: &InterruptController) -
     }
     let recognized = interrupts.active_sources_mask() & irq_mask_for(ier);
     let low_slots = recognized & IER_ENABLE_MASK as u64;
-    let slot = if low_slots != 0 { low_slots.trailing_zeros() as u16 } else { FOLD_SLOT };
+    let slot = if low_slots != 0 {
+        low_slots.trailing_zeros() as u16
+    } else {
+        FOLD_SLOT
+    };
     VECTOR_TABLE_BASE + slot * 2
 }
 
@@ -309,7 +326,10 @@ mod tests {
     fn resolve_routes_high_source_to_fold_slot() {
         let dev = pic_finch();
         let ctrl = with_active(&[40]);
-        assert_eq!(dev.resolve(IRQ_VECTOR, &ctrl), VECTOR_TABLE_BASE + FOLD_SLOT * 2);
+        assert_eq!(
+            dev.resolve(IRQ_VECTOR, &ctrl),
+            VECTOR_TABLE_BASE + FOLD_SLOT * 2
+        );
     }
 
     #[test]
@@ -326,7 +346,10 @@ mod tests {
         dev.write(IER_ADDR, 0x04);
         // slot 2 disabled; only a high source is active alongside it
         let ctrl = with_active(&[2, 40]);
-        assert_eq!(dev.resolve(IRQ_VECTOR, &ctrl), VECTOR_TABLE_BASE + FOLD_SLOT * 2);
+        assert_eq!(
+            dev.resolve(IRQ_VECTOR, &ctrl),
+            VECTOR_TABLE_BASE + FOLD_SLOT * 2
+        );
     }
 
     // --- vector_resolver ---
@@ -337,7 +360,10 @@ mod tests {
         let resolver = dev.vector_resolver();
         dev.write(IER_ADDR, 0x80 | (1 << 5)); // enable slot 5
         let ctrl = with_active(&[5]);
-        assert_eq!(resolver.resolve(IRQ_VECTOR, &ctrl), VECTOR_TABLE_BASE + 5 * 2);
+        assert_eq!(
+            resolver.resolve(IRQ_VECTOR, &ctrl),
+            VECTOR_TABLE_BASE + 5 * 2
+        );
     }
 
     #[test]

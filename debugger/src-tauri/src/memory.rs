@@ -7,8 +7,8 @@ use tauri::{AppHandle, Emitter, State};
 
 use emma65::emulator::Cpu;
 
-use crate::disassembly::LiveSnapshotRx;
 use crate::CpuState;
+use crate::disassembly::LiveSnapshotRx;
 
 /// Paragraph-aligned address of the memory page currently displayed in the
 /// memory panel. Updated by `get_memory` so the live snapshot always captures
@@ -49,7 +49,12 @@ pub fn get_memory(
 ) -> Result<Vec<u8>, String> {
     let mut last_seq = mem_view_seq.0.load(Ordering::Relaxed);
     while seq > last_seq {
-        match mem_view_seq.0.compare_exchange_weak(last_seq, seq, Ordering::Relaxed, Ordering::Relaxed) {
+        match mem_view_seq.0.compare_exchange_weak(
+            last_seq,
+            seq,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
             Ok(_) => {
                 mem_view_addr.0.store(addr & 0xfff0, Ordering::Relaxed);
                 break;
@@ -61,10 +66,15 @@ pub fn get_memory(
     if let Some(cpu) = guard.as_ref() {
         let page_start = addr & 0xfff0;
         let mut buf = vec![0u8; 256];
-        cpu.bus().peek_range(page_start, &mut buf).map_err(|e| e.to_string())?;
+        cpu.bus()
+            .peek_range(page_start, &mut buf)
+            .map_err(|e| e.to_string())?;
         return Ok(buf);
     }
-    let live = live_snapshot_rx.0.lock().unwrap()
+    let live = live_snapshot_rx
+        .0
+        .lock()
+        .unwrap()
         .as_ref()
         .and_then(|rx| rx.borrow().clone())
         .ok_or("CPU not ready")?;
@@ -122,9 +132,9 @@ fn apply_loaded_memory(
     bias: u16,
     symbols: Option<&emma65::emulator::SymbolTable>,
 ) -> Result<u16, String> {
+    use emma65::emulator::SymbolSource;
     use emma65::emulator::bus::BusLoadTarget;
     use emma65::emulator::config::loader::load_target;
-    use emma65::emulator::SymbolSource;
 
     let pc = cpu.registers().pc;
     let bus = cpu.bus_mut();
@@ -162,10 +172,10 @@ pub async fn load_memory(
     use emma65::emulator::config::loader::LoadFormat;
 
     let load_format = match format.as_str() {
-        "image"         => LoadFormat::Image,
-        "intel_hex"     => LoadFormat::IntelHex,
+        "image" => LoadFormat::Image,
+        "intel_hex" => LoadFormat::IntelHex,
         "motorola_srec" => LoadFormat::MotorolaSrec,
-        _               => return Err(format!("Unknown format: {format}")),
+        _ => return Err(format!("Unknown format: {format}")),
     };
 
     let data = tokio::fs::read(&path).await.map_err(|e| e.to_string())?;
@@ -200,14 +210,21 @@ pub async fn save_memory(
     path: String,
     cpu_state: State<'_, CpuState>,
 ) -> Result<(), String> {
-    let len = end.checked_sub(start).ok_or("End address must be >= start address")? as usize + 1;
+    let len = end
+        .checked_sub(start)
+        .ok_or("End address must be >= start address")? as usize
+        + 1;
     let mut buf = vec![0u8; len];
     {
         let guard = cpu_state.0.lock().unwrap();
         let cpu = guard.as_ref().ok_or("CPU not ready")?;
-        cpu.bus().peek_range(start, &mut buf).map_err(|e| e.to_string())?;
+        cpu.bus()
+            .peek_range(start, &mut buf)
+            .map_err(|e| e.to_string())?;
     }
-    tokio::fs::write(&path, &buf).await.map_err(|e| e.to_string())?;
+    tokio::fs::write(&path, &buf)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -254,7 +271,11 @@ pub fn fill_memory(
 /// Index `i` corresponds to `start.wrapping_add(i)`; an empty inner list means no symbols at that address.
 /// Returns all-empty lists when the CPU is not ready.
 #[tauri::command]
-pub fn get_symbols_for_range(start: u16, count: usize, cpu_state: State<CpuState>) -> Vec<Vec<String>> {
+pub fn get_symbols_for_range(
+    start: u16,
+    count: usize,
+    cpu_state: State<CpuState>,
+) -> Vec<Vec<String>> {
     let guard = cpu_state.0.lock().unwrap();
     let Some(cpu) = guard.as_ref() else {
         return vec![vec![]; count];
@@ -263,7 +284,10 @@ pub fn get_symbols_for_range(start: u16, count: usize, cpu_state: State<CpuState
     (0..count)
         .map(|i| {
             let addr = start.wrapping_add(i as u16);
-            symbol_table.names_for(addr).map(|s| s.to_string()).collect()
+            symbol_table
+                .names_for(addr)
+                .map(|s| s.to_string())
+                .collect()
         })
         .collect()
 }
@@ -272,7 +296,9 @@ pub fn get_symbols_for_range(start: u16, count: usize, cpu_state: State<CpuState
 mod tests {
     use super::*;
     use crate::CpuState;
-    use emma65::emulator::{run_from as exec_run_from, AddressRange, Bus, ClockSpeed, Cpu, CpuBuilder, CpuVariant};
+    use emma65::emulator::{
+        AddressRange, Bus, ClockSpeed, Cpu, CpuBuilder, CpuVariant, run_from as exec_run_from,
+    };
     use std::sync::Mutex;
     use tauri::Manager;
     use tauri::test::{mock_builder, mock_context, noop_assets};
@@ -317,8 +343,12 @@ mod tests {
             app.state::<LiveSnapshotRx>(),
             app.state::<MemoryViewAddr>(),
             app.state::<MemoryViewSeq>(),
-        ).unwrap();
-        assert_eq!(bytes[0x10], 0xBB, "stopped read of 0xC000 should see its marker byte");
+        )
+        .unwrap();
+        assert_eq!(
+            bytes[0x10], 0xBB,
+            "stopped read of 0xC000 should see its marker byte"
+        );
 
         // Run: mirrors run_cpu's core logic (take the CPU, start the run loop,
         // subscribe the live snapshot channel).
@@ -338,8 +368,12 @@ mod tests {
                 app.state::<LiveSnapshotRx>(),
                 app.state::<MemoryViewAddr>(),
                 app.state::<MemoryViewSeq>(),
-            ).unwrap();
-            assert_eq!(bytes[0x10], 0xBB, "running read of 0xC000 should see its marker byte, not 0x0000's");
+            )
+            .unwrap();
+            assert_eq!(
+                bytes[0x10], 0xBB,
+                "running read of 0xC000 should see its marker byte, not 0x0000's"
+            );
         }
 
         handle.take_cpu().await;
@@ -374,8 +408,12 @@ mod tests {
             app.state::<LiveSnapshotRx>(),
             app.state::<MemoryViewAddr>(),
             app.state::<MemoryViewSeq>(),
-        ).unwrap();
-        assert_eq!(app.state::<MemoryViewAddr>().0.load(Ordering::Relaxed), 0xC000);
+        )
+        .unwrap();
+        assert_eq!(
+            app.state::<MemoryViewAddr>().0.load(Ordering::Relaxed),
+            0xC000
+        );
 
         // The older, stale request (issued first, but slower) executes second.
         get_memory(
@@ -385,10 +423,14 @@ mod tests {
             app.state::<LiveSnapshotRx>(),
             app.state::<MemoryViewAddr>(),
             app.state::<MemoryViewSeq>(),
-        ).unwrap();
+        )
+        .unwrap();
 
         // MemoryViewAddr must still reflect the newer request, not the stale one.
-        assert_eq!(app.state::<MemoryViewAddr>().0.load(Ordering::Relaxed), 0xC000);
+        assert_eq!(
+            app.state::<MemoryViewAddr>().0.load(Ordering::Relaxed),
+            0xC000
+        );
     }
 
     async fn write_temp_file(name: &str, contents: &[u8]) -> String {
@@ -412,12 +454,19 @@ mod tests {
         assert_eq!(cpu.bus().symbol_table().address_for("START"), Some(0x8000));
 
         // Reload the same labels file after it moved the label to a new address.
-        tokio::fs::write(&labels_path, b"al 009000 .START\n").await.unwrap();
+        tokio::fs::write(&labels_path, b"al 009000 .START\n")
+            .await
+            .unwrap();
         let second = load_vice_labels(&labels_path).await.unwrap();
         apply_loaded_memory(&mut cpu, &[0xEA], LoadFormat::Image, 0x8000, Some(&second)).unwrap();
 
         assert_eq!(cpu.bus().symbol_table().address_for("START"), Some(0x9000));
-        assert!(!cpu.bus().symbol_table().names_for(0x8000).any(|n| n == "START"));
+        assert!(
+            !cpu.bus()
+                .symbol_table()
+                .names_for(0x8000)
+                .any(|n| n == "START")
+        );
     }
 
     #[tokio::test]
@@ -431,8 +480,22 @@ mod tests {
         let labels_a = load_vice_labels(&labels_a_path).await.unwrap();
         let labels_b = load_vice_labels(&labels_b_path).await.unwrap();
 
-        apply_loaded_memory(&mut cpu, &[0xEA], LoadFormat::Image, 0x8000, Some(&labels_a)).unwrap();
-        apply_loaded_memory(&mut cpu, &[0xEA], LoadFormat::Image, 0x8000, Some(&labels_b)).unwrap();
+        apply_loaded_memory(
+            &mut cpu,
+            &[0xEA],
+            LoadFormat::Image,
+            0x8000,
+            Some(&labels_a),
+        )
+        .unwrap();
+        apply_loaded_memory(
+            &mut cpu,
+            &[0xEA],
+            LoadFormat::Image,
+            0x8000,
+            Some(&labels_b),
+        )
+        .unwrap();
 
         assert_eq!(cpu.bus().symbol_table().address_for("FOO"), Some(0x1000));
         assert_eq!(cpu.bus().symbol_table().address_for("BAR"), Some(0x2000));
@@ -440,20 +503,35 @@ mod tests {
 
     #[tokio::test]
     async fn apply_loaded_memory_preserves_non_file_sourced_symbols() {
+        use emma65::emulator::SymbolSource;
         use emma65::emulator::bus::symbol::load_vice_labels;
         use emma65::emulator::config::loader::LoadFormat;
-        use emma65::emulator::SymbolSource;
 
         let mut cpu = make_cpu();
-        cpu.bus_mut().symbol_table_mut().insert_tagged("ASM_SYM".to_string(), 0x4000, SymbolSource::Assembler);
-        cpu.bus_mut().symbol_table_mut().insert("USER_SYM".to_string(), 0x5000);
+        cpu.bus_mut().symbol_table_mut().insert_tagged(
+            "ASM_SYM".to_string(),
+            0x4000,
+            SymbolSource::Assembler,
+        );
+        cpu.bus_mut()
+            .symbol_table_mut()
+            .insert("USER_SYM".to_string(), 0x5000);
 
         let labels_path = write_temp_file("c.lbl", b"al 003000 .FROM_FILE\n").await;
         let labels = load_vice_labels(&labels_path).await.unwrap();
         apply_loaded_memory(&mut cpu, &[0xEA], LoadFormat::Image, 0x8000, Some(&labels)).unwrap();
 
-        assert_eq!(cpu.bus().symbol_table().address_for("ASM_SYM"), Some(0x4000));
-        assert_eq!(cpu.bus().symbol_table().address_for("USER_SYM"), Some(0x5000));
-        assert_eq!(cpu.bus().symbol_table().address_for("FROM_FILE"), Some(0x3000));
+        assert_eq!(
+            cpu.bus().symbol_table().address_for("ASM_SYM"),
+            Some(0x4000)
+        );
+        assert_eq!(
+            cpu.bus().symbol_table().address_for("USER_SYM"),
+            Some(0x5000)
+        );
+        assert_eq!(
+            cpu.bus().symbol_table().address_for("FROM_FILE"),
+            Some(0x3000)
+        );
     }
 }

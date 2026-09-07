@@ -166,20 +166,22 @@ pub enum ViaProtocolMessage {
 }
 
 /// Creates a new encoder for protocol format `encoding`.
-pub fn new_encoder(encoding: ProtocolMessageEncoding)
-                   -> Box<dyn ProtocolMessageEncoder<ViaProtocolMessage>> {
+pub fn new_encoder(
+    encoding: ProtocolMessageEncoding,
+) -> Box<dyn ProtocolMessageEncoder<ViaProtocolMessage>> {
     match encoding {
         ProtocolMessageEncoding::Ascii => Box::new(ViaAsciiProtocolEncoder::new()),
-        ProtocolMessageEncoding::Binary => Box::new(ViaBinaryProtocolEncoder::new())
+        ProtocolMessageEncoding::Binary => Box::new(ViaBinaryProtocolEncoder::new()),
     }
 }
 
 /// Creates a new decoder for protocol format `encoding`.
-pub fn new_decoder(encoding: ProtocolMessageEncoding)
-                   -> Box<dyn ProtocolMessageDecoder<ViaProtocolMessage>> {
+pub fn new_decoder(
+    encoding: ProtocolMessageEncoding,
+) -> Box<dyn ProtocolMessageDecoder<ViaProtocolMessage>> {
     match encoding {
         ProtocolMessageEncoding::Ascii => Box::new(ViaAsciiProtocolDecoder::new()),
-        ProtocolMessageEncoding::Binary => Box::new(ViaBinaryProtocolDecoder::new())
+        ProtocolMessageEncoding::Binary => Box::new(ViaBinaryProtocolDecoder::new()),
     }
 }
 
@@ -198,14 +200,12 @@ impl Default for ViaAsciiProtocolEncoder {
 }
 
 impl ProtocolMessageEncoder<ViaProtocolMessage> for ViaAsciiProtocolEncoder {
-
     /// Encodes `message` and appends the resulting bytes to `out`.
     ///
     /// In ASCII mode a space separator is prepended before every message after the first.
     fn encode(&mut self, message: &ViaProtocolMessage, out: &mut Vec<u8>) {
         self.encode_ascii(message, out);
     }
-
 }
 
 impl ViaAsciiProtocolEncoder {
@@ -216,24 +216,46 @@ impl ViaAsciiProtocolEncoder {
 
     fn encode_ascii(&mut self, message: &ViaProtocolMessage, out: &mut Vec<u8>) {
         match message {
-            ViaProtocolMessage::PortState { port, port_state} => {
+            ViaProtocolMessage::PortState { port, port_state } => {
                 self.encode_ascii_port_state(*port, *port_state, out);
             }
-            ViaProtocolMessage::CtrlState { port, c1_state, c2_state } => {
+            ViaProtocolMessage::CtrlState {
+                port,
+                c1_state,
+                c2_state,
+            } => {
                 self.encode_ascii_ctrl_state(*port, *c1_state, *c2_state, out);
             }
-            ViaProtocolMessage::ResetPort { port, port_mask, reset_c1, reset_c2 } => {
+            ViaProtocolMessage::ResetPort {
+                port,
+                port_mask,
+                reset_c1,
+                reset_c2,
+            } => {
                 self.encode_ascii_port_change(b'R', *port, *port_mask, out);
                 self.encode_ascii_port_ctrl_change(b'R', *port, *reset_c1, *reset_c2, out);
             }
-            ViaProtocolMessage::SetPort { port, port_mask, set_c1, set_c2 } => {
+            ViaProtocolMessage::SetPort {
+                port,
+                port_mask,
+                set_c1,
+                set_c2,
+            } => {
                 self.encode_ascii_port_change(b'S', *port, *port_mask, out);
                 self.encode_ascii_port_ctrl_change(b'S', *port, *set_c1, *set_c2, out);
             }
-            ViaProtocolMessage::ResetCtrl { port, reset_c1, reset_c2 } => {
+            ViaProtocolMessage::ResetCtrl {
+                port,
+                reset_c1,
+                reset_c2,
+            } => {
                 self.encode_ascii_port_ctrl_change(b'R', *port, *reset_c1, *reset_c2, out);
             }
-            ViaProtocolMessage::SetCtrl { port, set_c1, set_c2 } => {
+            ViaProtocolMessage::SetCtrl {
+                port,
+                set_c1,
+                set_c2,
+            } => {
                 self.encode_ascii_port_ctrl_change(b'S', *port, *set_c1, *set_c2, out);
             }
         }
@@ -252,7 +274,14 @@ impl ViaAsciiProtocolEncoder {
         self.encode_ascii_space(out);
     }
 
-    fn encode_ascii_port_ctrl_change(&mut self, which: u8, port: u8, change_c1: bool, change_c2: bool, out: &mut Vec<u8>) {
+    fn encode_ascii_port_ctrl_change(
+        &mut self,
+        which: u8,
+        port: u8,
+        change_c1: bool,
+        change_c2: bool,
+        out: &mut Vec<u8>,
+    ) {
         if change_c1 {
             self.encode_ascii_ctrl_change(which, port, b'1', out);
         }
@@ -269,7 +298,13 @@ impl ViaAsciiProtocolEncoder {
         self.encode_ascii_space(out);
     }
 
-    fn encode_ascii_ctrl_state(&mut self, port: u8, c1_state: bool, c2_state: bool, out: &mut Vec<u8>) {
+    fn encode_ascii_ctrl_state(
+        &mut self,
+        port: u8,
+        c1_state: bool,
+        c2_state: bool,
+        out: &mut Vec<u8>,
+    ) {
         self.encode_ascii_prefix(b'C', out);
         self.encode_ascii_char(port, out);
         self.encode_ascii_bit(c1_state, out);
@@ -307,7 +342,6 @@ impl ViaAsciiProtocolEncoder {
         out.push(b'\n');
         self.line_length = 0;
     }
-
 }
 
 /// Encodes [`ViaProtocolMessage`] values into binary format for transmission.
@@ -320,14 +354,12 @@ impl Default for ViaBinaryProtocolEncoder {
 }
 
 impl ProtocolMessageEncoder<ViaProtocolMessage> for ViaBinaryProtocolEncoder {
-
     /// Encodes `message` and appends the resulting bytes to `out`.
     ///
     /// In ASCII mode a space separator is prepended before every message after the first.
     fn encode(&mut self, message: &ViaProtocolMessage, out: &mut Vec<u8>) {
         self.encode_binary(message, out);
     }
-
 }
 
 impl ViaBinaryProtocolEncoder {
@@ -338,26 +370,78 @@ impl ViaBinaryProtocolEncoder {
 
     fn encode_binary(&self, message: &ViaProtocolMessage, out: &mut Vec<u8>) {
         match message {
-            ViaProtocolMessage::PortState { port, port_state} => {
-                out.push(Self::encode_message_byte(VIA_TYPE_PORT_STATE, *port, false, false));
+            ViaProtocolMessage::PortState { port, port_state } => {
+                out.push(Self::encode_message_byte(
+                    VIA_TYPE_PORT_STATE,
+                    *port,
+                    false,
+                    false,
+                ));
                 out.push(*port_state);
             }
-            ViaProtocolMessage::CtrlState { port, c1_state, c2_state } => {
-                out.push(Self::encode_message_byte(VIA_TYPE_CTRL_STATE, *port, *c1_state, *c2_state));
+            ViaProtocolMessage::CtrlState {
+                port,
+                c1_state,
+                c2_state,
+            } => {
+                out.push(Self::encode_message_byte(
+                    VIA_TYPE_CTRL_STATE,
+                    *port,
+                    *c1_state,
+                    *c2_state,
+                ));
             }
-            ViaProtocolMessage::ResetPort { port, port_mask, reset_c1, reset_c2 } => {
-                out.push(Self::encode_message_byte(VIA_TYPE_RESET_PORT, *port, *reset_c1, *reset_c2));
+            ViaProtocolMessage::ResetPort {
+                port,
+                port_mask,
+                reset_c1,
+                reset_c2,
+            } => {
+                out.push(Self::encode_message_byte(
+                    VIA_TYPE_RESET_PORT,
+                    *port,
+                    *reset_c1,
+                    *reset_c2,
+                ));
                 out.push(*port_mask);
             }
-            ViaProtocolMessage::SetPort { port, port_mask, set_c1, set_c2} => {
-                out.push(Self::encode_message_byte(VIA_TYPE_SET_PORT, *port, *set_c1, *set_c2));
+            ViaProtocolMessage::SetPort {
+                port,
+                port_mask,
+                set_c1,
+                set_c2,
+            } => {
+                out.push(Self::encode_message_byte(
+                    VIA_TYPE_SET_PORT,
+                    *port,
+                    *set_c1,
+                    *set_c2,
+                ));
                 out.push(*port_mask);
             }
-            ViaProtocolMessage::ResetCtrl { port, reset_c1, reset_c2} => {
-                out.push(Self::encode_message_byte(VIA_TYPE_RESET_CTRL, *port, *reset_c1, *reset_c2));
+            ViaProtocolMessage::ResetCtrl {
+                port,
+                reset_c1,
+                reset_c2,
+            } => {
+                out.push(Self::encode_message_byte(
+                    VIA_TYPE_RESET_CTRL,
+                    *port,
+                    *reset_c1,
+                    *reset_c2,
+                ));
             }
-            ViaProtocolMessage::SetCtrl { port, set_c1, set_c2} => {
-                out.push(Self::encode_message_byte(VIA_TYPE_SET_CTRL, *port, *set_c1, *set_c2));
+            ViaProtocolMessage::SetCtrl {
+                port,
+                set_c1,
+                set_c2,
+            } => {
+                out.push(Self::encode_message_byte(
+                    VIA_TYPE_SET_CTRL,
+                    *port,
+                    *set_c1,
+                    *set_c2,
+                ));
             }
         }
     }
@@ -368,28 +452,51 @@ impl ViaBinaryProtocolEncoder {
             | (if c1_bit { VIA_CTRL1_MASK } else { 0 })
             | (if c2_bit { VIA_CTRL2_MASK } else { 0 })
     }
-
 }
 
 #[derive(Debug)]
 enum AsciiDecoderState {
     /// Waiting for the start of a message.
     Idle,
-    PortState { port: u8 },
-    PortStateHigh { port: u8, high_nibble: u8},
+    PortState {
+        port: u8,
+    },
+    PortStateHigh {
+        port: u8,
+        high_nibble: u8,
+    },
     CtrlState,
-    CtrlStatePort { port: u8 },
-    CtrlStatePin1 { port: u8, pin: bool },
+    CtrlStatePort {
+        port: u8,
+    },
+    CtrlStatePin1 {
+        port: u8,
+        pin: bool,
+    },
     Reset,
-    ResetPort { port: u8 },
-    ResetPortHigh { port: u8, high_nibble: u8 },
+    ResetPort {
+        port: u8,
+    },
+    ResetPortHigh {
+        port: u8,
+        high_nibble: u8,
+    },
     Set,
-    SetPort { port: u8 },
-    SetPortHigh { port: u8, high_nibble: u8 },
+    SetPort {
+        port: u8,
+    },
+    SetPortHigh {
+        port: u8,
+        high_nibble: u8,
+    },
     ResetCtrl,
-    ResetCtrlPort { port: u8 },
+    ResetCtrlPort {
+        port: u8,
+    },
     SetCtrl,
-    SetCtrlPort { port: u8 },
+    SetCtrlPort {
+        port: u8,
+    },
 }
 
 /// Decodes an ASCII-encoded byte stream into [`ViaProtocolMessage`] values.
@@ -407,7 +514,6 @@ impl Default for ViaAsciiProtocolDecoder {
 }
 
 impl ProtocolMessageDecoder<ViaProtocolMessage> for ViaAsciiProtocolDecoder {
-    
     /// Feeds a single byte into the decoder.
     ///
     /// Returns `Some(message)` when a complete, valid message has been decoded, or `None`
@@ -415,13 +521,14 @@ impl ProtocolMessageDecoder<ViaProtocolMessage> for ViaAsciiProtocolDecoder {
     fn feed(&mut self, byte: u8) -> Option<ViaProtocolMessage> {
         self.feed_ascii(byte)
     }
-
 }
 
 impl ViaAsciiProtocolDecoder {
     /// Creates a new decoder with no format selected.
     pub fn new() -> Self {
-        Self { state: AsciiDecoderState::Idle }
+        Self {
+            state: AsciiDecoderState::Idle,
+        }
     }
 
     fn feed_ascii(&mut self, byte: u8) -> Option<ViaProtocolMessage> {
@@ -449,7 +556,10 @@ impl ViaAsciiProtocolDecoder {
             }
             AsciiDecoderState::PortState { port } => {
                 if let Some(high_nibble) = parse_hex_nibble(byte) {
-                    self.state = AsciiDecoderState::PortStateHigh { port: *port, high_nibble };
+                    self.state = AsciiDecoderState::PortStateHigh {
+                        port: *port,
+                        high_nibble,
+                    };
                 } else {
                     self.state = AsciiDecoderState::Idle;
                 }
@@ -474,11 +584,11 @@ impl ViaAsciiProtocolDecoder {
                     }
                     _ => {
                         self.state = AsciiDecoderState::Idle;
-                    },
+                    }
                 }
                 None
             }
-            AsciiDecoderState::CtrlStatePort { port} => {
+            AsciiDecoderState::CtrlStatePort { port } => {
                 match byte {
                     b'0' | b'1' => {
                         self.state = AsciiDecoderState::CtrlStatePin1 {
@@ -492,21 +602,17 @@ impl ViaAsciiProtocolDecoder {
                 }
                 None
             }
-            AsciiDecoderState::CtrlStatePin1 { port, pin } => {
-                match byte {
-                    b'0' | b'1' => {
-                        Some(ViaProtocolMessage::CtrlState {
-                            port: *port,
-                            c1_state: *pin,
-                            c2_state: byte == b'1',
-                        })
-                    }
-                    _ => {
-                        self.state = AsciiDecoderState::Idle;
-                        None
-                    }
+            AsciiDecoderState::CtrlStatePin1 { port, pin } => match byte {
+                b'0' | b'1' => Some(ViaProtocolMessage::CtrlState {
+                    port: *port,
+                    c1_state: *pin,
+                    c2_state: byte == b'1',
+                }),
+                _ => {
+                    self.state = AsciiDecoderState::Idle;
+                    None
                 }
-            }
+            },
             AsciiDecoderState::Reset => {
                 let port = byte.to_ascii_uppercase();
                 match port {
@@ -524,7 +630,10 @@ impl ViaAsciiProtocolDecoder {
             }
             AsciiDecoderState::ResetPort { port } => {
                 if let Some(high_nibble) = parse_hex_nibble(byte) {
-                    self.state = AsciiDecoderState::ResetPortHigh { port: *port, high_nibble };
+                    self.state = AsciiDecoderState::ResetPortHigh {
+                        port: *port,
+                        high_nibble,
+                    };
                 } else {
                     self.state = AsciiDecoderState::Idle;
                 }
@@ -540,7 +649,7 @@ impl ViaAsciiProtocolDecoder {
                         port,
                         port_mask,
                         reset_c1: false,
-                        reset_c2: false
+                        reset_c2: false,
                     })
                 } else {
                     None
@@ -563,7 +672,10 @@ impl ViaAsciiProtocolDecoder {
             }
             AsciiDecoderState::SetPort { port } => {
                 if let Some(high_nibble) = parse_hex_nibble(byte) {
-                    self.state = AsciiDecoderState::SetPortHigh { port: *port, high_nibble };
+                    self.state = AsciiDecoderState::SetPortHigh {
+                        port: *port,
+                        high_nibble,
+                    };
                 } else {
                     self.state = AsciiDecoderState::Idle;
                 }
@@ -597,20 +709,16 @@ impl ViaAsciiProtocolDecoder {
                 }
                 None
             }
-            AsciiDecoderState::ResetCtrlPort { port} => {
+            AsciiDecoderState::ResetCtrlPort { port } => {
                 let port = *port;
                 self.state = AsciiDecoderState::Idle;
                 match byte {
-                    b'1' | b'2' => {
-                        Some(ViaProtocolMessage::ResetCtrl {
-                            port,
-                            reset_c1: byte == b'1',
-                            reset_c2: byte == b'2',
-                        })
-                    }
-                    _ => {
-                        None
-                    }
+                    b'1' | b'2' => Some(ViaProtocolMessage::ResetCtrl {
+                        port,
+                        reset_c1: byte == b'1',
+                        reset_c2: byte == b'2',
+                    }),
+                    _ => None,
                 }
             }
             AsciiDecoderState::SetCtrl => {
@@ -629,21 +737,16 @@ impl ViaAsciiProtocolDecoder {
                 let port = *port;
                 self.state = AsciiDecoderState::Idle;
                 match byte {
-                    b'1' | b'2' => {
-                        Some(ViaProtocolMessage::SetCtrl {
-                            port,
-                            set_c1: byte == b'1',
-                            set_c2: byte == b'2',
-                        })
-                    }
-                    _ => {
-                        None
-                    }
+                    b'1' | b'2' => Some(ViaProtocolMessage::SetCtrl {
+                        port,
+                        set_c1: byte == b'1',
+                        set_c2: byte == b'2',
+                    }),
+                    _ => None,
                 }
             }
         }
     }
-
 }
 
 #[derive(Debug)]
@@ -658,7 +761,7 @@ enum BinaryDecoderState {
 ///
 /// Invalid data is silently ignored per the protocol specification.
 pub struct ViaBinaryProtocolDecoder {
-    state: BinaryDecoderState,   
+    state: BinaryDecoderState,
 }
 
 impl Default for ViaBinaryProtocolDecoder {
@@ -668,7 +771,6 @@ impl Default for ViaBinaryProtocolDecoder {
 }
 
 impl ProtocolMessageDecoder<ViaProtocolMessage> for ViaBinaryProtocolDecoder {
-
     /// Feeds a single byte into the decoder.
     ///
     /// Returns `Some(message)` when a complete, valid message has been decoded, or `None`
@@ -676,7 +778,6 @@ impl ProtocolMessageDecoder<ViaProtocolMessage> for ViaBinaryProtocolDecoder {
     fn feed(&mut self, byte: u8) -> Option<ViaProtocolMessage> {
         self.feed_binary(byte)
     }
-
 }
 
 impl ViaBinaryProtocolDecoder {
@@ -689,57 +790,67 @@ impl ViaBinaryProtocolDecoder {
 
     fn feed_binary(&mut self, byte: u8) -> Option<ViaProtocolMessage> {
         match self.state {
-            BinaryDecoderState::Idle => {
-                match byte & VIA_TYPE_MASK {
-                    VIA_TYPE_PORT_STATE => {
-                        self.state = BinaryDecoderState::PortState { message: byte };
-                        None
-                    }
-                    VIA_TYPE_CTRL_STATE => {
-                        Some(ViaProtocolMessage::CtrlState {
-                            port: if byte & VIA_PORT_MASK == 0 { b'A' } else { b'B' },
-                            c1_state: byte & VIA_CTRL1_MASK != 0,
-                            c2_state: byte & VIA_CTRL2_MASK != 0,
-                        })
-                    }
-                    VIA_TYPE_RESET_PORT => {
-                        self.state = BinaryDecoderState::ResetPort { message: byte };
-                        None
-                    }
-                    VIA_TYPE_SET_PORT => {
-                        self.state = BinaryDecoderState::SetPort { message: byte };
-                        None
-                    }
-                    VIA_TYPE_RESET_CTRL => {
-                        Some(ViaProtocolMessage::ResetCtrl {
-                            port: if byte & VIA_PORT_MASK == 0 { b'A' } else { b'B' },
-                            reset_c1: byte & VIA_CTRL1_MASK != 0,
-                            reset_c2: byte & VIA_CTRL2_MASK != 0,
-                        })
-                    }
-                    VIA_TYPE_SET_CTRL => {
-                        Some(ViaProtocolMessage::SetCtrl {
-                            port: if byte & VIA_PORT_MASK == 0 { b'A' } else { b'B' },
-                            set_c1: byte & VIA_CTRL1_MASK != 0,
-                            set_c2: byte & VIA_CTRL2_MASK != 0,
-                        })
-                    }
-                    _ => {
-                        None
-                    }
+            BinaryDecoderState::Idle => match byte & VIA_TYPE_MASK {
+                VIA_TYPE_PORT_STATE => {
+                    self.state = BinaryDecoderState::PortState { message: byte };
+                    None
                 }
-            }
+                VIA_TYPE_CTRL_STATE => Some(ViaProtocolMessage::CtrlState {
+                    port: if byte & VIA_PORT_MASK == 0 {
+                        b'A'
+                    } else {
+                        b'B'
+                    },
+                    c1_state: byte & VIA_CTRL1_MASK != 0,
+                    c2_state: byte & VIA_CTRL2_MASK != 0,
+                }),
+                VIA_TYPE_RESET_PORT => {
+                    self.state = BinaryDecoderState::ResetPort { message: byte };
+                    None
+                }
+                VIA_TYPE_SET_PORT => {
+                    self.state = BinaryDecoderState::SetPort { message: byte };
+                    None
+                }
+                VIA_TYPE_RESET_CTRL => Some(ViaProtocolMessage::ResetCtrl {
+                    port: if byte & VIA_PORT_MASK == 0 {
+                        b'A'
+                    } else {
+                        b'B'
+                    },
+                    reset_c1: byte & VIA_CTRL1_MASK != 0,
+                    reset_c2: byte & VIA_CTRL2_MASK != 0,
+                }),
+                VIA_TYPE_SET_CTRL => Some(ViaProtocolMessage::SetCtrl {
+                    port: if byte & VIA_PORT_MASK == 0 {
+                        b'A'
+                    } else {
+                        b'B'
+                    },
+                    set_c1: byte & VIA_CTRL1_MASK != 0,
+                    set_c2: byte & VIA_CTRL2_MASK != 0,
+                }),
+                _ => None,
+            },
             BinaryDecoderState::PortState { message } => {
                 self.state = BinaryDecoderState::Idle;
                 Some(ViaProtocolMessage::PortState {
-                    port: if message & VIA_PORT_MASK == 0 { b'A' } else { b'B' },
+                    port: if message & VIA_PORT_MASK == 0 {
+                        b'A'
+                    } else {
+                        b'B'
+                    },
                     port_state: byte,
                 })
             }
             BinaryDecoderState::ResetPort { message } => {
                 self.state = BinaryDecoderState::Idle;
                 Some(ViaProtocolMessage::ResetPort {
-                    port: if message & VIA_PORT_MASK == 0 { b'A' } else { b'B' },
+                    port: if message & VIA_PORT_MASK == 0 {
+                        b'A'
+                    } else {
+                        b'B'
+                    },
                     port_mask: byte,
                     reset_c1: message & VIA_CTRL1_MASK != 0,
                     reset_c2: message & VIA_CTRL2_MASK != 0,
@@ -748,7 +859,11 @@ impl ViaBinaryProtocolDecoder {
             BinaryDecoderState::SetPort { message } => {
                 self.state = BinaryDecoderState::Idle;
                 Some(ViaProtocolMessage::SetPort {
-                    port: if message & VIA_PORT_MASK == 0 { b'A' } else { b'B' },
+                    port: if message & VIA_PORT_MASK == 0 {
+                        b'A'
+                    } else {
+                        b'B'
+                    },
                     port_mask: byte,
                     set_c1: message & VIA_CTRL1_MASK != 0,
                     set_c2: message & VIA_CTRL2_MASK != 0,
@@ -757,7 +872,6 @@ impl ViaBinaryProtocolDecoder {
         }
     }
 }
-
 
 fn hex_nibble(n: u8) -> u8 {
     if n < 10 { b'0' + n } else { b'A' + n - 10 }
@@ -788,7 +902,8 @@ mod tests {
                 port: b'A',
                 port_state: 0x55,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"A55 ");
     }
 
@@ -800,7 +915,8 @@ mod tests {
                 port: b'B',
                 port_state: 0xAA,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"BAA ");
     }
 
@@ -813,7 +929,8 @@ mod tests {
                 c1_state: true,
                 c2_state: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"CA11 ");
     }
 
@@ -826,7 +943,8 @@ mod tests {
                 c1_state: true,
                 c2_state: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"CB11 ");
     }
 
@@ -840,7 +958,8 @@ mod tests {
                 reset_c1: false,
                 reset_c2: false,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"RA55 ");
     }
 
@@ -854,7 +973,8 @@ mod tests {
                 reset_c1: true,
                 reset_c2: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"RA55 RCA1 RCA2 ");
     }
 
@@ -868,7 +988,8 @@ mod tests {
                 reset_c1: false,
                 reset_c2: false,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"RBAA ");
     }
 
@@ -882,7 +1003,8 @@ mod tests {
                 reset_c1: true,
                 reset_c2: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"RBAA RCB1 RCB2 ");
     }
 
@@ -896,7 +1018,8 @@ mod tests {
                 set_c1: false,
                 set_c2: false,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"SA55 ");
     }
 
@@ -910,7 +1033,8 @@ mod tests {
                 set_c1: true,
                 set_c2: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"SA55 SCA1 SCA2 ");
     }
 
@@ -924,7 +1048,8 @@ mod tests {
                 set_c1: false,
                 set_c2: false,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"SBAA ");
     }
 
@@ -938,7 +1063,8 @@ mod tests {
                 set_c1: true,
                 set_c2: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"SBAA SCB1 SCB2 ");
     }
 
@@ -951,7 +1077,8 @@ mod tests {
                 reset_c1: true,
                 reset_c2: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"RCA1 RCA2 ");
     }
 
@@ -964,7 +1091,8 @@ mod tests {
                 reset_c1: true,
                 reset_c2: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"RCB1 RCB2 ");
     }
 
@@ -977,7 +1105,8 @@ mod tests {
                 set_c1: true,
                 set_c2: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"SCA1 SCA2 ");
     }
 
@@ -990,7 +1119,8 @@ mod tests {
                 set_c1: true,
                 set_c2: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, b"SCB1 SCB2 ");
     }
 
@@ -1000,17 +1130,23 @@ mod tests {
         let mut out: Vec<u8> = Vec::new();
         let mut expected: String = String::new();
         for _ in 0..(72 / 4) {
-            encoder.encode(&ViaProtocolMessage::PortState {
-                port: b'A',
-                port_state: 0xFF,
-            }, &mut out);
+            encoder.encode(
+                &ViaProtocolMessage::PortState {
+                    port: b'A',
+                    port_state: 0xFF,
+                },
+                &mut out,
+            );
             expected.push_str("AFF ");
         }
         assert_eq!(out, expected.as_bytes());
-        encoder.encode(&ViaProtocolMessage::PortState {
-            port: b'A',
-            port_state: 0xFF,
-        }, &mut out);
+        encoder.encode(
+            &ViaProtocolMessage::PortState {
+                port: b'A',
+                port_state: 0xFF,
+            },
+            &mut out,
+        );
         expected.push_str("\r\nAFF ");
         assert_eq!(out, expected.as_bytes());
     }
@@ -1027,7 +1163,8 @@ mod tests {
                 port: b'A',
                 port_state: 0x55,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, &[0b10000000, 0b01010101]);
     }
 
@@ -1039,7 +1176,8 @@ mod tests {
                 port: b'B',
                 port_state: 0xAA,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, &[0b10000100, 0b10101010]);
     }
 
@@ -1052,7 +1190,8 @@ mod tests {
                 c1_state: false,
                 c2_state: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, &[0b10010001]);
     }
 
@@ -1065,7 +1204,8 @@ mod tests {
                 c1_state: true,
                 c2_state: false,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, &[0b10010110]);
     }
 
@@ -1079,7 +1219,8 @@ mod tests {
                 reset_c1: false,
                 reset_c2: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, &[0b10100001, 0b01010101]);
     }
 
@@ -1093,7 +1234,8 @@ mod tests {
                 reset_c1: true,
                 reset_c2: false,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, &[0b10100110, 0b10101010]);
     }
 
@@ -1107,7 +1249,8 @@ mod tests {
                 set_c1: false,
                 set_c2: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, &[0b10110001, 0b01010101]);
     }
 
@@ -1121,7 +1264,8 @@ mod tests {
                 set_c1: true,
                 set_c2: false,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, &[0b10110110, 0b10101010]);
     }
 
@@ -1134,7 +1278,8 @@ mod tests {
                 reset_c1: false,
                 reset_c2: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, &[0b11000001]);
     }
 
@@ -1147,7 +1292,8 @@ mod tests {
                 reset_c1: true,
                 reset_c2: false,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, &[0b11000110]);
     }
 
@@ -1160,7 +1306,8 @@ mod tests {
                 set_c1: false,
                 set_c2: true,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, &[0b11010001]);
     }
 
@@ -1173,7 +1320,8 @@ mod tests {
                 set_c1: true,
                 set_c2: false,
             },
-            &mut out);
+            &mut out,
+        );
         assert_eq!(out, &[0b11010110]);
     }
 
@@ -1183,7 +1331,13 @@ mod tests {
         assert!(decoder.feed(b'A').is_none());
         assert!(decoder.feed(b'5').is_none());
         let message = decoder.feed(b'A');
-        assert_eq!(message, Some(ViaProtocolMessage::PortState { port: b'A', port_state: 0x5A }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::PortState {
+                port: b'A',
+                port_state: 0x5A
+            })
+        );
     }
 
     #[test]
@@ -1192,7 +1346,13 @@ mod tests {
         assert!(decoder.feed(b'B').is_none());
         assert!(decoder.feed(b'A').is_none());
         let message = decoder.feed(b'5');
-        assert_eq!(message, Some(ViaProtocolMessage::PortState { port: b'B', port_state: 0xA5 }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::PortState {
+                port: b'B',
+                port_state: 0xA5
+            })
+        );
     }
 
     #[test]
@@ -1202,7 +1362,14 @@ mod tests {
         assert!(decoder.feed(b'A').is_none());
         assert!(decoder.feed(b'0').is_none());
         let message = decoder.feed(b'1');
-        assert_eq!(message, Some(ViaProtocolMessage::CtrlState { port: b'A', c1_state: false, c2_state: true }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::CtrlState {
+                port: b'A',
+                c1_state: false,
+                c2_state: true
+            })
+        );
     }
 
     #[test]
@@ -1212,7 +1379,14 @@ mod tests {
         assert!(decoder.feed(b'B').is_none());
         assert!(decoder.feed(b'1').is_none());
         let message = decoder.feed(b'0');
-        assert_eq!(message, Some(ViaProtocolMessage::CtrlState { port: b'B', c1_state: true, c2_state: false }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::CtrlState {
+                port: b'B',
+                c1_state: true,
+                c2_state: false
+            })
+        );
     }
 
     #[test]
@@ -1222,7 +1396,15 @@ mod tests {
         assert!(decoder.feed(b'A').is_none());
         assert!(decoder.feed(b'5').is_none());
         let message = decoder.feed(b'A');
-        assert_eq!(message, Some(ViaProtocolMessage::ResetPort { port: b'A', port_mask: 0x5A, reset_c1: false, reset_c2: false }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::ResetPort {
+                port: b'A',
+                port_mask: 0x5A,
+                reset_c1: false,
+                reset_c2: false
+            })
+        );
     }
 
     #[test]
@@ -1232,7 +1414,15 @@ mod tests {
         assert!(decoder.feed(b'B').is_none());
         assert!(decoder.feed(b'A').is_none());
         let message = decoder.feed(b'5');
-        assert_eq!(message, Some(ViaProtocolMessage::ResetPort { port: b'B', port_mask: 0xA5, reset_c1: false, reset_c2: false }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::ResetPort {
+                port: b'B',
+                port_mask: 0xA5,
+                reset_c1: false,
+                reset_c2: false
+            })
+        );
     }
 
     #[test]
@@ -1242,7 +1432,15 @@ mod tests {
         assert!(decoder.feed(b'A').is_none());
         assert!(decoder.feed(b'5').is_none());
         let message = decoder.feed(b'A');
-        assert_eq!(message, Some(ViaProtocolMessage::SetPort { port: b'A', port_mask: 0x5A, set_c1: false, set_c2: false }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::SetPort {
+                port: b'A',
+                port_mask: 0x5A,
+                set_c1: false,
+                set_c2: false
+            })
+        );
     }
 
     #[test]
@@ -1252,7 +1450,15 @@ mod tests {
         assert!(decoder.feed(b'B').is_none());
         assert!(decoder.feed(b'A').is_none());
         let message = decoder.feed(b'5');
-        assert_eq!(message, Some(ViaProtocolMessage::SetPort { port: b'B', port_mask: 0xA5, set_c1: false, set_c2: false }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::SetPort {
+                port: b'B',
+                port_mask: 0xA5,
+                set_c1: false,
+                set_c2: false
+            })
+        );
     }
 
     #[test]
@@ -1262,7 +1468,14 @@ mod tests {
         assert!(decoder.feed(b'C').is_none());
         assert!(decoder.feed(b'A').is_none());
         let message = decoder.feed(b'1');
-        assert_eq!(message, Some(ViaProtocolMessage::ResetCtrl { port: b'A', reset_c1: true, reset_c2: false }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::ResetCtrl {
+                port: b'A',
+                reset_c1: true,
+                reset_c2: false
+            })
+        );
     }
 
     #[test]
@@ -1272,7 +1485,14 @@ mod tests {
         assert!(decoder.feed(b'C').is_none());
         assert!(decoder.feed(b'B').is_none());
         let message = decoder.feed(b'2');
-        assert_eq!(message, Some(ViaProtocolMessage::ResetCtrl { port: b'B', reset_c1: false, reset_c2: true }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::ResetCtrl {
+                port: b'B',
+                reset_c1: false,
+                reset_c2: true
+            })
+        );
     }
 
     #[test]
@@ -1282,7 +1502,14 @@ mod tests {
         assert!(decoder.feed(b'C').is_none());
         assert!(decoder.feed(b'A').is_none());
         let message = decoder.feed(b'1');
-        assert_eq!(message, Some(ViaProtocolMessage::SetCtrl { port: b'A', set_c1: true, set_c2: false }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::SetCtrl {
+                port: b'A',
+                set_c1: true,
+                set_c2: false
+            })
+        );
     }
 
     #[test]
@@ -1292,119 +1519,205 @@ mod tests {
         assert!(decoder.feed(b'C').is_none());
         assert!(decoder.feed(b'B').is_none());
         let message = decoder.feed(b'2');
-        assert_eq!(message, Some(ViaProtocolMessage::SetCtrl { port: b'B', set_c1: false, set_c2: true }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::SetCtrl {
+                port: b'B',
+                set_c1: false,
+                set_c2: true
+            })
+        );
     }
 
     #[test]
     fn decode_binary_port_a_state() {
         let mut decoder = ViaBinaryProtocolDecoder::new();
-        assert!(decoder
-            .feed(VIA_TYPE_PORT_STATE).is_none());
+        assert!(decoder.feed(VIA_TYPE_PORT_STATE).is_none());
         let message = decoder.feed(0x55);
-        assert_eq!(message, Some(ViaProtocolMessage::PortState { port: b'A', port_state: 0x55 }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::PortState {
+                port: b'A',
+                port_state: 0x55
+            })
+        );
     }
 
     #[test]
     fn decode_binary_port_b_state() {
         let mut decoder = ViaBinaryProtocolDecoder::new();
-        assert!(decoder
-            .feed(VIA_TYPE_PORT_STATE | VIA_PORT_MASK).is_none());
+        assert!(decoder.feed(VIA_TYPE_PORT_STATE | VIA_PORT_MASK).is_none());
         let message = decoder.feed(0x55);
-        assert_eq!(message, Some(ViaProtocolMessage::PortState { port: b'B', port_state: 0x55 }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::PortState {
+                port: b'B',
+                port_state: 0x55
+            })
+        );
     }
 
     #[test]
     fn decode_binary_port_a_ctrl_state() {
         let mut decoder = ViaBinaryProtocolDecoder::new();
-        let message = decoder
-            .feed(VIA_TYPE_CTRL_STATE | VIA_CTRL1_MASK | VIA_CTRL2_MASK);
-        assert_eq!(message, Some(ViaProtocolMessage::CtrlState {
-            port: b'A', c1_state: true, c2_state: true }));
+        let message = decoder.feed(VIA_TYPE_CTRL_STATE | VIA_CTRL1_MASK | VIA_CTRL2_MASK);
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::CtrlState {
+                port: b'A',
+                c1_state: true,
+                c2_state: true
+            })
+        );
     }
 
     #[test]
     fn decode_binary_port_b_ctrl_state() {
         let mut decoder = ViaBinaryProtocolDecoder::new();
-        let message = decoder
-            .feed(VIA_TYPE_CTRL_STATE | VIA_PORT_MASK | VIA_CTRL2_MASK);
-        assert_eq!(message, Some(ViaProtocolMessage::CtrlState {
-            port: b'B', c1_state: false, c2_state: true }));
+        let message = decoder.feed(VIA_TYPE_CTRL_STATE | VIA_PORT_MASK | VIA_CTRL2_MASK);
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::CtrlState {
+                port: b'B',
+                c1_state: false,
+                c2_state: true
+            })
+        );
     }
 
     #[test]
     fn decode_binary_port_a_reset() {
         let mut decoder = ViaBinaryProtocolDecoder::new();
-        assert!(decoder
-            .feed(VIA_TYPE_RESET_PORT | VIA_CTRL1_MASK | VIA_CTRL2_MASK).is_none());
+        assert!(
+            decoder
+                .feed(VIA_TYPE_RESET_PORT | VIA_CTRL1_MASK | VIA_CTRL2_MASK)
+                .is_none()
+        );
         let message = decoder.feed(0x55);
-        assert_eq!(message, Some(ViaProtocolMessage::ResetPort {
-            port: b'A', port_mask: 0x55, reset_c1: true, reset_c2: true }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::ResetPort {
+                port: b'A',
+                port_mask: 0x55,
+                reset_c1: true,
+                reset_c2: true
+            })
+        );
     }
 
     #[test]
     fn decode_binary_port_b_reset() {
         let mut decoder = ViaBinaryProtocolDecoder::new();
-        assert!(decoder
-            .feed(VIA_TYPE_RESET_PORT | VIA_PORT_MASK | VIA_CTRL1_MASK).is_none());
+        assert!(
+            decoder
+                .feed(VIA_TYPE_RESET_PORT | VIA_PORT_MASK | VIA_CTRL1_MASK)
+                .is_none()
+        );
         let message = decoder.feed(0x55);
-        assert_eq!(message, Some(ViaProtocolMessage::ResetPort {
-            port: b'B', port_mask: 0x55, reset_c1: true, reset_c2: false}));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::ResetPort {
+                port: b'B',
+                port_mask: 0x55,
+                reset_c1: true,
+                reset_c2: false
+            })
+        );
     }
 
     #[test]
     fn decode_binary_port_a_set() {
         let mut decoder = ViaBinaryProtocolDecoder::new();
-        assert!(decoder
-            .feed(VIA_TYPE_SET_PORT | VIA_CTRL1_MASK | VIA_CTRL2_MASK).is_none());
+        assert!(
+            decoder
+                .feed(VIA_TYPE_SET_PORT | VIA_CTRL1_MASK | VIA_CTRL2_MASK)
+                .is_none()
+        );
         let message = decoder.feed(0xAA);
-        assert_eq!(message, Some(ViaProtocolMessage::SetPort {
-            port: b'A', port_mask: 0xAA, set_c1: true, set_c2: true }));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::SetPort {
+                port: b'A',
+                port_mask: 0xAA,
+                set_c1: true,
+                set_c2: true
+            })
+        );
     }
 
     #[test]
     fn decode_binary_port_b_set() {
         let mut decoder = ViaBinaryProtocolDecoder::new();
-        assert!(decoder
-            .feed(VIA_TYPE_SET_PORT | VIA_PORT_MASK | VIA_CTRL2_MASK).is_none());
+        assert!(
+            decoder
+                .feed(VIA_TYPE_SET_PORT | VIA_PORT_MASK | VIA_CTRL2_MASK)
+                .is_none()
+        );
         let message = decoder.feed(0xAA);
-        assert_eq!(message, Some(ViaProtocolMessage::SetPort {
-            port: b'B', port_mask: 0xAA, set_c1: false, set_c2: true}));
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::SetPort {
+                port: b'B',
+                port_mask: 0xAA,
+                set_c1: false,
+                set_c2: true
+            })
+        );
     }
 
     #[test]
     fn decode_binary_port_a_ctrl_reset() {
         let mut decoder = ViaBinaryProtocolDecoder::new();
-        let message = decoder
-            .feed(VIA_TYPE_RESET_CTRL | VIA_CTRL1_MASK | VIA_CTRL2_MASK);
-        assert_eq!(message, Some(ViaProtocolMessage::ResetCtrl {
-            port: b'A', reset_c1: true, reset_c2: true }));
+        let message = decoder.feed(VIA_TYPE_RESET_CTRL | VIA_CTRL1_MASK | VIA_CTRL2_MASK);
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::ResetCtrl {
+                port: b'A',
+                reset_c1: true,
+                reset_c2: true
+            })
+        );
     }
 
     #[test]
     fn decode_binary_port_b_ctrl_reset() {
         let mut decoder = ViaBinaryProtocolDecoder::new();
-        let message = decoder
-            .feed(VIA_TYPE_RESET_CTRL | VIA_PORT_MASK | VIA_CTRL2_MASK);
-        assert_eq!(message, Some(ViaProtocolMessage::ResetCtrl {
-            port: b'B', reset_c1: false, reset_c2: true }));
+        let message = decoder.feed(VIA_TYPE_RESET_CTRL | VIA_PORT_MASK | VIA_CTRL2_MASK);
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::ResetCtrl {
+                port: b'B',
+                reset_c1: false,
+                reset_c2: true
+            })
+        );
     }
 
     #[test]
     fn decode_binary_port_a_ctrl_set() {
         let mut decoder = ViaBinaryProtocolDecoder::new();
-        let message = decoder
-            .feed(VIA_TYPE_SET_CTRL | VIA_CTRL1_MASK | VIA_CTRL2_MASK);
-        assert_eq!(message, Some(ViaProtocolMessage::SetCtrl {
-            port: b'A', set_c1: true, set_c2: true }));
+        let message = decoder.feed(VIA_TYPE_SET_CTRL | VIA_CTRL1_MASK | VIA_CTRL2_MASK);
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::SetCtrl {
+                port: b'A',
+                set_c1: true,
+                set_c2: true
+            })
+        );
     }
 
     #[test]
     fn decode_binary_port_b_ctrl_set() {
         let mut decoder = ViaBinaryProtocolDecoder::new();
-        let message = decoder
-            .feed(VIA_TYPE_SET_CTRL | VIA_PORT_MASK | VIA_CTRL2_MASK);
-        assert_eq!(message, Some(ViaProtocolMessage::SetCtrl {
-            port: b'B', set_c1: false, set_c2: true }));
+        let message = decoder.feed(VIA_TYPE_SET_CTRL | VIA_PORT_MASK | VIA_CTRL2_MASK);
+        assert_eq!(
+            message,
+            Some(ViaProtocolMessage::SetCtrl {
+                port: b'B',
+                set_c1: false,
+                set_c2: true
+            })
+        );
     }
-
 }

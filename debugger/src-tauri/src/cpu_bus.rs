@@ -5,9 +5,9 @@ use std::sync::Mutex;
 use emma65::emulator::{Cpu, IrqSource};
 use tauri::{AppHandle, Emitter, State};
 
+use crate::CpuState;
 use crate::disassembly::{LiveSnapshotRx, RunStopperState, SkipBreakpointPc};
 use crate::registers::{ChangedFlagsState, RegisterSnapshot};
-use crate::CpuState;
 
 /// IRQ source identifying the debugger UI's own IRQ toggle control.
 ///
@@ -145,7 +145,11 @@ pub fn trigger_nmi(
         }
     };
     if is_running {
-        return Ok(current_cpu_bus_state(&cpu_bus_cache, &run_stopper_state, &live_snapshot_rx));
+        return Ok(current_cpu_bus_state(
+            &cpu_bus_cache,
+            &run_stopper_state,
+            &live_snapshot_rx,
+        ));
     }
     let mut guard = cpu_state.0.lock().unwrap();
     let cpu = guard.as_mut().ok_or("CPU not ready")?;
@@ -186,7 +190,11 @@ pub fn assert_irq(
         }
     };
     if is_running {
-        return Ok(current_cpu_bus_state(&cpu_bus_cache, &run_stopper_state, &live_snapshot_rx));
+        return Ok(current_cpu_bus_state(
+            &cpu_bus_cache,
+            &run_stopper_state,
+            &live_snapshot_rx,
+        ));
     }
     let mut guard = cpu_state.0.lock().unwrap();
     let cpu = guard.as_mut().ok_or("CPU not ready")?;
@@ -223,7 +231,11 @@ pub fn release_irq(
         }
     };
     if is_running {
-        return Ok(current_cpu_bus_state(&cpu_bus_cache, &run_stopper_state, &live_snapshot_rx));
+        return Ok(current_cpu_bus_state(
+            &cpu_bus_cache,
+            &run_stopper_state,
+            &live_snapshot_rx,
+        ));
     }
     let mut guard = cpu_state.0.lock().unwrap();
     let cpu = guard.as_mut().ok_or("CPU not ready")?;
@@ -274,7 +286,12 @@ fn current_cpu_bus_state(
     let snap = cpu_bus_cache.0.lock().unwrap().clone();
     let is_running = run_stopper_state.0.lock().unwrap().is_some();
     let live = if is_running {
-        live_snapshot_rx.0.lock().unwrap().as_ref().and_then(|rx| rx.borrow().clone())
+        live_snapshot_rx
+            .0
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|rx| rx.borrow().clone())
     } else {
         None
     };

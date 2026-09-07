@@ -24,10 +24,12 @@ async fn bus_drop_shuts_down_all_transports_without_hanging() {
     let mut console = Console::new("console").with_address(0x8000);
     console.attach_transport(Box::new(pipe_local), TransportRelay::Byte(pipe_relay));
 
-    let (tcp_transport, tcp_relay) =
-        TcpSocketTransport::listen("127.0.0.1:0".parse().unwrap(), TransportReporter::pending(None))
-            .await
-            .unwrap();
+    let (tcp_transport, tcp_relay) = TcpSocketTransport::listen(
+        "127.0.0.1:0".parse().unwrap(),
+        TransportReporter::pending(None),
+    )
+    .await
+    .unwrap();
     let tcp_addr = tcp_transport.local_addr();
     let _client = TcpStream::connect(tcp_addr).await.unwrap();
     tokio::time::sleep(std::time::Duration::from_millis(20)).await;
@@ -36,9 +38,17 @@ async fn bus_drop_shuts_down_all_transports_without_hanging() {
     acia.attach_transport(Box::new(tcp_transport), TransportRelay::Tagged(tcp_relay));
 
     let bus = Bus::config()
-        .device(AddressRange::new(0x8000, 0x8001), DeviceId(0), Box::new(console))
+        .device(
+            AddressRange::new(0x8000, 0x8001),
+            DeviceId(0),
+            Box::new(console),
+        )
         .unwrap()
-        .device(AddressRange::new(0x8010, 0x8013), DeviceId(1), Box::new(acia))
+        .device(
+            AddressRange::new(0x8010, 0x8013),
+            DeviceId(1),
+            Box::new(acia),
+        )
         .unwrap()
         .build();
 

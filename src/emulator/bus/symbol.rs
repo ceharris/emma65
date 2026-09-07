@@ -42,7 +42,6 @@ pub struct SymbolTable {
 }
 
 impl SymbolTable {
-
     /// Removes the `(name, source)` reverse pointer from `address`'s bucket
     /// in `by_address`, dropping the bucket entirely once empty. Takes
     /// `by_address` directly (rather than `&mut self`) so callers can hold
@@ -91,7 +90,10 @@ impl SymbolTable {
         } else {
             entries.push((source.clone(), address));
         }
-        self.by_address.entry(address).or_default().push((name, source));
+        self.by_address
+            .entry(address)
+            .or_default()
+            .push((name, source));
     }
 
     /// Inserts all mappings from `source`, preserving each entry's own tag.
@@ -215,7 +217,6 @@ impl SymbolTable {
                 .map(move |(source, address)| (name.as_str(), source, *address))
         })
     }
-
 }
 
 impl Default for SymbolTable {
@@ -223,7 +224,6 @@ impl Default for SymbolTable {
         Self::new()
     }
 }
-
 
 /// Parses a VICE monitor labels file and inserts each label into a
 /// `SymbolTable`, tagged with `SymbolSource::File` using the path's
@@ -260,7 +260,8 @@ fn parse_vice_labels(contents: &str, source: SymbolSource) -> Result<SymbolTable
             Some((_space, hex)) => hex,
             None => addr_tok,
         };
-        let address = u16::from_str_radix(hex_part, 16).map_err(|_| "malformed line: invalid hex address")?;
+        let address =
+            u16::from_str_radix(hex_part, 16).map_err(|_| "malformed line: invalid hex address")?;
 
         let label_tok = tokens.next().ok_or("malformed line: missing label name")?;
         let label = label_tok.strip_prefix('.').unwrap_or(label_tok);
@@ -368,8 +369,16 @@ mod tests {
         let mut table = SymbolTable::default();
         let path_a = PathBuf::from("/a.lbl");
         let path_b = PathBuf::from("/b.lbl");
-        table.insert_tagged("foo".to_string(), 0x1000, SymbolSource::File(path_a.clone()));
-        table.insert_tagged("bar".to_string(), 0x2000, SymbolSource::File(path_b.clone()));
+        table.insert_tagged(
+            "foo".to_string(),
+            0x1000,
+            SymbolSource::File(path_a.clone()),
+        );
+        table.insert_tagged(
+            "bar".to_string(),
+            0x2000,
+            SymbolSource::File(path_b.clone()),
+        );
 
         assert!(table.has_file_source(&path_a));
         assert!(table.has_file_source(&path_b));
@@ -452,8 +461,10 @@ mod tests {
 
     #[tokio::test]
     async fn load_vice_labels_file() {
-        let path  = tempfile::Builder::new().suffix(".lbl").tempfile().unwrap();
-        tokio::fs::write(&path.path(), VICE_LABELS.as_bytes()).await.unwrap();
+        let path = tempfile::Builder::new().suffix(".lbl").tempfile().unwrap();
+        tokio::fs::write(&path.path(), VICE_LABELS.as_bytes())
+            .await
+            .unwrap();
         let table = load_vice_labels(path.path()).await.unwrap();
         assert_eq!(table.address_for("COLD_START"), Some(0xEF3A));
         assert_eq!(table.address_for("cls_sequence"), Some(0xF1F4));
@@ -463,5 +474,4 @@ mod tests {
             assert_eq!(source, &SymbolSource::File(canonical.clone()));
         }
     }
-
 }

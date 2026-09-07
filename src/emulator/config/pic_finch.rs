@@ -24,11 +24,14 @@ impl DeviceModule for PicFinchModule {
         "pic/finch"
     }
 
-    async fn instantiate(&self, bus_config: BusConfig, address: u16,
-                         _attributes: &HashMap<String, Value>, context: &InstantiationContext,
-                         id_allocator: Arc<Mutex<DeviceIdAllocator>>)
-            -> Result<BusConfig, DeviceModuleError> {
-
+    async fn instantiate(
+        &self,
+        bus_config: BusConfig,
+        address: u16,
+        _attributes: &HashMap<String, Value>,
+        context: &InstantiationContext,
+        id_allocator: Arc<Mutex<DeviceIdAllocator>>,
+    ) -> Result<BusConfig, DeviceModuleError> {
         let device_id = id_allocator.lock().unwrap().next_available();
         let mut device = PicFinch::new(self.name()).with_address(address);
         if let Some(sender) = &context.log_sender {
@@ -36,12 +39,16 @@ impl DeviceModule for PicFinchModule {
         }
         let resolver = device.vector_resolver();
 
-        let bus_config = bus_config.device(
-            AddressRange::new(address, address + (BUS_SIZE - 1)),
-            device_id, Box::new(device))
+        let bus_config = bus_config
+            .device(
+                AddressRange::new(address, address + (BUS_SIZE - 1)),
+                device_id,
+                Box::new(device),
+            )
             .map_err(DeviceModuleError::BusConfig)?;
 
-        bus_config.vector_resolver(Box::new(resolver))
+        bus_config
+            .vector_resolver(Box::new(resolver))
             .map_err(DeviceModuleError::BusConfig)
     }
 }
@@ -61,8 +68,16 @@ mod tests {
         let module = PicFinchModule;
         let attributes: HashMap<String, Value> = HashMap::new();
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
-        let bus_config = module.instantiate(BusConfig::new(), 0xFFFF, &attributes, &context(), id_allocator)
-            .await.unwrap();
+        let bus_config = module
+            .instantiate(
+                BusConfig::new(),
+                0xFFFF,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await
+            .unwrap();
         let mut bus = bus_config.build();
         bus.write(0xFFFF, !(1 << 2) & 0x7F).unwrap(); // disable all but slot 2
         assert_eq!(bus.read(0xFFFF).unwrap(), 0x80 | (1 << 2));
@@ -75,9 +90,13 @@ mod tests {
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
         // RAM everywhere except the PIC's own IER byte at 0xFFFF, so the vector table
         // (backed by ROM in a real system) can actually store the bytes we write.
-        let bus_config = BusConfig::new().ram(AddressRange::new(0x0000, 0xFFFE)).unwrap();
-        let mut bus_config = module.instantiate(bus_config, 0xFFFF, &attributes, &context(), id_allocator)
-            .await.unwrap();
+        let bus_config = BusConfig::new()
+            .ram(AddressRange::new(0x0000, 0xFFFE))
+            .unwrap();
+        let mut bus_config = module
+            .instantiate(bus_config, 0xFFFF, &attributes, &context(), id_allocator)
+            .await
+            .unwrap();
         let resolver = bus_config.take_vector_resolver();
         let bus = bus_config.build();
         let mut builder = Cpu::builder(CpuVariant::Wdc65C02).bus(bus);
@@ -90,7 +109,9 @@ mod tests {
         cpu.bus_mut().write(0xFFE6, 0x00).unwrap(); // slot 3 vector low byte
         cpu.bus_mut().write(0xFFE7, 0x04).unwrap(); // slot 3 vector high byte
         cpu.interrupts_mut().assert_irq(IrqSource(3));
-        cpu.registers_mut().p.remove(crate::emulator::StatusRegister::I);
+        cpu.registers_mut()
+            .p
+            .remove(crate::emulator::StatusRegister::I);
 
         cpu.step(None, true);
         assert_eq!(cpu.registers().pc, 0x0400);

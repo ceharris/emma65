@@ -105,7 +105,8 @@ pub fn parse_operand<'a>(
 
     let first = parser.parse_expr()?;
     if let Some(token) = parser.peek()
-        && token.token_type() == TokenType::Comma {
+        && token.token_type() == TokenType::Comma
+    {
         parser.advance();
         return parse_after_comma(parser, first, zero_page_relative_supported);
     }
@@ -119,13 +120,18 @@ fn parse_indirect_operand<'a>(parser: &mut Parser<'a>) -> Result<OperandSyntax<'
         Some(token) if token.token_type() == TokenType::Comma => {
             // (expr,X)
             expect_index_register(parser, "X")?;
-            expect_token(parser, TokenType::RightParen, "expected closing parenthesis")?;
+            expect_token(
+                parser,
+                TokenType::RightParen,
+                "expected closing parenthesis",
+            )?;
             Ok(OperandSyntax::IndirectX(inner))
         }
         Some(token) if token.token_type() == TokenType::RightParen => {
             // (expr) or (expr),Y
             if let Some(comma) = parser.peek()
-                && comma.token_type() == TokenType::Comma {
+                && comma.token_type() == TokenType::Comma
+            {
                 parser.advance();
                 expect_index_register(parser, "Y")?;
                 return Ok(OperandSyntax::IndirectY(inner));
@@ -133,11 +139,15 @@ fn parse_indirect_operand<'a>(parser: &mut Parser<'a>) -> Result<OperandSyntax<'
             Ok(OperandSyntax::Indirect(inner))
         }
         Some(token) => Err(Error::from(
-            token.location.line, token.location.column,
-            "expected ',' or closing parenthesis")),
+            token.location.line,
+            token.location.column,
+            "expected ',' or closing parenthesis",
+        )),
         None => Err(Error::from(
-            open.location.line, open.location.column,
-            "expected closing parenthesis")),
+            open.location.line,
+            open.location.column,
+            "expected closing parenthesis",
+        )),
     }
 }
 
@@ -160,8 +170,10 @@ fn parse_after_comma<'a>(
     }
     match parser.peek() {
         Some(token) => Err(Error::from(
-            token.location.line, token.location.column,
-            "expected 'X' or 'Y' index register")),
+            token.location.line,
+            token.location.column,
+            "expected 'X' or 'Y' index register",
+        )),
         None => Err(Error::from(0, 0, "expected 'X' or 'Y' index register")),
     }
 }
@@ -173,9 +185,15 @@ fn expect_index_register(parser: &mut Parser, letter: &str) -> Result<(), Error>
     } else {
         match parser.peek() {
             Some(token) => Err(Error::from(
-                token.location.line, token.location.column,
-                &format!("expected index register '{letter}'"))),
-            None => Err(Error::from(0, 0, &format!("expected index register '{letter}'"))),
+                token.location.line,
+                token.location.column,
+                &format!("expected index register '{letter}'"),
+            )),
+            None => Err(Error::from(
+                0,
+                0,
+                &format!("expected index register '{letter}'"),
+            )),
         }
     }
 }
@@ -183,7 +201,11 @@ fn expect_index_register(parser: &mut Parser, letter: &str) -> Result<(), Error>
 fn expect_token(parser: &mut Parser, expected: TokenType, message: &str) -> Result<(), Error> {
     match parser.advance() {
         Some(token) if token.token_type() == expected => Ok(()),
-        Some(token) => Err(Error::from(token.location.line, token.location.column, message)),
+        Some(token) => Err(Error::from(
+            token.location.line,
+            token.location.column,
+            message,
+        )),
         None => Err(Error::from(0, 0, message)),
     }
 }
@@ -221,24 +243,51 @@ pub fn encode(
     table: &InstructionTable,
     location: Location,
 ) -> Result<EncodedInstruction, Error> {
-    let ctx = Context { mnemonic, addr, symbols, table, location };
+    let ctx = Context {
+        mnemonic,
+        addr,
+        symbols,
+        table,
+        location,
+    };
     match operand {
         OperandSyntax::None => encode_none(&ctx),
         OperandSyntax::Accumulator => encode_fixed(&ctx, AddressingMode::Accumulator),
         OperandSyntax::Immediate(expr) => encode_sized(&ctx, AddressingMode::Immediate, expr),
-        OperandSyntax::Indirect(expr) =>
-            encode_indirect_family(&ctx, expr, AddressingMode::Indirect, AddressingMode::ZeroPageIndirect),
-        OperandSyntax::IndirectX(expr) =>
-            encode_indirect_family(&ctx, expr, AddressingMode::AbsoluteIndirectX, AddressingMode::IndirectX),
+        OperandSyntax::Indirect(expr) => encode_indirect_family(
+            &ctx,
+            expr,
+            AddressingMode::Indirect,
+            AddressingMode::ZeroPageIndirect,
+        ),
+        OperandSyntax::IndirectX(expr) => encode_indirect_family(
+            &ctx,
+            expr,
+            AddressingMode::AbsoluteIndirectX,
+            AddressingMode::IndirectX,
+        ),
         OperandSyntax::IndirectY(expr) => encode_sized(&ctx, AddressingMode::IndirectY, expr),
-        OperandSyntax::Direct(expr) =>
-            encode_direct(&ctx, expr, AddressingMode::ZeroPage, AddressingMode::Absolute),
-        OperandSyntax::DirectX(expr) =>
-            encode_direct(&ctx, expr, AddressingMode::ZeroPageX, AddressingMode::AbsoluteX),
-        OperandSyntax::DirectY(expr) =>
-            encode_direct(&ctx, expr, AddressingMode::ZeroPageY, AddressingMode::AbsoluteY),
-        OperandSyntax::ZeroPageRelative(zp_expr, rel_expr) =>
-            encode_zero_page_relative(&ctx, zp_expr, rel_expr),
+        OperandSyntax::Direct(expr) => encode_direct(
+            &ctx,
+            expr,
+            AddressingMode::ZeroPage,
+            AddressingMode::Absolute,
+        ),
+        OperandSyntax::DirectX(expr) => encode_direct(
+            &ctx,
+            expr,
+            AddressingMode::ZeroPageX,
+            AddressingMode::AbsoluteX,
+        ),
+        OperandSyntax::DirectY(expr) => encode_direct(
+            &ctx,
+            expr,
+            AddressingMode::ZeroPageY,
+            AddressingMode::AbsoluteY,
+        ),
+        OperandSyntax::ZeroPageRelative(zp_expr, rel_expr) => {
+            encode_zero_page_relative(&ctx, zp_expr, rel_expr)
+        }
     }
 }
 
@@ -256,17 +305,29 @@ fn opcode_bytes(op: &DecodedOp) -> Vec<u8> {
 
 fn encode_none(ctx: &Context) -> Result<EncodedInstruction, Error> {
     if let Some(op) = ctx.table.get(ctx.mnemonic, AddressingMode::Implied) {
-        return Ok(EncodedInstruction { mode: AddressingMode::Implied, byte_len: op.byte_len, bytes: Some(opcode_bytes(op)) });
+        return Ok(EncodedInstruction {
+            mode: AddressingMode::Implied,
+            byte_len: op.byte_len,
+            bytes: Some(opcode_bytes(op)),
+        });
     }
     if let Some(op) = ctx.table.get(ctx.mnemonic, AddressingMode::Accumulator) {
-        return Ok(EncodedInstruction { mode: AddressingMode::Accumulator, byte_len: op.byte_len, bytes: Some(opcode_bytes(op)) });
+        return Ok(EncodedInstruction {
+            mode: AddressingMode::Accumulator,
+            byte_len: op.byte_len,
+            bytes: Some(opcode_bytes(op)),
+        });
     }
     Err(unsupported(ctx.mnemonic, ctx.location))
 }
 
 fn encode_fixed(ctx: &Context, mode: AddressingMode) -> Result<EncodedInstruction, Error> {
     match ctx.table.get(ctx.mnemonic, mode) {
-        Some(op) => Ok(EncodedInstruction { mode, byte_len: op.byte_len, bytes: Some(opcode_bytes(op)) }),
+        Some(op) => Ok(EncodedInstruction {
+            mode,
+            byte_len: op.byte_len,
+            bytes: Some(opcode_bytes(op)),
+        }),
         None => Err(unsupported(ctx.mnemonic, ctx.location)),
     }
 }
@@ -290,16 +351,31 @@ fn encode_indirect_family(
     Err(unsupported(ctx.mnemonic, ctx.location))
 }
 
-fn encode_sized(ctx: &Context, mode: AddressingMode, expr: &Expr) -> Result<EncodedInstruction, Error> {
-    let op = ctx.table.get(ctx.mnemonic, mode).ok_or_else(|| unsupported(ctx.mnemonic, ctx.location))?;
+fn encode_sized(
+    ctx: &Context,
+    mode: AddressingMode,
+    expr: &Expr,
+) -> Result<EncodedInstruction, Error> {
+    let op = ctx
+        .table
+        .get(ctx.mnemonic, mode)
+        .ok_or_else(|| unsupported(ctx.mnemonic, ctx.location))?;
     let byte_len = op.byte_len;
     let opcode = op.opcode;
     match evaluate(expr, ctx.symbols)? {
-        None => Ok(EncodedInstruction { mode, byte_len, bytes: None }),
+        None => Ok(EncodedInstruction {
+            mode,
+            byte_len,
+            bytes: None,
+        }),
         Some(value) => {
             let mut bytes = vec![opcode];
             bytes.extend(operand_value_bytes(mode, value, expr_location(expr))?);
-            Ok(EncodedInstruction { mode, byte_len, bytes: Some(bytes) })
+            Ok(EncodedInstruction {
+                mode,
+                byte_len,
+                bytes: Some(bytes),
+            })
         }
     }
 }
@@ -317,7 +393,11 @@ fn encode_direct(
     let zp = ctx.table.get(ctx.mnemonic, zp_mode);
     let abs = ctx.table.get(ctx.mnemonic, abs_mode);
     if zp.is_none() && abs.is_none() {
-        if ctx.table.get(ctx.mnemonic, AddressingMode::Relative).is_some() {
+        if ctx
+            .table
+            .get(ctx.mnemonic, AddressingMode::Relative)
+            .is_some()
+        {
             return encode_relative(ctx, expr);
         }
         return Err(unsupported(ctx.mnemonic, ctx.location));
@@ -333,27 +413,48 @@ fn encode_direct(
     }
     // Only a zero-page form exists, and the resolved value doesn't fit.
     match value {
-        None => Ok(EncodedInstruction { mode: zp_mode, byte_len: zp.unwrap().byte_len, bytes: None }),
+        None => Ok(EncodedInstruction {
+            mode: zp_mode,
+            byte_len: zp.unwrap().byte_len,
+            bytes: None,
+        }),
         Some(_) => Err(operand_range_error(zp_mode, expr_location(expr))),
     }
 }
 
 fn encode_relative(ctx: &Context, expr: &Expr) -> Result<EncodedInstruction, Error> {
-    let op = ctx.table.get(ctx.mnemonic, AddressingMode::Relative).ok_or_else(|| unsupported(ctx.mnemonic, ctx.location))?;
+    let op = ctx
+        .table
+        .get(ctx.mnemonic, AddressingMode::Relative)
+        .ok_or_else(|| unsupported(ctx.mnemonic, ctx.location))?;
     let byte_len = op.byte_len;
     match evaluate(expr, ctx.symbols)? {
-        None => Ok(EncodedInstruction { mode: AddressingMode::Relative, byte_len, bytes: None }),
+        None => Ok(EncodedInstruction {
+            mode: AddressingMode::Relative,
+            byte_len,
+            bytes: None,
+        }),
         Some(target) => {
             let pc_after = ctx.addr.wrapping_add(byte_len as u16);
             let displacement = relative_displacement(target as u16, pc_after)
                 .ok_or_else(|| branch_out_of_range(expr_location(expr)))?;
-            Ok(EncodedInstruction { mode: AddressingMode::Relative, byte_len, bytes: Some(vec![op.opcode, displacement]) })
+            Ok(EncodedInstruction {
+                mode: AddressingMode::Relative,
+                byte_len,
+                bytes: Some(vec![op.opcode, displacement]),
+            })
         }
     }
 }
 
-fn encode_zero_page_relative(ctx: &Context, zp_expr: &Expr, rel_expr: &Expr) -> Result<EncodedInstruction, Error> {
-    let op = ctx.table.get(ctx.mnemonic, AddressingMode::ZeroPageRelative)
+fn encode_zero_page_relative(
+    ctx: &Context,
+    zp_expr: &Expr,
+    rel_expr: &Expr,
+) -> Result<EncodedInstruction, Error> {
+    let op = ctx
+        .table
+        .get(ctx.mnemonic, AddressingMode::ZeroPageRelative)
         .ok_or_else(|| unsupported(ctx.mnemonic, ctx.location))?;
     let byte_len = op.byte_len;
     let opcode = op.opcode;
@@ -362,7 +463,10 @@ fn encode_zero_page_relative(ctx: &Context, zp_expr: &Expr, rel_expr: &Expr) -> 
     match (zp_value, rel_value) {
         (Some(zp), Some(target)) => {
             if zp > 0xFF {
-                return Err(operand_range_error(AddressingMode::ZeroPage, expr_location(zp_expr)));
+                return Err(operand_range_error(
+                    AddressingMode::ZeroPage,
+                    expr_location(zp_expr),
+                ));
             }
             let pc_after = ctx.addr.wrapping_add(byte_len as u16);
             let displacement = relative_displacement(target as u16, pc_after)
@@ -373,7 +477,11 @@ fn encode_zero_page_relative(ctx: &Context, zp_expr: &Expr, rel_expr: &Expr) -> 
                 bytes: Some(vec![opcode, zp as u8, displacement]),
             })
         }
-        _ => Ok(EncodedInstruction { mode: AddressingMode::ZeroPageRelative, byte_len, bytes: None }),
+        _ => Ok(EncodedInstruction {
+            mode: AddressingMode::ZeroPageRelative,
+            byte_len,
+            bytes: None,
+        }),
     }
 }
 
@@ -393,20 +501,29 @@ fn relative_displacement(target: u16, pc_after: u16) -> Option<u8> {
     }
 }
 
-fn operand_value_bytes(mode: AddressingMode, value: Operand, location: Location) -> Result<Vec<u8>, Error> {
+fn operand_value_bytes(
+    mode: AddressingMode,
+    value: Operand,
+    location: Location,
+) -> Result<Vec<u8>, Error> {
     match mode {
-        AddressingMode::Immediate |
-        AddressingMode::ZeroPage | AddressingMode::ZeroPageX | AddressingMode::ZeroPageY |
-        AddressingMode::IndirectX | AddressingMode::IndirectY | AddressingMode::ZeroPageIndirect => {
+        AddressingMode::Immediate
+        | AddressingMode::ZeroPage
+        | AddressingMode::ZeroPageX
+        | AddressingMode::ZeroPageY
+        | AddressingMode::IndirectX
+        | AddressingMode::IndirectY
+        | AddressingMode::ZeroPageIndirect => {
             if value > 0xFF {
                 return Err(operand_range_error(mode, location));
             }
             Ok(vec![value as u8])
         }
-        AddressingMode::Absolute | AddressingMode::AbsoluteX | AddressingMode::AbsoluteY |
-        AddressingMode::Indirect | AddressingMode::AbsoluteIndirectX => {
-            Ok((value as u16).to_le_bytes().to_vec())
-        }
+        AddressingMode::Absolute
+        | AddressingMode::AbsoluteX
+        | AddressingMode::AbsoluteY
+        | AddressingMode::Indirect
+        | AddressingMode::AbsoluteIndirectX => Ok((value as u16).to_le_bytes().to_vec()),
         _ => panic!("operand_value_bytes: unsupported mode {mode:?}"),
     }
 }
@@ -416,19 +533,29 @@ fn expr_location(expr: &Expr) -> Location {
 }
 
 fn unsupported(mnemonic: Mnemonic, location: Location) -> Error {
-    Error::from(location.line, location.column,
-                &format!("addressing mode not supported by {mnemonic}"))
+    Error::from(
+        location.line,
+        location.column,
+        &format!("addressing mode not supported by {mnemonic}"),
+    )
 }
 
 fn operand_range_error(mode: AddressingMode, location: Location) -> Error {
     let description = match mode {
         AddressingMode::Immediate => "immediate operand",
-        AddressingMode::ZeroPage | AddressingMode::ZeroPageX | AddressingMode::ZeroPageY |
-        AddressingMode::IndirectX | AddressingMode::IndirectY | AddressingMode::ZeroPageIndirect =>
-            "zero-page operand",
+        AddressingMode::ZeroPage
+        | AddressingMode::ZeroPageX
+        | AddressingMode::ZeroPageY
+        | AddressingMode::IndirectX
+        | AddressingMode::IndirectY
+        | AddressingMode::ZeroPageIndirect => "zero-page operand",
         _ => "operand",
     };
-    Error::from(location.line, location.column, &format!("{description} out of range"))
+    Error::from(
+        location.line,
+        location.column,
+        &format!("{description} out of range"),
+    )
 }
 
 fn branch_out_of_range(location: Location) -> Error {
@@ -446,21 +573,37 @@ mod tests {
         zero_page_relative_supported: bool,
     ) -> Result<OperandSyntax<'a>, Error> {
         let mut parser = Parser::new(source).unwrap();
-        parse_operand(&mut parser, accumulator_supported, zero_page_relative_supported)
+        parse_operand(
+            &mut parser,
+            accumulator_supported,
+            zero_page_relative_supported,
+        )
     }
 
     // --- parse_operand ---
 
     #[test]
     fn parse_none_operand() {
-        assert_eq!(parse_operand_source("", false, false).unwrap(), OperandSyntax::None);
-        assert_eq!(parse_operand_source("\n", false, false).unwrap(), OperandSyntax::None);
+        assert_eq!(
+            parse_operand_source("", false, false).unwrap(),
+            OperandSyntax::None
+        );
+        assert_eq!(
+            parse_operand_source("\n", false, false).unwrap(),
+            OperandSyntax::None
+        );
     }
 
     #[test]
     fn parse_accumulator_operand() {
-        assert_eq!(parse_operand_source("A", true, false).unwrap(), OperandSyntax::Accumulator);
-        assert_eq!(parse_operand_source("a", true, false).unwrap(), OperandSyntax::Accumulator);
+        assert_eq!(
+            parse_operand_source("A", true, false).unwrap(),
+            OperandSyntax::Accumulator
+        );
+        assert_eq!(
+            parse_operand_source("a", true, false).unwrap(),
+            OperandSyntax::Accumulator
+        );
     }
 
     #[test]
@@ -501,17 +644,38 @@ mod tests {
 
     #[test]
     fn parse_direct_x_and_y_operands() {
-        assert!(matches!(parse_operand_source("$50,X", false, false).unwrap(), OperandSyntax::DirectX(_)));
-        assert!(matches!(parse_operand_source("$50,x", false, false).unwrap(), OperandSyntax::DirectX(_)));
-        assert!(matches!(parse_operand_source("$50,Y", false, false).unwrap(), OperandSyntax::DirectY(_)));
-        assert!(matches!(parse_operand_source("$50,y", false, false).unwrap(), OperandSyntax::DirectY(_)));
+        assert!(matches!(
+            parse_operand_source("$50,X", false, false).unwrap(),
+            OperandSyntax::DirectX(_)
+        ));
+        assert!(matches!(
+            parse_operand_source("$50,x", false, false).unwrap(),
+            OperandSyntax::DirectX(_)
+        ));
+        assert!(matches!(
+            parse_operand_source("$50,Y", false, false).unwrap(),
+            OperandSyntax::DirectY(_)
+        ));
+        assert!(matches!(
+            parse_operand_source("$50,y", false, false).unwrap(),
+            OperandSyntax::DirectY(_)
+        ));
     }
 
     #[test]
     fn parse_indirect_operands() {
-        assert!(matches!(parse_operand_source("($20)", false, false).unwrap(), OperandSyntax::Indirect(_)));
-        assert!(matches!(parse_operand_source("($20,X)", false, false).unwrap(), OperandSyntax::IndirectX(_)));
-        assert!(matches!(parse_operand_source("($20),Y", false, false).unwrap(), OperandSyntax::IndirectY(_)));
+        assert!(matches!(
+            parse_operand_source("($20)", false, false).unwrap(),
+            OperandSyntax::Indirect(_)
+        ));
+        assert!(matches!(
+            parse_operand_source("($20,X)", false, false).unwrap(),
+            OperandSyntax::IndirectX(_)
+        ));
+        assert!(matches!(
+            parse_operand_source("($20),Y", false, false).unwrap(),
+            OperandSyntax::IndirectY(_)
+        ));
     }
 
     #[test]
@@ -566,14 +730,26 @@ mod tests {
         zero_page_relative_supported: bool,
     ) -> Result<EncodedInstruction, Error> {
         let mut parser = Parser::new(source).unwrap();
-        let operand = parse_operand(&mut parser, accumulator_supported, zero_page_relative_supported)?;
-        encode(mnemonic, &operand, addr, symbols, table, Location::from(1, 1))
+        let operand = parse_operand(
+            &mut parser,
+            accumulator_supported,
+            zero_page_relative_supported,
+        )?;
+        encode(
+            mnemonic,
+            &operand,
+            addr,
+            symbols,
+            table,
+            Location::from(1, 1),
+        )
     }
 
     #[test]
     fn encode_implied() {
         let t = table(CpuVariant::Cmos65C02);
-        let result = encode_source(Mnemonic::Nop, "", 0x0200, &no_symbols(), &t, false, false).unwrap();
+        let result =
+            encode_source(Mnemonic::Nop, "", 0x0200, &no_symbols(), &t, false, false).unwrap();
         assert_eq!(result.mode, AddressingMode::Implied);
         assert_eq!(result.bytes, Some(vec![0xEA]));
     }
@@ -581,7 +757,8 @@ mod tests {
     #[test]
     fn encode_accumulator_shorthand_with_no_operand() {
         let t = table(CpuVariant::Cmos65C02);
-        let result = encode_source(Mnemonic::Asl, "", 0x0200, &no_symbols(), &t, true, false).unwrap();
+        let result =
+            encode_source(Mnemonic::Asl, "", 0x0200, &no_symbols(), &t, true, false).unwrap();
         assert_eq!(result.mode, AddressingMode::Accumulator);
         assert_eq!(result.bytes, Some(vec![0x0A]));
     }
@@ -589,7 +766,8 @@ mod tests {
     #[test]
     fn encode_accumulator_explicit() {
         let t = table(CpuVariant::Cmos65C02);
-        let result = encode_source(Mnemonic::Asl, "A", 0x0200, &no_symbols(), &t, true, false).unwrap();
+        let result =
+            encode_source(Mnemonic::Asl, "A", 0x0200, &no_symbols(), &t, true, false).unwrap();
         assert_eq!(result.mode, AddressingMode::Accumulator);
         assert_eq!(result.bytes, Some(vec![0x0A]));
     }
@@ -597,7 +775,16 @@ mod tests {
     #[test]
     fn encode_immediate() {
         let t = table(CpuVariant::Cmos65C02);
-        let result = encode_source(Mnemonic::Lda, "#$42", 0x0200, &no_symbols(), &t, false, false).unwrap();
+        let result = encode_source(
+            Mnemonic::Lda,
+            "#$42",
+            0x0200,
+            &no_symbols(),
+            &t,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(result.mode, AddressingMode::Immediate);
         assert_eq!(result.bytes, Some(vec![0xA9, 0x42]));
     }
@@ -605,14 +792,31 @@ mod tests {
     #[test]
     fn encode_immediate_out_of_range_errors() {
         let t = table(CpuVariant::Cmos65C02);
-        let result = encode_source(Mnemonic::Lda, "#$1FF", 0x0200, &no_symbols(), &t, false, false);
+        let result = encode_source(
+            Mnemonic::Lda,
+            "#$1FF",
+            0x0200,
+            &no_symbols(),
+            &t,
+            false,
+            false,
+        );
         assert!(result.is_err());
     }
 
     #[test]
     fn encode_direct_picks_zero_page_when_value_fits() {
         let t = table(CpuVariant::Cmos65C02);
-        let result = encode_source(Mnemonic::Lda, "$50", 0x0200, &no_symbols(), &t, false, false).unwrap();
+        let result = encode_source(
+            Mnemonic::Lda,
+            "$50",
+            0x0200,
+            &no_symbols(),
+            &t,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(result.mode, AddressingMode::ZeroPage);
         assert_eq!(result.bytes, Some(vec![0xA5, 0x50]));
     }
@@ -620,7 +824,16 @@ mod tests {
     #[test]
     fn encode_direct_picks_absolute_when_value_does_not_fit() {
         let t = table(CpuVariant::Cmos65C02);
-        let result = encode_source(Mnemonic::Lda, "$1234", 0x0200, &no_symbols(), &t, false, false).unwrap();
+        let result = encode_source(
+            Mnemonic::Lda,
+            "$1234",
+            0x0200,
+            &no_symbols(),
+            &t,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(result.mode, AddressingMode::Absolute);
         assert_eq!(result.bytes, Some(vec![0xAD, 0x34, 0x12]));
     }
@@ -629,7 +842,16 @@ mod tests {
     fn encode_direct_picks_widest_mode_when_unresolved() {
         let t = table(CpuVariant::Cmos65C02);
         // "forward" is not in the symbol table yet.
-        let result = encode_source(Mnemonic::Lda, "forward", 0x0200, &no_symbols(), &t, false, false).unwrap();
+        let result = encode_source(
+            Mnemonic::Lda,
+            "forward",
+            0x0200,
+            &no_symbols(),
+            &t,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(result.mode, AddressingMode::Absolute);
         assert_eq!(result.byte_len, 3);
         assert_eq!(result.bytes, None);
@@ -640,7 +862,8 @@ mod tests {
         let t = table(CpuVariant::Cmos65C02);
         let mut symbols = no_symbols();
         symbols.insert("forward".to_string(), 0x50);
-        let result = encode_source(Mnemonic::Lda, "forward", 0x0200, &symbols, &t, false, false).unwrap();
+        let result =
+            encode_source(Mnemonic::Lda, "forward", 0x0200, &symbols, &t, false, false).unwrap();
         assert_eq!(result.mode, AddressingMode::ZeroPage);
         assert_eq!(result.bytes, Some(vec![0xA5, 0x50]));
     }
@@ -648,11 +871,29 @@ mod tests {
     #[test]
     fn encode_direct_x_and_y() {
         let t = table(CpuVariant::Cmos65C02);
-        let result = encode_source(Mnemonic::Lda, "$50,X", 0x0200, &no_symbols(), &t, false, false).unwrap();
+        let result = encode_source(
+            Mnemonic::Lda,
+            "$50,X",
+            0x0200,
+            &no_symbols(),
+            &t,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(result.mode, AddressingMode::ZeroPageX);
         assert_eq!(result.bytes, Some(vec![0xB5, 0x50]));
 
-        let result = encode_source(Mnemonic::Lda, "$1234,Y", 0x0200, &no_symbols(), &t, false, false).unwrap();
+        let result = encode_source(
+            Mnemonic::Lda,
+            "$1234,Y",
+            0x0200,
+            &no_symbols(),
+            &t,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(result.mode, AddressingMode::AbsoluteY);
         assert_eq!(result.bytes, Some(vec![0xB9, 0x34, 0x12]));
     }
@@ -660,7 +901,16 @@ mod tests {
     #[test]
     fn encode_indirect_x_zero_page() {
         let t = table(CpuVariant::Cmos65C02);
-        let result = encode_source(Mnemonic::Lda, "($20,X)", 0x0200, &no_symbols(), &t, false, false).unwrap();
+        let result = encode_source(
+            Mnemonic::Lda,
+            "($20,X)",
+            0x0200,
+            &no_symbols(),
+            &t,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(result.mode, AddressingMode::IndirectX);
         assert_eq!(result.bytes, Some(vec![0xA1, 0x20]));
     }
@@ -668,7 +918,16 @@ mod tests {
     #[test]
     fn encode_indirect_x_absolute_for_jmp() {
         let t = table(CpuVariant::Cmos65C02);
-        let result = encode_source(Mnemonic::Jmp, "($0300,X)", 0x0200, &no_symbols(), &t, false, false).unwrap();
+        let result = encode_source(
+            Mnemonic::Jmp,
+            "($0300,X)",
+            0x0200,
+            &no_symbols(),
+            &t,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(result.mode, AddressingMode::AbsoluteIndirectX);
         assert_eq!(result.bytes, Some(vec![0x7C, 0x00, 0x03]));
     }
@@ -676,7 +935,16 @@ mod tests {
     #[test]
     fn encode_indirect_y() {
         let t = table(CpuVariant::Cmos65C02);
-        let result = encode_source(Mnemonic::Lda, "($20),Y", 0x0200, &no_symbols(), &t, false, false).unwrap();
+        let result = encode_source(
+            Mnemonic::Lda,
+            "($20),Y",
+            0x0200,
+            &no_symbols(),
+            &t,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(result.mode, AddressingMode::IndirectY);
         assert_eq!(result.bytes, Some(vec![0xB1, 0x20]));
     }
@@ -684,7 +952,16 @@ mod tests {
     #[test]
     fn encode_zero_page_indirect() {
         let t = table(CpuVariant::Cmos65C02);
-        let result = encode_source(Mnemonic::Lda, "($20)", 0x0200, &no_symbols(), &t, false, false).unwrap();
+        let result = encode_source(
+            Mnemonic::Lda,
+            "($20)",
+            0x0200,
+            &no_symbols(),
+            &t,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(result.mode, AddressingMode::ZeroPageIndirect);
         assert_eq!(result.bytes, Some(vec![0xB2, 0x20]));
     }
@@ -692,7 +969,16 @@ mod tests {
     #[test]
     fn encode_indirect_absolute_for_jmp() {
         let t = table(CpuVariant::Cmos65C02);
-        let result = encode_source(Mnemonic::Jmp, "($0300)", 0x0200, &no_symbols(), &t, false, false).unwrap();
+        let result = encode_source(
+            Mnemonic::Jmp,
+            "($0300)",
+            0x0200,
+            &no_symbols(),
+            &t,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(result.mode, AddressingMode::Indirect);
         assert_eq!(result.bytes, Some(vec![0x6C, 0x00, 0x03]));
     }
@@ -703,7 +989,8 @@ mod tests {
         let mut symbols = no_symbols();
         symbols.insert("target".to_string(), 0x0206);
         // BEQ at 0x0200, 2-byte instruction => pc_after = 0x0202, displacement +4
-        let result = encode_source(Mnemonic::Beq, "target", 0x0200, &symbols, &t, false, false).unwrap();
+        let result =
+            encode_source(Mnemonic::Beq, "target", 0x0200, &symbols, &t, false, false).unwrap();
         assert_eq!(result.mode, AddressingMode::Relative);
         assert_eq!(result.bytes, Some(vec![0xF0, 0x04]));
     }
@@ -714,7 +1001,8 @@ mod tests {
         let mut symbols = no_symbols();
         symbols.insert("target".to_string(), 0x0200);
         // BRA at 0x0200, 2-byte instruction => pc_after = 0x0202, displacement -2
-        let result = encode_source(Mnemonic::Bra, "target", 0x0200, &symbols, &t, false, false).unwrap();
+        let result =
+            encode_source(Mnemonic::Bra, "target", 0x0200, &symbols, &t, false, false).unwrap();
         assert_eq!(result.mode, AddressingMode::Relative);
         assert_eq!(result.bytes, Some(vec![0x80, 0xFE]));
     }
@@ -731,7 +1019,16 @@ mod tests {
     #[test]
     fn encode_relative_unresolved_leaves_bytes_none() {
         let t = table(CpuVariant::Cmos65C02);
-        let result = encode_source(Mnemonic::Bra, "forward", 0x0200, &no_symbols(), &t, false, false).unwrap();
+        let result = encode_source(
+            Mnemonic::Bra,
+            "forward",
+            0x0200,
+            &no_symbols(),
+            &t,
+            false,
+            false,
+        )
+        .unwrap();
         assert_eq!(result.mode, AddressingMode::Relative);
         assert_eq!(result.byte_len, 2);
         assert_eq!(result.bytes, None);
@@ -744,7 +1041,8 @@ mod tests {
         symbols.insert("bar".to_string(), 0x50);
         symbols.insert("foo".to_string(), 0x207);
         // BBR0 at 0x0200, 3-byte instruction => pc_after = 0x0203, displacement +4
-        let result = encode_source(Mnemonic::Bbr0, "bar,foo", 0x0200, &symbols, &t, false, true).unwrap();
+        let result =
+            encode_source(Mnemonic::Bbr0, "bar,foo", 0x0200, &symbols, &t, false, true).unwrap();
         assert_eq!(result.mode, AddressingMode::ZeroPageRelative);
         assert_eq!(result.bytes, Some(vec![0x0F, 0x50, 0x04]));
     }
@@ -752,7 +1050,16 @@ mod tests {
     #[test]
     fn encode_zero_page_relative_unresolved_leaves_bytes_none() {
         let t = table(CpuVariant::Wdc65C02);
-        let result = encode_source(Mnemonic::Bbr0, "bar,foo", 0x0200, &no_symbols(), &t, false, true).unwrap();
+        let result = encode_source(
+            Mnemonic::Bbr0,
+            "bar,foo",
+            0x0200,
+            &no_symbols(),
+            &t,
+            false,
+            true,
+        )
+        .unwrap();
         assert_eq!(result.mode, AddressingMode::ZeroPageRelative);
         assert_eq!(result.byte_len, 3);
         assert_eq!(result.bytes, None);
@@ -762,7 +1069,14 @@ mod tests {
     fn encode_unsupported_mode_errors() {
         let t = table(CpuVariant::Cmos65C02);
         // LDA has no accumulator-mode opcode.
-        let result = encode(Mnemonic::Lda, &OperandSyntax::Accumulator, 0x0200, &no_symbols(), &t, Location::from(1, 1));
+        let result = encode(
+            Mnemonic::Lda,
+            &OperandSyntax::Accumulator,
+            0x0200,
+            &no_symbols(),
+            &t,
+            Location::from(1, 1),
+        );
         assert!(result.is_err());
     }
 

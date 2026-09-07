@@ -39,7 +39,9 @@ use std::thread;
 use crossbeam_channel::{Receiver, Sender, bounded};
 use rtrb::{Producer, RingBuffer};
 
-use super::{CHANNEL_CAPACITY, ChannelRelay, Transport, TransportError, TransportReporter, push_and_park};
+use super::{
+    CHANNEL_CAPACITY, ChannelRelay, Transport, TransportError, TransportReporter, push_and_park,
+};
 
 /// Bidirectional transport over a pair of OS pipes. See the module
 /// documentation for the asymmetry between `local` (relay-thread-backed) and
@@ -58,7 +60,10 @@ pub struct InternalPipeTransport {
 enum RxMode {
     /// No relay, no background thread — `rx` is owned directly and read
     /// on-demand, non-blocking.
-    Direct { rx: File, connected: Arc<AtomicBool> },
+    Direct {
+        rx: File,
+        connected: Arc<AtomicBool>,
+    },
     /// A background thread owns `rx` (moved into its closure) and drains it
     /// into the ring backing an externally-returned `ChannelRelay<u8>`.
     /// `try_recv` is a permanent no-op for this mode — real data only flows
@@ -120,8 +125,13 @@ impl InternalPipeTransport {
     pub fn into_split(self) -> (File, File) {
         match &self.rx_mode {
             RxMode::Direct { rx, .. } => {
-                let rx = rx.try_clone().expect("into_split: failed to duplicate rx fd");
-                let tx = self.tx.try_clone().expect("into_split: failed to duplicate tx fd");
+                let rx = rx
+                    .try_clone()
+                    .expect("into_split: failed to duplicate rx fd");
+                let tx = self
+                    .tx
+                    .try_clone()
+                    .expect("into_split: failed to duplicate tx fd");
                 (rx, tx)
             }
             RxMode::Relayed { .. } => panic!(
@@ -168,12 +178,18 @@ impl InternalPipeTransport {
         let local = Self {
             tx: b_tx,
             reporter: TransportReporter::pending(None),
-            rx_mode: RxMode::Direct { rx: a_rx, connected: Arc::new(AtomicBool::new(true)) },
+            rx_mode: RxMode::Direct {
+                rx: a_rx,
+                connected: Arc::new(AtomicBool::new(true)),
+            },
         };
         let remote = Self {
             tx: a_tx,
             reporter: TransportReporter::pending(None),
-            rx_mode: RxMode::Direct { rx: b_rx, connected: Arc::new(AtomicBool::new(true)) },
+            rx_mode: RxMode::Direct {
+                rx: b_rx,
+                connected: Arc::new(AtomicBool::new(true)),
+            },
         };
         Ok((local, remote))
     }
@@ -196,7 +212,10 @@ impl InternalPipeTransport {
         let remote = Self {
             tx: a_tx,
             reporter: TransportReporter::pending(None),
-            rx_mode: RxMode::Direct { rx: b_rx, connected: Arc::new(AtomicBool::new(true)) },
+            rx_mode: RxMode::Direct {
+                rx: b_rx,
+                connected: Arc::new(AtomicBool::new(true)),
+            },
         };
 
         Ok(((local, relay), remote))
@@ -219,7 +238,14 @@ impl InternalPipeTransport {
         let thread_connected = Arc::clone(&connected);
         let thread_reporter = reporter.clone();
         let handle = thread::spawn(move || {
-            run_relay_thread(rx, producer, stop_rx, interrupt_r, thread_connected, thread_reporter);
+            run_relay_thread(
+                rx,
+                producer,
+                stop_rx,
+                interrupt_r,
+                thread_connected,
+                thread_reporter,
+            );
         });
         let relay = ChannelRelay::from_parts(consumer, handle);
 
@@ -280,7 +306,8 @@ impl InternalPipeTransport {
             RxMode::Relayed { .. } => None,
         };
         if newly_disconnected {
-            self.reporter.report_disconnected(None, "connection closed".to_string());
+            self.reporter
+                .report_disconnected(None, "connection closed".to_string());
         }
         result
     }
@@ -323,9 +350,15 @@ impl Transport for InternalPipeTransport {
 
     fn shutdown(&mut self) {
         if self.connected_flag().swap(false, Ordering::Release) {
-            self.reporter.report_disconnected(None, "shutdown".to_string());
+            self.reporter
+                .report_disconnected(None, "shutdown".to_string());
         }
-        if let RxMode::Relayed { stop_tx, interrupt_w, .. } = &mut self.rx_mode {
+        if let RxMode::Relayed {
+            stop_tx,
+            interrupt_w,
+            ..
+        } = &mut self.rx_mode
+        {
             if let Some(tx) = stop_tx.take() {
                 let _ = tx.send(());
             }
@@ -375,8 +408,16 @@ fn run_relay_thread(
 
     let reason = 'relay: loop {
         let mut fds = [
-            libc::pollfd { fd: rx_fd, events: libc::POLLIN, revents: 0 },
-            libc::pollfd { fd: interrupt_fd, events: libc::POLLIN, revents: 0 },
+            libc::pollfd {
+                fd: rx_fd,
+                events: libc::POLLIN,
+                revents: 0,
+            },
+            libc::pollfd {
+                fd: interrupt_fd,
+                events: libc::POLLIN,
+                revents: 0,
+            },
         ];
         let rc = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, -1) };
         if rc < 0 {
@@ -450,7 +491,10 @@ mod tests {
     use crate::emulator::{DeviceEvent, device_event_channel};
     use std::time::Duration;
 
-    fn pair() -> ((InternalPipeTransport, ChannelRelay<u8>), InternalPipeTransport) {
+    fn pair() -> (
+        (InternalPipeTransport, ChannelRelay<u8>),
+        InternalPipeTransport,
+    ) {
         InternalPipeTransport::pair(TransportReporter::pending(None)).unwrap()
     }
 
@@ -568,7 +612,10 @@ mod tests {
         let reporter = TransportReporter::pending(Some(sender));
         reporter.bind("test-device-99");
         let ((mut local, relay), _remote) = InternalPipeTransport::pair(reporter.clone()).unwrap();
-        assert!(matches!(receiver.try_recv(), Ok(DeviceEvent::TransportConnected { .. })));
+        assert!(matches!(
+            receiver.try_recv(),
+            Ok(DeviceEvent::TransportConnected { .. })
+        ));
 
         // Force the OS pipe buffer (default 64KiB on Linux) full without
         // ever draining it from the remote side, so send() observes

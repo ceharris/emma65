@@ -35,11 +35,18 @@ pub struct BreakpointInfo {
 }
 
 /// Converts the debugger's breakpoint records into the list returned to the frontend.
-fn breakpoint_list(bps: &BTreeMap<u16, bool>, symbols: Option<&SymbolTable>) -> Vec<BreakpointInfo> {
+fn breakpoint_list(
+    bps: &BTreeMap<u16, bool>,
+    symbols: Option<&SymbolTable>,
+) -> Vec<BreakpointInfo> {
     bps.iter()
         .map(|(&addr, &enabled)| {
             let label = symbols.and_then(|s| s.names_for(addr).next().map(String::from));
-            BreakpointInfo { addr, enabled, label }
+            BreakpointInfo {
+                addr,
+                enabled,
+                label,
+            }
         })
         .collect()
 }
@@ -59,7 +66,9 @@ pub fn load_breakpoints_from(dir: &Path) -> BTreeMap<u16, bool> {
     let Ok(contents) = std::fs::read_to_string(&path) else {
         return BTreeMap::new();
     };
-    serde_json::from_str::<Vec<(u16, bool)>>(&contents).map(|pairs| pairs.into_iter().collect()).unwrap_or_default()
+    serde_json::from_str::<Vec<(u16, bool)>>(&contents)
+        .map(|pairs| pairs.into_iter().collect())
+        .unwrap_or_default()
 }
 
 /// Serializes `breakpoints` to `dir/breakpoints.json` as a JSON array of
@@ -67,7 +76,10 @@ pub fn load_breakpoints_from(dir: &Path) -> BTreeMap<u16, bool> {
 fn save_breakpoints_to(dir: &Path, breakpoints: &BTreeMap<u16, bool>) -> Result<(), String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("Failed to create config directory: {e}"))?;
     let path = dir.join("breakpoints.json");
-    let pairs: Vec<(u16, bool)> = breakpoints.iter().map(|(&addr, &enabled)| (addr, enabled)).collect();
+    let pairs: Vec<(u16, bool)> = breakpoints
+        .iter()
+        .map(|(&addr, &enabled)| (addr, enabled))
+        .collect();
     let contents = serde_json::to_string_pretty(&pairs).map_err(|e| e.to_string())?;
     std::fs::write(&path, contents).map_err(|e| format!("{}: {e}", path.display()))
 }
@@ -89,7 +101,11 @@ pub fn install_breakpoints(cpu: &mut Cpu, breakpoints: &BTreeMap<u16, bool>) {
 /// Used at session load (startup, New/Open Profile, Open Recent) instead of a
 /// dedicated "profile changed" event, since the Breakpoints panel and the
 /// Disassembly gutter already resync from this broadcast.
-pub fn emit_loaded_breakpoints(app: &AppHandle, breakpoints: &BTreeMap<u16, bool>, symbol_table: &SymbolTable) {
+pub fn emit_loaded_breakpoints(
+    app: &AppHandle,
+    breakpoints: &BTreeMap<u16, bool>,
+    symbol_table: &SymbolTable,
+) {
     let list = breakpoint_list(breakpoints, Some(symbol_table));
     emit_breakpoints_changed(app, &list);
 }
@@ -214,7 +230,10 @@ pub fn enable_breakpoint(
 
 /// Returns the debugger's tracked breakpoint list (including disabled ones), sorted ascending.
 #[tauri::command]
-pub fn get_breakpoints(cpu_state: State<CpuState>, breakpoint_state: State<BreakpointState>) -> Vec<BreakpointInfo> {
+pub fn get_breakpoints(
+    cpu_state: State<CpuState>,
+    breakpoint_state: State<BreakpointState>,
+) -> Vec<BreakpointInfo> {
     let cpu_guard = cpu_state.0.lock().unwrap();
     let symbols = cpu_guard.as_ref().map(|cpu| cpu.bus().symbol_table());
     breakpoint_list(&breakpoint_state.0.lock().unwrap(), symbols)
@@ -226,7 +245,10 @@ mod tests {
 
     /// Returns a fresh, uniquely-named temp directory for one test's config files.
     fn temp_dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("emma65-breakpoints-test-{name}-{:?}", std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!(
+            "emma65-breakpoints-test-{name}-{:?}",
+            std::thread::current().id()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -275,7 +297,10 @@ mod tests {
             .build();
         bus.write(0xFFFC, 0x00).unwrap();
         bus.write(0xFFFD, 0x02).unwrap();
-        let mut cpu = Cpu::builder(emma65::emulator::CpuVariant::Wdc65C02).bus(bus).build().unwrap();
+        let mut cpu = Cpu::builder(emma65::emulator::CpuVariant::Wdc65C02)
+            .bus(bus)
+            .build()
+            .unwrap();
         cpu.reset().unwrap();
 
         let mut bps = BTreeMap::new();

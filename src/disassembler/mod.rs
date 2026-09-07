@@ -32,7 +32,6 @@ pub struct Disassembler {
 }
 
 impl Disassembler {
-
     const ASCII_CTRL_MNEMONICS: &str = "NULSOHSTXETXEOTENQACKBELBS HT LF VT FF CR SO SI \
                                         DLEDC1DC2DC3DC4NAKSYNETBCANEM SUBESCFS GS RS US ";
 
@@ -47,8 +46,12 @@ impl Disassembler {
     /// `SPC`, or `DEL`) or, for non-ASCII bytes, the signed interpretation.
     pub fn immediate_mode_comment(operand: u8) -> String {
         if operand < 0x20 {
-            format!("; {} ^{} ({})", operand, (operand + b'@') as char,
-                    Self::ascii_ctrl_mnemonic(operand).trim())
+            format!(
+                "; {} ^{} ({})",
+                operand,
+                (operand + b'@') as char,
+                Self::ascii_ctrl_mnemonic(operand).trim()
+            )
         } else if operand == 0x20 {
             "; 32 ' ' (SPC)".to_string()
         } else if operand < 0x7F {
@@ -62,7 +65,9 @@ impl Disassembler {
 
     /// Creates a disassembler for the given CPU variant.
     pub fn new(variant: CpuVariant) -> Self {
-        Self { table: decode_table(variant) }
+        Self {
+            table: decode_table(variant),
+        }
     }
 
     /// Returns the decode table entry for `opcode`.
@@ -83,7 +88,12 @@ impl Disassembler {
 
     /// Builds a `DisassembledLine` from already-collected instruction bytes.
     /// Pure: no bus access, only the opcode table and `symbol_table`.
-    pub(crate) fn build_line(&self, addr: u16, raw_bytes: Vec<u8>, symbol_table: &SymbolTable) -> DisassembledLine {
+    pub(crate) fn build_line(
+        &self,
+        addr: u16,
+        raw_bytes: Vec<u8>,
+        symbol_table: &SymbolTable,
+    ) -> DisassembledLine {
         let decoded = self.table[raw_bytes[0] as usize];
         let names: Vec<&str> = symbol_table.names_for(addr).collect();
         let labels: Vec<String> = names.iter().map(|&s| s.to_string()).collect();
@@ -138,7 +148,12 @@ impl Disassembler {
     }
 }
 
-fn format_operand(decoded: &DecodedOp, raw: &[u8], addr: u16, symbol_table: &SymbolTable) -> String {
+fn format_operand(
+    decoded: &DecodedOp,
+    raw: &[u8],
+    addr: u16,
+    symbol_table: &SymbolTable,
+) -> String {
     let b1 = raw.get(1).copied().unwrap_or(0);
     let b2 = raw.get(2).copied().unwrap_or(0);
 
@@ -150,33 +165,32 @@ fn format_operand(decoded: &DecodedOp, raw: &[u8], addr: u16, symbol_table: &Sym
     let abs = absolute_address(b1, b2, pc_after, decoded.mode);
 
     match decoded.mode {
-        AddressingMode::Implied =>
-            String::new(),
-        AddressingMode::Accumulator =>
-            "A".to_string(),
-        AddressingMode::Immediate =>
-            format!("#${b1:02X}"),
-        AddressingMode::ZeroPage |
-        AddressingMode::Absolute |
-        AddressingMode::Relative =>
-            format_address(abs, decoded.mode, symbol_table),
-        AddressingMode::ZeroPageX |
-        AddressingMode::AbsoluteX =>
-            format!("{},X", format_address(abs, decoded.mode, symbol_table)),
-        AddressingMode::ZeroPageY |
-        AddressingMode::AbsoluteY =>
-            format!("{},Y", format_address(abs, decoded.mode, symbol_table)),
-        AddressingMode::Indirect |
-        AddressingMode::ZeroPageIndirect =>
-            format!("({})", format_address(abs, decoded.mode, symbol_table)),
-        AddressingMode::IndirectX |
-        AddressingMode::AbsoluteIndirectX =>
-            format!("({},X)", format_address(abs, decoded.mode, symbol_table)),
-        AddressingMode::IndirectY =>
-            format!("({}),Y", format_address(abs, decoded.mode, symbol_table)),
-        AddressingMode::ZeroPageRelative =>
-            format!("{},{}", format_address(b1 as u16, AddressingMode::ZeroPage, symbol_table),
-                    format_address(abs, decoded.mode, symbol_table)),
+        AddressingMode::Implied => String::new(),
+        AddressingMode::Accumulator => "A".to_string(),
+        AddressingMode::Immediate => format!("#${b1:02X}"),
+        AddressingMode::ZeroPage | AddressingMode::Absolute | AddressingMode::Relative => {
+            format_address(abs, decoded.mode, symbol_table)
+        }
+        AddressingMode::ZeroPageX | AddressingMode::AbsoluteX => {
+            format!("{},X", format_address(abs, decoded.mode, symbol_table))
+        }
+        AddressingMode::ZeroPageY | AddressingMode::AbsoluteY => {
+            format!("{},Y", format_address(abs, decoded.mode, symbol_table))
+        }
+        AddressingMode::Indirect | AddressingMode::ZeroPageIndirect => {
+            format!("({})", format_address(abs, decoded.mode, symbol_table))
+        }
+        AddressingMode::IndirectX | AddressingMode::AbsoluteIndirectX => {
+            format!("({},X)", format_address(abs, decoded.mode, symbol_table))
+        }
+        AddressingMode::IndirectY => {
+            format!("({}),Y", format_address(abs, decoded.mode, symbol_table))
+        }
+        AddressingMode::ZeroPageRelative => format!(
+            "{},{}",
+            format_address(b1 as u16, AddressingMode::ZeroPage, symbol_table),
+            format_address(abs, decoded.mode, symbol_table)
+        ),
     }
 }
 
@@ -186,19 +200,19 @@ fn format_address(address: u16, mode: AddressingMode, symbol_table: &SymbolTable
         names[0].to_string()
     } else {
         match mode {
-            AddressingMode::ZeroPage |
-            AddressingMode::ZeroPageX |
-            AddressingMode::ZeroPageY |
-            AddressingMode::IndirectX |
-            AddressingMode::IndirectY |
-            AddressingMode::ZeroPageIndirect => format!("${address:02X}"),
-            AddressingMode::Absolute |
-            AddressingMode::AbsoluteX |
-            AddressingMode::AbsoluteY |
-            AddressingMode::Indirect |
-            AddressingMode::Relative |
-            AddressingMode::ZeroPageRelative |
-            AddressingMode::AbsoluteIndirectX => format!("${address:04X}"),
+            AddressingMode::ZeroPage
+            | AddressingMode::ZeroPageX
+            | AddressingMode::ZeroPageY
+            | AddressingMode::IndirectX
+            | AddressingMode::IndirectY
+            | AddressingMode::ZeroPageIndirect => format!("${address:02X}"),
+            AddressingMode::Absolute
+            | AddressingMode::AbsoluteX
+            | AddressingMode::AbsoluteY
+            | AddressingMode::Indirect
+            | AddressingMode::Relative
+            | AddressingMode::ZeroPageRelative
+            | AddressingMode::AbsoluteIndirectX => format!("${address:04X}"),
             _ => panic!("no address format for mode {:?}", mode),
         }
     }
@@ -213,7 +227,6 @@ fn absolute_address(b1: u8, b2: u8, pc_after: u16, mode: AddressingMode) -> u16 
         u16::from_le_bytes([b1, b2])
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -277,7 +290,7 @@ mod tests {
     fn immediate_mode_comment_ascii_space() {
         assert_eq!(Disassembler::immediate_mode_comment(0x20), "; 32 ' ' (SPC)");
     }
-        #[test]
+    #[test]
     fn immediate_mode_comment_ascii_printable() {
         assert_eq!(Disassembler::immediate_mode_comment(0x40), "; 64 '@'");
         assert_eq!(Disassembler::immediate_mode_comment(0x41), "; 65 'A'");
@@ -381,7 +394,6 @@ mod tests {
         let line = disasm(CpuVariant::Cmos65C02).disassemble_one(&bus, 0x0200);
         assert_eq!(line.operand_text, "foo,X");
     }
-
 
     #[test]
     fn lda_absolute_y() {
@@ -574,8 +586,7 @@ mod tests {
         let mut bus = make_bus(0x0200, &[0xEA]);
         bus.symbol_table_mut().insert("foo".to_string(), 0x200);
         bus.symbol_table_mut().insert("bar".to_string(), 0x200);
-        let line = disasm(CpuVariant::Cmos65C02)
-            .disassemble_one(&bus, 0x0200);
+        let line = disasm(CpuVariant::Cmos65C02).disassemble_one(&bus, 0x0200);
         assert_eq!(line.addr, 0x0200);
         assert!(line.labels.contains(&"foo".to_string()));
         assert!(line.labels.contains(&"bar".to_string()));
@@ -588,8 +599,7 @@ mod tests {
     fn disassemble_range_two_instructions() {
         // NOP (1 byte), LDA #$42 (2 bytes)
         let bus = make_bus(0x0200, &[0xEA, 0xA9, 0x42]);
-        let lines = disasm(CpuVariant::Cmos65C02)
-            .disassemble_range(&bus, 0x0200, 0x0203, 10);
+        let lines = disasm(CpuVariant::Cmos65C02).disassemble_range(&bus, 0x0200, 0x0203, 10);
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0].addr, 0x0200);
         assert!(matches!(lines[0].mnemonic, Mnemonic::Nop));
@@ -600,16 +610,14 @@ mod tests {
     #[test]
     fn disassemble_range_respects_max() {
         let bus = make_bus(0x0200, &[0xEA; 10]); // 10 NOPs
-        let lines = disasm(CpuVariant::Cmos65C02)
-            .disassemble_range(&bus, 0x0200, 0x020A, 3);
+        let lines = disasm(CpuVariant::Cmos65C02).disassemble_range(&bus, 0x0200, 0x020A, 3);
         assert_eq!(lines.len(), 3);
     }
 
     #[test]
     fn disassemble_range_stops_at_end() {
         let bus = make_bus(0x0200, &[0xEA; 10]);
-        let lines = disasm(CpuVariant::Cmos65C02)
-            .disassemble_range(&bus, 0x0200, 0x0203, 100);
+        let lines = disasm(CpuVariant::Cmos65C02).disassemble_range(&bus, 0x0200, 0x0203, 100);
         assert_eq!(lines.len(), 3);
     }
 
@@ -618,11 +626,9 @@ mod tests {
         // Bus with a device that would increment a counter on read — we use RAM here
         // and verify the bus state is unchanged after disassembly.
         let bus = make_bus(0x0200, &[0xEA, 0xEA]);
-        let lines = disasm(CpuVariant::Cmos65C02)
-            .disassemble_range(&bus, 0x0200, 0x0202, 10);
+        let lines = disasm(CpuVariant::Cmos65C02).disassemble_range(&bus, 0x0200, 0x0202, 10);
         assert_eq!(lines.len(), 2);
         // If peek had side effects we'd see corruption; absence of panic is sufficient here.
         // A mock device test in bus/mod.rs already verifies peek is side-effect-free.
     }
-
 }

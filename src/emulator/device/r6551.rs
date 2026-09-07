@@ -170,10 +170,18 @@ impl R6551 {
 
     fn status(&self) -> u8 {
         let mut s = 0u8;
-        if self.irq_active() { s |= 0x80; }
-        if self.tdre { s |= 0x10; }
-        if self.rdrf { s |= 0x08; }
-        if self.overrun { s |= 0x04; }
+        if self.irq_active() {
+            s |= 0x80;
+        }
+        if self.tdre {
+            s |= 0x10;
+        }
+        if self.rdrf {
+            s |= 0x08;
+        }
+        if self.overrun {
+            s |= 0x04;
+        }
         s
     }
 
@@ -235,7 +243,6 @@ impl R6551 {
 }
 
 impl IoDevice for R6551 {
-
     fn read(&mut self, address: u16) -> u8 {
         match address - self.address {
             0 => {
@@ -335,7 +342,13 @@ impl IoDevice for R6551 {
         self.tdre_bug_compatible = tdre_bug_compatible;
         self.overrun_enabled = overrun_enabled;
         self.log_sender = log_sender;
-        log_msg!(self.log_sender, LogLevel::Info, LogCategory::Device, "{} reset", self.identity());
+        log_msg!(
+            self.log_sender,
+            LogLevel::Info,
+            LogCategory::Device,
+            "{} reset",
+            self.identity()
+        );
     }
 
     fn irq_active(&self) -> bool {
@@ -442,7 +455,7 @@ mod tests {
     #[test]
     fn rx_byte_deferred_when_dtr_not_asserted() {
         let (mut device, _remote, tx) = device_with_pipe();
-        device.write(2, 0x0);   // deassert DTR
+        device.write(2, 0x0); // deassert DTR
         tx.send(0xBB).unwrap();
         std::thread::sleep(Duration::from_millis(5));
         device.tick(1); // external clock: poll every tick
@@ -453,7 +466,7 @@ mod tests {
     #[test]
     fn rx_byte_sets_rdrf() {
         let (mut device, _remote, tx) = device_with_pipe();
-        device.write(2, 0x1);   // assert DTR
+        device.write(2, 0x1); // assert DTR
         tx.send(0xBB).unwrap();
         std::thread::sleep(Duration::from_millis(5));
         device.tick(1); // external clock: poll every tick
@@ -463,7 +476,7 @@ mod tests {
     #[test]
     fn rx_read_data_returns_byte_and_clears_rdrf() {
         let (mut device, _remote, tx) = device_with_pipe();
-        device.write(2, 0x1);   // assert DTR
+        device.write(2, 0x1); // assert DTR
         tx.send(0x55).unwrap();
         std::thread::sleep(Duration::from_millis(5));
         device.tick(1);
@@ -474,7 +487,7 @@ mod tests {
     #[test]
     fn second_byte_held_in_transport_until_first_read() {
         let (mut device, _remote, tx) = device_with_pipe();
-        device.write(2, 0x1);   // assert DTR
+        device.write(2, 0x1); // assert DTR
         tx.send(0x01).unwrap();
         tx.send(0x02).unwrap();
         std::thread::sleep(Duration::from_millis(5));
@@ -491,12 +504,10 @@ mod tests {
     fn overrun_set_in_internal_clock_mode_with_overrun_enabled() {
         let (local, _remote) = InternalPipeTransport::pair_direct().unwrap();
         let (tx, relay) = spawn_byte_relay(256);
-        let mut device = device()
-            .with_clock_hz(1_000_000)
-            .with_overrun(true);
+        let mut device = device().with_clock_hz(1_000_000).with_overrun(true);
         device.attach_transport(Box::new(local), TransportRelay::Byte(relay));
         // 19200 baud internal clock: cycles_per_byte = 1_000_000 * 10 / 19200 = 520
-        device.write(2, 0x1);   // assert DTR
+        device.write(2, 0x1); // assert DTR
         device.write(3, 0x1F);
         tx.send(0x01).unwrap();
         tx.send(0x02).unwrap();
@@ -511,10 +522,9 @@ mod tests {
     fn no_overrun_in_external_clock_mode_even_with_flag() {
         let (local, _remote) = InternalPipeTransport::pair_direct().unwrap();
         let (tx, relay) = spawn_byte_relay(256);
-        let mut device = device()
-            .with_overrun(true);
+        let mut device = device().with_overrun(true);
         device.attach_transport(Box::new(local), TransportRelay::Byte(relay));
-        device.write(2, 0x1);   // assert DTR
+        device.write(2, 0x1); // assert DTR
         // Control defaults to 0x00 → external clock (cycles_per_byte = 0)
         tx.send(0x01).unwrap();
         tx.send(0x02).unwrap();
@@ -532,7 +542,7 @@ mod tests {
     #[test]
     fn baud_rate_setting_controls_poll_timing() {
         let (mut device, _remote, tx) = device_with_pipe();
-        device.write(2, 0x1);  // assert DTR
+        device.write(2, 0x1); // assert DTR
         device.write(3, 0x1F); // 19200 baud, internal receiver clock
         tx.send(0x42).unwrap();
         std::thread::sleep(Duration::from_millis(5));
@@ -638,7 +648,7 @@ mod tests {
     #[test]
     fn peek_does_not_clear_rdrf() {
         let (mut device, _remote, tx) = device_with_pipe();
-        device.write(2, 0x1);   // assert DTR
+        device.write(2, 0x1); // assert DTR
         tx.send(0xCC).unwrap();
         std::thread::sleep(Duration::from_millis(5));
         device.tick(1);
@@ -649,7 +659,7 @@ mod tests {
     #[test]
     fn peek_returns_rx_data_without_consuming() {
         let (mut device, _remote, tx) = device_with_pipe();
-        device.write(2, 0x1);   // assert DTR
+        device.write(2, 0x1); // assert DTR
         tx.send(0x77).unwrap();
         std::thread::sleep(Duration::from_millis(5));
         device.tick(1);
@@ -665,8 +675,14 @@ mod tests {
         device.rdrf = true;
         device.tdre = true;
         device.reset();
-        assert_eq!(device.command, 0, "command register must be zero after reset");
-        assert_eq!(device.control, 0, "command register must be zero after reset");
+        assert_eq!(
+            device.command, 0,
+            "command register must be zero after reset"
+        );
+        assert_eq!(
+            device.control, 0,
+            "command register must be zero after reset"
+        );
         assert!(device.tdre, "TRDE must be set after reset");
         assert!(!device.rdrf, "RDRF must be clear after reset");
     }
@@ -689,9 +705,18 @@ mod tests {
             .with_tdre_bug(true)
             .with_overrun(true);
         device.reset();
-        assert_eq!(device.clock_hz, 1_843_200, "clock_hz must be preserved after reset");
-        assert!(device.tdre_bug_compatible, "tdre_bug_compatible must be preserved after reset");
-        assert!(device.overrun_enabled, "overrun_enabled must be preserved after reset");
+        assert_eq!(
+            device.clock_hz, 1_843_200,
+            "clock_hz must be preserved after reset"
+        );
+        assert!(
+            device.tdre_bug_compatible,
+            "tdre_bug_compatible must be preserved after reset"
+        );
+        assert!(
+            device.overrun_enabled,
+            "overrun_enabled must be preserved after reset"
+        );
     }
 
     #[test]
@@ -704,5 +729,4 @@ mod tests {
         assert_eq!(received.category, LogCategory::Device);
         assert_eq!(received.message, format!("{DEVICE_NAME}@0xc000 reset"));
     }
-
 }

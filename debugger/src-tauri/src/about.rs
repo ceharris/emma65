@@ -20,7 +20,10 @@ pub struct AboutInfo {
 /// fixed text owned by the frontend component itself.
 #[tauri::command]
 pub fn get_about_info() -> AboutInfo {
-    AboutInfo { repo_url: menu::GITHUB_REPO_URL.to_string(), build_info: build_info() }
+    AboutInfo {
+        repo_url: menu::GITHUB_REPO_URL.to_string(),
+        build_info: build_info(),
+    }
 }
 
 #[cfg(debug_assertions)]
@@ -30,7 +33,11 @@ fn build_info() -> Option<String> {
 
 #[cfg(not(debug_assertions))]
 fn build_info() -> Option<String> {
-    Some(format!("Build {} ({})", env!("EMMA65_BUILD_GIT_HASH"), env!("EMMA65_BUILD_DATE")))
+    Some(format!(
+        "Build {} ({})",
+        env!("EMMA65_BUILD_GIT_HASH"),
+        env!("EMMA65_BUILD_DATE")
+    ))
 }
 
 /// Emits the event that opens the About dialog, mirroring

@@ -55,7 +55,10 @@ pub(super) fn resolve_palette_index(index: u8, palette_len: usize) -> usize {
 
 /// Resolves a color-RAM byte to a palette entry using [`resolve_palette_index`].
 fn resolve_color(index: u8, palette: &[Rgb24]) -> Rgb24 {
-    debug_assert!(!palette.is_empty(), "palette must be non-empty (spec §3 validates this at configuration time)");
+    debug_assert!(
+        !palette.is_empty(),
+        "palette must be non-empty (spec §3 validates this at configuration time)"
+    );
     palette[resolve_palette_index(index, palette.len())]
 }
 
@@ -70,12 +73,27 @@ fn resolve_color(index: u8, palette: &[Rgb24]) -> Rgb24 {
 ///
 /// `char_ram` and `color_ram` must each have exactly `columns * rows` entries, matching the
 /// invariant `CharDisplay` already upholds internally.
-pub fn composite(char_ram: &[u8], color_ram: &[u8], columns: u32, rows: u32, palette: &[Rgb24], font: &Font) -> Vec<u8> {
+pub fn composite(
+    char_ram: &[u8],
+    color_ram: &[u8],
+    columns: u32,
+    rows: u32,
+    palette: &[Rgb24],
+    font: &Font,
+) -> Vec<u8> {
     let columns = columns as usize;
     let rows = rows as usize;
     let cells = columns * rows;
-    debug_assert_eq!(char_ram.len(), cells, "char_ram length must equal columns * rows");
-    debug_assert_eq!(color_ram.len(), cells, "color_ram length must equal columns * rows");
+    debug_assert_eq!(
+        char_ram.len(),
+        cells,
+        "char_ram length must equal columns * rows"
+    );
+    debug_assert_eq!(
+        color_ram.len(),
+        cells,
+        "color_ram length must equal columns * rows"
+    );
 
     let width_px = columns * 8;
     let height_px = rows * 8;
@@ -148,7 +166,11 @@ mod tests {
     #[test]
     fn palette_index_wraps_via_modulo() {
         let font = one_cell_font(&[(0, 0)]);
-        let palette = [Rgb24::new(10, 20, 30), Rgb24::new(40, 50, 60), Rgb24::new(70, 80, 90)];
+        let palette = [
+            Rgb24::new(10, 20, 30),
+            Rgb24::new(40, 50, 60),
+            Rgb24::new(70, 80, 90),
+        ];
         let char_ram = [0x01];
         // 5 % 3 == 2 -> third palette entry.
         let color_ram = [5u8];
@@ -172,7 +194,10 @@ mod tests {
         assert_eq!(&pixels[0..4], &[0, 0, 0, 255]);
         // Cell 1's top-left pixel (pixel_x = 8, pixel_y = 0): light gray.
         let cell1_offset = 8 * 4;
-        assert_eq!(&pixels[cell1_offset..cell1_offset + 4], &[200, 200, 200, 255]);
+        assert_eq!(
+            &pixels[cell1_offset..cell1_offset + 4],
+            &[200, 200, 200, 255]
+        );
     }
 
     #[test]

@@ -25,7 +25,10 @@ use std::path::{Path, PathBuf};
 
 use tokio::net::UnixListener;
 
-use super::{CHANNEL_CAPACITY, ChannelRelay, ClientListener, ListenerCore, Transport, TransportEvent, TransportReporter};
+use super::{
+    CHANNEL_CAPACITY, ChannelRelay, ClientListener, ListenerCore, Transport, TransportEvent,
+    TransportReporter,
+};
 
 /// Transport that listens for incoming Unix-domain socket connections.
 pub struct UnixSocketTransport {
@@ -39,7 +42,10 @@ impl UnixSocketTransport {
     /// Binds a Unix-domain socket at `path` and starts listening for
     /// connections, using the crate's default channel/ring capacity for
     /// both the inbound relay and the outbound ring.
-    pub async fn listen(path: impl Into<PathBuf>, reporter: TransportReporter) -> std::io::Result<(Self, ChannelRelay<TransportEvent>)> {
+    pub async fn listen(
+        path: impl Into<PathBuf>,
+        reporter: TransportReporter,
+    ) -> std::io::Result<(Self, ChannelRelay<TransportEvent>)> {
         Self::listen_with_capacity(path, reporter, CHANNEL_CAPACITY).await
     }
 
@@ -128,12 +134,20 @@ mod tests {
     }
 
     fn only_data(events: Vec<TransportEvent>) -> Vec<(u8, u8)> {
-        events.into_iter().filter_map(|e| match e { TransportEvent::Data(tag, byte) => Some((tag, byte)), _ => None }).collect()
+        events
+            .into_iter()
+            .filter_map(|e| match e {
+                TransportEvent::Data(tag, byte) => Some((tag, byte)),
+                _ => None,
+            })
+            .collect()
     }
 
     async fn make_transport(name: &str) -> (UnixSocketTransport, ChannelRelay<TransportEvent>) {
         let path = tmp_socket_path(name);
-        UnixSocketTransport::listen(path, TransportReporter::pending(None)).await.unwrap()
+        UnixSocketTransport::listen(path, TransportReporter::pending(None))
+            .await
+            .unwrap()
     }
 
     #[tokio::test]
@@ -171,7 +185,13 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         let mut got = Vec::new();
         relay.drain_into(|event| got.push(event));
-        assert_eq!(only_data(got).into_iter().map(|(_, b)| b).collect::<Vec<_>>(), vec![0x01]);
+        assert_eq!(
+            only_data(got)
+                .into_iter()
+                .map(|(_, b)| b)
+                .collect::<Vec<_>>(),
+            vec![0x01]
+        );
         drop(c1);
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 
@@ -181,7 +201,13 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         let mut got2 = Vec::new();
         relay.drain_into(|event| got2.push(event));
-        assert_eq!(only_data(got2).into_iter().map(|(_, b)| b).collect::<Vec<_>>(), vec![0x02]);
+        assert_eq!(
+            only_data(got2)
+                .into_iter()
+                .map(|(_, b)| b)
+                .collect::<Vec<_>>(),
+            vec![0x02]
+        );
 
         close(transport, relay);
         let _ = std::fs::remove_file(&path);
@@ -204,7 +230,12 @@ mod tests {
         let (sender, mut receiver) = device_event_channel();
         let reporter = TransportReporter::pending(Some(sender));
         reporter.bind("test-device-101");
-        let (mut transport, relay) = UnixSocketTransport::listen(tmp_socket_path("unix_no_client_no_drop"), reporter.clone()).await.unwrap();
+        let (mut transport, relay) = UnixSocketTransport::listen(
+            tmp_socket_path("unix_no_client_no_drop"),
+            reporter.clone(),
+        )
+        .await
+        .unwrap();
         let path = transport.path().to_path_buf();
 
         assert!(!transport.is_connected());
@@ -213,7 +244,10 @@ mod tests {
         }
 
         reporter.report_counts();
-        assert!(receiver.try_recv().is_err(), "sending with no client connected must not count as an outbound drop");
+        assert!(
+            receiver.try_recv().is_err(),
+            "sending with no client connected must not count as an outbound drop"
+        );
 
         close(transport, relay);
         let _ = std::fs::remove_file(&path);
@@ -271,12 +305,20 @@ mod tests {
         let mut events = Vec::new();
         relay.drain_into(|event| events.push(event));
 
-        let connected_tags: Vec<u8> = events.iter()
-            .filter_map(|e| match e { TransportEvent::Connected(tag) => Some(*tag), _ => None })
+        let connected_tags: Vec<u8> = events
+            .iter()
+            .filter_map(|e| match e {
+                TransportEvent::Connected(tag) => Some(*tag),
+                _ => None,
+            })
             .collect();
         let data = only_data(events.clone());
 
-        assert_eq!(connected_tags.len(), 2, "expected a Connected event for each client");
+        assert_eq!(
+            connected_tags.len(),
+            2,
+            "expected a Connected event for each client"
+        );
         // Different clients must be tagged with different connection IDs.
         assert_ne!(connected_tags[0], connected_tags[1]);
 
@@ -308,7 +350,10 @@ mod tests {
                 saw_disconnect = true;
             }
         }
-        assert!(saw_disconnect, "expected a Disconnected event after dropping c1");
+        assert!(
+            saw_disconnect,
+            "expected a Disconnected event after dropping c1"
+        );
 
         drop(c2);
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
@@ -323,13 +368,22 @@ mod tests {
         let (sender, mut receiver) = device_event_channel();
         let reporter = TransportReporter::pending(Some(sender));
         reporter.bind("test-device-99");
-        let (mut transport, relay) = UnixSocketTransport::listen_with_capacity(tmp_socket_path("unix_outbound_overflow"), reporter.clone(), 1).await.unwrap();
+        let (mut transport, relay) = UnixSocketTransport::listen_with_capacity(
+            tmp_socket_path("unix_outbound_overflow"),
+            reporter.clone(),
+            1,
+        )
+        .await
+        .unwrap();
         let path = transport.path().to_path_buf();
 
         let _client = UnixStream::connect(&path).await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         assert!(transport.is_connected());
-        assert!(matches!(receiver.try_recv(), Ok(DeviceEvent::TransportConnected { .. })));
+        assert!(matches!(
+            receiver.try_recv(),
+            Ok(DeviceEvent::TransportConnected { .. })
+        ));
 
         // Capacity 1, two sends back-to-back with no `.await` in between —
         // the spawned Tokio task can't be scheduled to drain in between, so
@@ -356,12 +410,21 @@ mod tests {
         let (sender, mut receiver) = device_event_channel();
         let reporter = TransportReporter::pending(Some(sender));
         reporter.bind("test-device-100");
-        let (transport, relay) = UnixSocketTransport::listen_with_capacity(tmp_socket_path("unix_inbound_overflow"), reporter.clone(), 1).await.unwrap();
+        let (transport, relay) = UnixSocketTransport::listen_with_capacity(
+            tmp_socket_path("unix_inbound_overflow"),
+            reporter.clone(),
+            1,
+        )
+        .await
+        .unwrap();
         let path = transport.path().to_path_buf();
 
         let mut client = UnixStream::connect(&path).await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        assert!(matches!(receiver.try_recv(), Ok(DeviceEvent::TransportConnected { .. })));
+        assert!(matches!(
+            receiver.try_recv(),
+            Ok(DeviceEvent::TransportConnected { .. })
+        ));
 
         // Never drain the relay: with channel/ring capacity 1, a burst large
         // enough is guaranteed to overflow before it's exhausted.
@@ -388,14 +451,20 @@ mod tests {
         let (sender, mut receiver) = device_event_channel();
         let reporter = TransportReporter::pending(Some(sender));
         reporter.bind("test-device-102");
-        let (transport, relay) = UnixSocketTransport::listen(tmp_socket_path("unix_peer_events"), reporter).await.unwrap();
+        let (transport, relay) =
+            UnixSocketTransport::listen(tmp_socket_path("unix_peer_events"), reporter)
+                .await
+                .unwrap();
         let path = transport.path().to_path_buf();
 
         let client = UnixStream::connect(&path).await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
         let peer = match receiver.try_recv() {
-            Ok(DeviceEvent::TransportConnected { device, peer: Some(peer) }) => {
+            Ok(DeviceEvent::TransportConnected {
+                device,
+                peer: Some(peer),
+            }) => {
                 assert_eq!(device, "test-device-102");
                 assert!(!peer.is_empty());
                 peer
@@ -407,7 +476,11 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 
         match receiver.try_recv() {
-            Ok(DeviceEvent::TransportDisconnected { device, peer: Some(disconnected_peer), .. }) => {
+            Ok(DeviceEvent::TransportDisconnected {
+                device,
+                peer: Some(disconnected_peer),
+                ..
+            }) => {
                 assert_eq!(device, "test-device-102");
                 assert_eq!(disconnected_peer, peer);
             }

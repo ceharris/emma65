@@ -116,7 +116,11 @@ fn emit(row: TraceRow, verbose: bool, out: &mut dyn Write) -> io::Result<()> {
     for label in &row.line.labels {
         writeln!(out, "{}", format::label_line(label))?;
     }
-    writeln!(out, "{}", format::instruction_row(row.instr_id + 1, row.cycles, &row.regs, &row.line))?;
+    writeln!(
+        out,
+        "{}",
+        format::instruction_row(row.instr_id + 1, row.cycles, &row.regs, &row.line)
+    )?;
 
     if verbose {
         for op in row.non_fetch_bus_ops() {

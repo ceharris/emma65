@@ -85,15 +85,27 @@ enum Command {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingOp {
     Idle,
-    Write { command: Command, buffer: [u8; 4], filled: usize, expected: usize },
-    Read { remaining: [u8; 3], next: usize },
+    Write {
+        command: Command,
+        buffer: [u8; 4],
+        filled: usize,
+        expected: usize,
+    },
+    Read {
+        remaining: [u8; 3],
+        next: usize,
+    },
 }
 
 /// Computes the bitmask covering `matrices` matrices (bits `0..matrices` set), used for the
 /// dirty/auto-refresh/power masks' construction- and reset-time defaults (design doc §7). `8`
 /// matrices fills the mask completely rather than overflowing the `1 << 8` shift.
 fn matrix_mask(matrices: u32) -> u8 {
-    if matrices >= 8 { 0xFF } else { ((1u16 << matrices) - 1) as u8 }
+    if matrices >= 8 {
+        0xFF
+    } else {
+        ((1u16 << matrices) - 1) as u8
+    }
 }
 
 /// One matrix's newly composited frame (design doc §10), pushed to an attached sink on every
@@ -201,10 +213,19 @@ impl LedMatrix {
         frame_rate_hz: u32,
         palette: Vec<Rgb565>,
     ) -> Self {
-        debug_assert!((1..=8).contains(&matrices), "matrices must be 1..=8 (validated by the config module)");
-        debug_assert!(cols >= 1 && matrices.is_multiple_of(cols),
-            "cols must evenly divide matrices (validated by the config module)");
-        debug_assert_eq!(palette.len(), PALETTE_LEN, "palette must have exactly PALETTE_LEN entries");
+        debug_assert!(
+            (1..=8).contains(&matrices),
+            "matrices must be 1..=8 (validated by the config module)"
+        );
+        debug_assert!(
+            cols >= 1 && matrices.is_multiple_of(cols),
+            "cols must evenly divide matrices (validated by the config module)"
+        );
+        debug_assert_eq!(
+            palette.len(),
+            PALETTE_LEN,
+            "palette must have exactly PALETTE_LEN entries"
+        );
         let pixel_bytes = matrices as usize * PIXELS_PER_MATRIX;
         let effective_clock_hz = clock_hz.unwrap_or(super::display::NOMINAL_CLOCK_HZ);
         let cycles_per_frame = (effective_clock_hz / frame_rate_hz.max(1) as u64).max(1);
@@ -253,7 +274,8 @@ impl LedMatrix {
     /// the header now, then a block message per matrix swap and a palette message per actual
     /// `CMD_PALETTE_WRITE` (see [`Self::swap_matrix`], [`Self::apply_command`]).
     pub fn attach_external_transport(&mut self, mut transport: Box<dyn Transport>) {
-        let header = protocol::encode_header(self.matrices as u8, self.cols as u8, self.frame_rate_hz);
+        let header =
+            protocol::encode_header(self.matrices as u8, self.cols as u8, self.frame_rate_hz);
         transport.send_bytes(&header);
         self.external_transport = Some(transport);
     }
@@ -341,8 +363,12 @@ impl LedMatrix {
             let block = self.gather_matrix_block(&self.scanout, index);
             if let Some(sink) = &self.frame_sink {
                 let power_on = self.power_mask & (1 << index) != 0;
-                let pixels = compositing::composite_matrix(&block, &self.palette, power_on, self.brightness);
-                let _ = sink.try_send(LedMatrixFrame { matrix_index: index as u8, pixels });
+                let pixels =
+                    compositing::composite_matrix(&block, &self.palette, power_on, self.brightness);
+                let _ = sink.try_send(LedMatrixFrame {
+                    matrix_index: index as u8,
+                    pixels,
+                });
             }
             if let Some(transport) = self.external_transport.as_mut() {
                 let message = protocol::encode_block(index as u8, &block);
@@ -355,7 +381,12 @@ impl LedMatrix {
     /// discarding whatever partial sequence was in progress, and arms the write-sequence state
     /// machine for the selected command. An unrecognized command code returns to idle.
     fn write_command(&mut self, value: u8) {
-        let armed = |command, expected| PendingOp::Write { command, buffer: [0; 4], filled: 0, expected };
+        let armed = |command, expected| PendingOp::Write {
+            command,
+            buffer: [0; 4],
+            filled: 0,
+            expected,
+        };
         self.pending = match value {
             CMD_SWAP => armed(Command::Swap, 1),
             CMD_SET_AUTOREFRESH => armed(Command::SetAutorefresh, 1),
@@ -372,11 +403,24 @@ impl LedMatrix {
     /// while idle or while a read-sequence command's result bytes are being popped (nothing armed
     /// to advance).
     fn write_data(&mut self, value: u8) {
-        let PendingOp::Write { command, mut buffer, filled, expected } = self.pending else { return };
+        let PendingOp::Write {
+            command,
+            mut buffer,
+            filled,
+            expected,
+        } = self.pending
+        else {
+            return;
+        };
         buffer[filled] = value;
         let filled = filled + 1;
         if filled < expected {
-            self.pending = PendingOp::Write { command, buffer, filled, expected };
+            self.pending = PendingOp::Write {
+                command,
+                buffer,
+                filled,
+                expected,
+            };
             return;
         }
         self.pending = self.apply_command(command, buffer);
@@ -422,7 +466,10 @@ impl LedMatrix {
             Command::PaletteRead => {
                 let index = buffer[0] as usize;
                 let (r, g, b) = self.palette[index].to_rgb888();
-                return PendingOp::Read { remaining: [r, g, b], next: 0 };
+                return PendingOp::Read {
+                    remaining: [r, g, b],
+                    next: 0,
+                };
             }
         }
         PendingOp::Idle
@@ -431,13 +478,19 @@ impl LedMatrix {
     /// Reads the data register (spec §4.3): pops the next byte of an armed read sequence, or
     /// returns `0` when idle, mid write-sequence, or past the sequence's byte count.
     fn read_data(&mut self) -> u8 {
-        let PendingOp::Read { remaining, next } = self.pending else { return 0 };
+        let PendingOp::Read { remaining, next } = self.pending else {
+            return 0;
+        };
         if next >= remaining.len() {
             return 0;
         }
         let value = remaining[next];
         let next = next + 1;
-        self.pending = if next == remaining.len() { PendingOp::Idle } else { PendingOp::Read { remaining, next } };
+        self.pending = if next == remaining.len() {
+            PendingOp::Idle
+        } else {
+            PendingOp::Read { remaining, next }
+        };
         value
     }
 
@@ -472,7 +525,11 @@ impl IoDevice for LedMatrix {
             };
         }
         let offset = (address - self.pixel_range.start) as usize;
-        if offset < self.pixel_bytes { self.pixels[offset] } else { 0 }
+        if offset < self.pixel_bytes {
+            self.pixels[offset]
+        } else {
+            0
+        }
     }
 
     fn write(&mut self, address: u16, value: u8) {
@@ -498,7 +555,11 @@ impl IoDevice for LedMatrix {
             };
         }
         let offset = (address - self.pixel_range.start) as usize;
-        if offset < self.pixel_bytes { self.pixels[offset] } else { 0 }
+        if offset < self.pixel_bytes {
+            self.pixels[offset]
+        } else {
+            0
+        }
     }
 
     fn claims(&self, address: u16) -> bool {
@@ -520,7 +581,13 @@ impl IoDevice for LedMatrix {
         self.power_mask = mask;
         self.pending = PendingOp::Idle;
         self.cycle_accumulator = 0;
-        log_msg!(self.log_sender, LogLevel::Info, LogCategory::Device, "{} reset", self.identity());
+        log_msg!(
+            self.log_sender,
+            LogLevel::Info,
+            LogCategory::Device,
+            "{} reset",
+            self.identity()
+        );
     }
 
     fn name(&self) -> &str {
@@ -576,7 +643,16 @@ mod tests {
     /// Builds a device with an explicit arrangement column count, for tests exercising
     /// arrangement-aware addressing (design doc §2.2).
     fn device_with_arrangement(matrices: u32, cols: u32) -> LedMatrix {
-        LedMatrix::new(DEVICE_NAME, pixel_range(matrices), register_range(), matrices, cols, Some(1_000_000), 100, test_palette())
+        LedMatrix::new(
+            DEVICE_NAME,
+            pixel_range(matrices),
+            register_range(),
+            matrices,
+            cols,
+            Some(1_000_000),
+            100,
+            test_palette(),
+        )
     }
 
     fn pixel_addr(offset: u16) -> u16 {
@@ -607,7 +683,10 @@ mod tests {
         device.write(pixel_addr(2 * PIXELS_PER_MATRIX as u16 - 1), 0x43);
         assert_eq!(device.read(pixel_addr(0)), 0x41);
         assert_eq!(device.read(pixel_addr(PIXELS_PER_MATRIX as u16 - 1)), 0x42);
-        assert_eq!(device.read(pixel_addr(2 * PIXELS_PER_MATRIX as u16 - 1)), 0x43);
+        assert_eq!(
+            device.read(pixel_addr(2 * PIXELS_PER_MATRIX as u16 - 1)),
+            0x43
+        );
         assert_eq!(device.peek(pixel_addr(0)), 0x41);
     }
 
@@ -621,7 +700,10 @@ mod tests {
 
         device.write(pixel_addr(32), 0x41);
 
-        assert_eq!(device.dirty, 0b10, "offset 32 must belong to matrix 1, not matrix 0");
+        assert_eq!(
+            device.dirty, 0b10,
+            "offset 32 must belong to matrix 1, not matrix 0"
+        );
         assert_eq!(device.read(pixel_addr(32)), 0x41);
     }
 
@@ -647,7 +729,12 @@ mod tests {
         // `frame_source` rather than a contiguous-slice copy.
         let mut device = device_with_arrangement(4, 2);
         let width = 64usize;
-        for (matrix_row, matrix_col, value) in [(0usize, 0usize, 0x11u8), (0, 1, 0x22), (1, 0, 0x33), (1, 1, 0x44)] {
+        for (matrix_row, matrix_col, value) in [
+            (0usize, 0usize, 0x11u8),
+            (0, 1, 0x22),
+            (1, 0, 0x33),
+            (1, 1, 0x44),
+        ] {
             let offset = (matrix_row * 32) * width + matrix_col * 32; // that matrix's local (0,0)
             device.write(pixel_addr(offset as u16), value);
         }
@@ -684,8 +771,10 @@ mod tests {
         assert!(device.claims(command_addr()));
         assert!(device.claims(data_addr()));
         assert!(!device.claims(BASE_ADDRESS - 1));
-        assert!(!device.claims(BASE_ADDRESS + PIXELS_PER_MATRIX as u16),
-            "the gap between pixel memory and the separately configured register pair must not be claimed");
+        assert!(
+            !device.claims(BASE_ADDRESS + PIXELS_PER_MATRIX as u16),
+            "the gap between pixel memory and the separately configured register pair must not be claimed"
+        );
         assert!(!device.claims(data_addr() + 1));
     }
 
@@ -753,7 +842,11 @@ mod tests {
         device.write(data_addr(), 0b01); // only matrix 0
 
         assert_eq!(device.frame_source(0)[0], 0x41);
-        assert_eq!(device.frame_source(1)[0], 0, "matrix 1 must not have been swapped");
+        assert_eq!(
+            device.frame_source(1)[0],
+            0,
+            "matrix 1 must not have been swapped"
+        );
         assert_eq!(device.dirty, 0b10, "matrix 1's dirty bit must remain set");
     }
 
@@ -840,8 +933,16 @@ mod tests {
 
         device.tick(10_000); // one cadence tick (cycles_per_frame = 1_000_000 / 100)
 
-        assert_eq!(device.frame_source(0)[0], 0x41, "enabled + dirty matrix must be swapped");
-        assert_eq!(device.frame_source(1)[0], 0, "disabled matrix must not be swapped despite being dirty");
+        assert_eq!(
+            device.frame_source(0)[0],
+            0x41,
+            "enabled + dirty matrix must be swapped"
+        );
+        assert_eq!(
+            device.frame_source(1)[0],
+            0,
+            "disabled matrix must not be swapped despite being dirty"
+        );
         assert_eq!(device.dirty, 0b10, "matrix 1 must remain dirty");
     }
 
@@ -852,7 +953,10 @@ mod tests {
         device.write(data_addr(), 0b1); // clear the construction-time dirty default
 
         device.tick(10_000);
-        assert_eq!(device.dirty, 0, "no write occurred since the swap, so nothing should be dirty");
+        assert_eq!(
+            device.dirty, 0,
+            "no write occurred since the swap, so nothing should be dirty"
+        );
         assert_eq!(device.frame_source(0)[0], 0);
     }
 
@@ -869,8 +973,18 @@ mod tests {
 
     #[test]
     fn nominal_clock_used_when_clock_hz_unavailable() {
-        let mut device = LedMatrix::new(DEVICE_NAME, pixel_range(1), register_range(), 1, 1, None, super::super::display::DEFAULT_FRAME_RATE_HZ, test_palette());
-        let cycles_per_frame = super::super::display::NOMINAL_CLOCK_HZ / super::super::display::DEFAULT_FRAME_RATE_HZ as u64;
+        let mut device = LedMatrix::new(
+            DEVICE_NAME,
+            pixel_range(1),
+            register_range(),
+            1,
+            1,
+            None,
+            super::super::display::DEFAULT_FRAME_RATE_HZ,
+            test_palette(),
+        );
+        let cycles_per_frame = super::super::display::NOMINAL_CLOCK_HZ
+            / super::super::display::DEFAULT_FRAME_RATE_HZ as u64;
         device.write(pixel_addr(0), 0x41);
         device.tick(cycles_per_frame as u32 - 1);
         assert_eq!(device.frame_source(0)[0], 0);
@@ -898,7 +1012,11 @@ mod tests {
         assert_eq!(device.read(data_addr()), 0xFF); // red
         assert_eq!(device.read(data_addr()), 0x00); // green
         assert_eq!(device.read(data_addr()), 0xFF); // blue
-        assert_eq!(device.read(data_addr()), 0, "past the 3-byte sequence, reads return 0");
+        assert_eq!(
+            device.read(data_addr()),
+            0,
+            "past the 3-byte sequence, reads return 0"
+        );
     }
 
     #[test]
@@ -919,12 +1037,26 @@ mod tests {
         write_palette_write(&mut device, 9, 0x00, 0x00, 0x00);
         device.write(command_addr(), CMD_PALETTE_READ);
         device.write(data_addr(), 9);
-        assert_eq!((device.read(data_addr()), device.read(data_addr()), device.read(data_addr())), (0, 0, 0));
+        assert_eq!(
+            (
+                device.read(data_addr()),
+                device.read(data_addr()),
+                device.read(data_addr())
+            ),
+            (0, 0, 0)
+        );
 
         write_palette_write(&mut device, 9, 0xFF, 0xFF, 0xFF);
         device.write(command_addr(), CMD_PALETTE_READ);
         device.write(data_addr(), 9);
-        assert_eq!((device.read(data_addr()), device.read(data_addr()), device.read(data_addr())), (0xFF, 0xFF, 0xFF));
+        assert_eq!(
+            (
+                device.read(data_addr()),
+                device.read(data_addr()),
+                device.read(data_addr())
+            ),
+            (0xFF, 0xFF, 0xFF)
+        );
     }
 
     #[test]
@@ -972,8 +1104,16 @@ mod tests {
 
         let expected = device.palette()[1].to_rgb888().0;
         assert_eq!(device.peek(data_addr()), expected);
-        assert_eq!(device.peek(data_addr()), expected, "peek must not consume the byte");
-        assert_eq!(device.read(data_addr()), expected, "read still returns the same first byte");
+        assert_eq!(
+            device.peek(data_addr()),
+            expected,
+            "peek must not consume the byte"
+        );
+        assert_eq!(
+            device.read(data_addr()),
+            expected,
+            "read still returns the same first byte"
+        );
     }
 
     #[test]
@@ -999,7 +1139,11 @@ mod tests {
         device.write(data_addr(), 1);
         device.write(data_addr(), 2);
         device.write(data_addr(), 3);
-        assert_eq!(device.palette()[1], original, "data-only writes with nothing armed are ignored");
+        assert_eq!(
+            device.palette()[1],
+            original,
+            "data-only writes with nothing armed are ignored"
+        );
     }
 
     #[test]
@@ -1018,7 +1162,10 @@ mod tests {
         device.reset();
         let received = rx.recv().unwrap();
         assert_eq!(received.category, LogCategory::Device);
-        assert_eq!(received.message, format!("{DEVICE_NAME}@0x{BASE_ADDRESS:04x} reset"));
+        assert_eq!(
+            received.message,
+            format!("{DEVICE_NAME}@0x{BASE_ADDRESS:04x} reset")
+        );
     }
 
     #[test]
@@ -1059,7 +1206,9 @@ mod tests {
         device.write(pixel_addr(0), 0x41);
         device.tick(10_000); // one cadence tick (cycles_per_frame = 1_000_000 / 100)
 
-        let frame = rx.try_recv().expect("expected a frame pushed by auto-refresh");
+        let frame = rx
+            .try_recv()
+            .expect("expected a frame pushed by auto-refresh");
         assert_eq!(frame.matrix_index, 0);
     }
 
@@ -1071,7 +1220,10 @@ mod tests {
         device.shutdown();
         device.write(command_addr(), CMD_SWAP);
         device.write(data_addr(), 0b1);
-        assert!(rx.try_recv().is_err(), "channel should be closed once the sink is dropped");
+        assert!(
+            rx.try_recv().is_err(),
+            "channel should be closed once the sink is dropped"
+        );
     }
 
     /// Regression test for a bug reported against the debugger panel: with 8 matrices configured,
@@ -1098,7 +1250,11 @@ mod tests {
         while let Ok(f) = rx.try_recv() {
             received.push(f.matrix_index);
         }
-        assert_eq!(received, (0..8).collect::<Vec<u8>>(), "expected a frame for every matrix, in order");
+        assert_eq!(
+            received,
+            (0..8).collect::<Vec<u8>>(),
+            "expected a frame for every matrix, in order"
+        );
     }
 
     // -- External transport (`plan/led-matrix-external-protocol.md`) --
@@ -1149,7 +1305,11 @@ mod tests {
 
         let bytes = collect_bytes(&mut remote);
         let msg_len = 1 + 1 + PIXELS_PER_MATRIX;
-        assert_eq!(bytes.len(), msg_len * 2, "expected one block message per swapped matrix");
+        assert_eq!(
+            bytes.len(),
+            msg_len * 2,
+            "expected one block message per swapped matrix"
+        );
 
         assert_eq!(bytes[0], 1); // MSG_BLOCK
         assert_eq!(bytes[1], 0); // matrix_index 0
@@ -1190,7 +1350,10 @@ mod tests {
         assert_eq!(bytes.len(), 4);
         assert_eq!(bytes[0], 2); // MSG_PALETTE
         assert_eq!(bytes[1], 9); // index
-        assert_eq!(&bytes[2..4], &device.palette()[9].to_packed565().to_le_bytes());
+        assert_eq!(
+            &bytes[2..4],
+            &device.palette()[9].to_packed565().to_le_bytes()
+        );
     }
 
     #[test]
@@ -1203,7 +1366,10 @@ mod tests {
         device.write(data_addr(), 1);
         device.read(data_addr());
 
-        assert!(collect_bytes(&mut remote).is_empty(), "a read-only sequence must send nothing");
+        assert!(
+            collect_bytes(&mut remote).is_empty(),
+            "a read-only sequence must send nothing"
+        );
     }
 
     #[test]

@@ -15,31 +15,104 @@ pub fn mnemonic_from_str(name: &str) -> Option<Mnemonic> {
     use Mnemonic::*;
     let upper = name.to_ascii_uppercase();
     Some(match upper.as_str() {
-        "ADC" => Adc, "AND" => And, "ASL" => Asl, "BBC" => Bbc,
-        "BBR0" => Bbr0, "BBR1" => Bbr1, "BBR2" => Bbr2, "BBR3" => Bbr3,
-        "BBR4" => Bbr4, "BBR5" => Bbr5, "BBR6" => Bbr6, "BBR7" => Bbr7,
-        "BBS0" => Bbs0, "BBS1" => Bbs1, "BBS2" => Bbs2, "BBS3" => Bbs3,
-        "BBS4" => Bbs4, "BBS5" => Bbs5, "BBS6" => Bbs6, "BBS7" => Bbs7,
-        "BCC" => Bcc, "BCS" => Bcs, "BEQ" => Beq, "BIT" => Bit,
-        "BMI" => Bmi, "BNE" => Bne, "BPL" => Bpl, "BRA" => Bra,
-        "BRK" => Brk, "BVC" => Bvc, "BVS" => Bvs,
-        "CLC" => Clc, "CLD" => Cld, "CLI" => Cli, "CLV" => Clv,
-        "CMP" => Cmp, "CPX" => Cpx, "CPY" => Cpy,
-        "DEC" => Dec, "DEX" => Dex, "DEY" => Dey, "EOR" => Eor,
-        "INC" => Inc, "INX" => Inx, "INY" => Iny, "JMP" => Jmp, "JSR" => Jsr,
-        "LDA" => Lda, "LDX" => Ldx, "LDY" => Ldy, "LSR" => Lsr,
-        "NOP" => Nop, "ORA" => Ora,
-        "PHA" => Pha, "PHP" => Php, "PHX" => Phx, "PHY" => Phy,
-        "PLA" => Pla, "PLP" => Plp, "PLX" => Plx, "PLY" => Ply,
-        "RMB0" => Rmb0, "RMB1" => Rmb1, "RMB2" => Rmb2, "RMB3" => Rmb3,
-        "RMB4" => Rmb4, "RMB5" => Rmb5, "RMB6" => Rmb6, "RMB7" => Rmb7,
-        "ROL" => Rol, "ROR" => Ror, "RTI" => Rti, "RTS" => Rts,
-        "SBC" => Sbc, "SEC" => Sec, "SED" => Sed, "SEI" => Sei,
-        "SMB0" => Smb0, "SMB1" => Smb1, "SMB2" => Smb2, "SMB3" => Smb3,
-        "SMB4" => Smb4, "SMB5" => Smb5, "SMB6" => Smb6, "SMB7" => Smb7,
-        "STA" => Sta, "STP" => Stp, "STX" => Stx, "STY" => Sty, "STZ" => Stz,
-        "TAX" => Tax, "TAY" => Tay, "TRB" => Trb, "TSB" => Tsb,
-        "TSX" => Tsx, "TXA" => Txa, "TXS" => Txs, "TYA" => Tya,
+        "ADC" => Adc,
+        "AND" => And,
+        "ASL" => Asl,
+        "BBC" => Bbc,
+        "BBR0" => Bbr0,
+        "BBR1" => Bbr1,
+        "BBR2" => Bbr2,
+        "BBR3" => Bbr3,
+        "BBR4" => Bbr4,
+        "BBR5" => Bbr5,
+        "BBR6" => Bbr6,
+        "BBR7" => Bbr7,
+        "BBS0" => Bbs0,
+        "BBS1" => Bbs1,
+        "BBS2" => Bbs2,
+        "BBS3" => Bbs3,
+        "BBS4" => Bbs4,
+        "BBS5" => Bbs5,
+        "BBS6" => Bbs6,
+        "BBS7" => Bbs7,
+        "BCC" => Bcc,
+        "BCS" => Bcs,
+        "BEQ" => Beq,
+        "BIT" => Bit,
+        "BMI" => Bmi,
+        "BNE" => Bne,
+        "BPL" => Bpl,
+        "BRA" => Bra,
+        "BRK" => Brk,
+        "BVC" => Bvc,
+        "BVS" => Bvs,
+        "CLC" => Clc,
+        "CLD" => Cld,
+        "CLI" => Cli,
+        "CLV" => Clv,
+        "CMP" => Cmp,
+        "CPX" => Cpx,
+        "CPY" => Cpy,
+        "DEC" => Dec,
+        "DEX" => Dex,
+        "DEY" => Dey,
+        "EOR" => Eor,
+        "INC" => Inc,
+        "INX" => Inx,
+        "INY" => Iny,
+        "JMP" => Jmp,
+        "JSR" => Jsr,
+        "LDA" => Lda,
+        "LDX" => Ldx,
+        "LDY" => Ldy,
+        "LSR" => Lsr,
+        "NOP" => Nop,
+        "ORA" => Ora,
+        "PHA" => Pha,
+        "PHP" => Php,
+        "PHX" => Phx,
+        "PHY" => Phy,
+        "PLA" => Pla,
+        "PLP" => Plp,
+        "PLX" => Plx,
+        "PLY" => Ply,
+        "RMB0" => Rmb0,
+        "RMB1" => Rmb1,
+        "RMB2" => Rmb2,
+        "RMB3" => Rmb3,
+        "RMB4" => Rmb4,
+        "RMB5" => Rmb5,
+        "RMB6" => Rmb6,
+        "RMB7" => Rmb7,
+        "ROL" => Rol,
+        "ROR" => Ror,
+        "RTI" => Rti,
+        "RTS" => Rts,
+        "SBC" => Sbc,
+        "SEC" => Sec,
+        "SED" => Sed,
+        "SEI" => Sei,
+        "SMB0" => Smb0,
+        "SMB1" => Smb1,
+        "SMB2" => Smb2,
+        "SMB3" => Smb3,
+        "SMB4" => Smb4,
+        "SMB5" => Smb5,
+        "SMB6" => Smb6,
+        "SMB7" => Smb7,
+        "STA" => Sta,
+        "STP" => Stp,
+        "STX" => Stx,
+        "STY" => Sty,
+        "STZ" => Stz,
+        "TAX" => Tax,
+        "TAY" => Tay,
+        "TRB" => Trb,
+        "TSB" => Tsb,
+        "TSX" => Tsx,
+        "TXA" => Txa,
+        "TXS" => Txs,
+        "TYA" => Tya,
         "WAI" => Wai,
         _ => return None,
     })
@@ -65,8 +138,13 @@ impl InstructionTable {
             // NOPs standing in for other illegal opcodes) aren't meaningfully
             // distinguishable from source, so an arbitrary pick among them is
             // fine — first-wins, same as every other addressing mode.
-            modes.entry((entry.mnemonic, entry.mode))
-                .and_modify(|existing| if entry.opcode == 0xEA { *existing = entry })
+            modes
+                .entry((entry.mnemonic, entry.mode))
+                .and_modify(|existing| {
+                    if entry.opcode == 0xEA {
+                        *existing = entry
+                    }
+                })
                 .or_insert(entry);
         }
         Self { modes }
@@ -86,8 +164,14 @@ mod tests {
     #[test]
     fn mnemonic_from_str_round_trips_display() {
         for mnemonic in [
-            Mnemonic::Lda, Mnemonic::Sta, Mnemonic::Jmp, Mnemonic::Bbr0,
-            Mnemonic::Smb7, Mnemonic::Wai, Mnemonic::Stp, Mnemonic::Nop,
+            Mnemonic::Lda,
+            Mnemonic::Sta,
+            Mnemonic::Jmp,
+            Mnemonic::Bbr0,
+            Mnemonic::Smb7,
+            Mnemonic::Wai,
+            Mnemonic::Stp,
+            Mnemonic::Nop,
         ] {
             let text = format!("{mnemonic}");
             assert_eq!(mnemonic_from_str(&text), Some(mnemonic));
@@ -123,7 +207,11 @@ mod tests {
     fn instruction_table_missing_combination_is_none() {
         let table = InstructionTable::new(CpuVariant::Cmos65C02);
         // LDA has no Accumulator-mode opcode.
-        assert!(table.get(Mnemonic::Lda, AddressingMode::Accumulator).is_none());
+        assert!(
+            table
+                .get(Mnemonic::Lda, AddressingMode::Accumulator)
+                .is_none()
+        );
     }
 
     #[test]
@@ -132,8 +220,14 @@ mod tests {
         let wdc = InstructionTable::new(CpuVariant::Wdc65C02);
         assert!(cmos.get(Mnemonic::Stp, AddressingMode::Implied).is_none());
         assert!(wdc.get(Mnemonic::Stp, AddressingMode::Implied).is_some());
-        assert!(cmos.get(Mnemonic::Bbr0, AddressingMode::ZeroPageRelative).is_none());
-        assert!(wdc.get(Mnemonic::Bbr0, AddressingMode::ZeroPageRelative).is_some());
+        assert!(
+            cmos.get(Mnemonic::Bbr0, AddressingMode::ZeroPageRelative)
+                .is_none()
+        );
+        assert!(
+            wdc.get(Mnemonic::Bbr0, AddressingMode::ZeroPageRelative)
+                .is_some()
+        );
     }
 
     #[test]

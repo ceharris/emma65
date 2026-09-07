@@ -62,7 +62,7 @@ use crate::emulator::bus::RomWritePolicy;
 use crate::emulator::device::{ErrorSender, IoDevice};
 use crate::emulator::{LogCategory, LogLevel, LogSender, log_msg};
 
-pub const RAM_SIZE: usize = 128*1024;
+pub const RAM_SIZE: usize = 128 * 1024;
 
 pub const ROM_START: u16 = 0x8000;
 const ROM_END: u16 = 0xFFFF;
@@ -75,7 +75,6 @@ const CTRL_WINDOW_INHIBIT: u8 = 0b01000000;
 const CTRL_RAM_ONLY: u8 = 0b00100000;
 const CTRL_MAP_UPPER: u8 = 0b00010000;
 const CTRL_SEGMENT_MASK: u8 = 0b00001111;
-
 
 /// A bank-switched memory module with a simple MMU (designed for the Finch SBC).
 pub struct Vireo {
@@ -107,7 +106,6 @@ pub struct Vireo {
 }
 
 impl Vireo {
-
     /// Constructs a new `Vireo` device.
     ///
     /// ## Arguments
@@ -139,14 +137,25 @@ impl Vireo {
     /// - `ram_data` - data to load into RAM; panics if the length of `ram_data` is not 128K
     ///
     pub fn with_data(
-            name: &'static str,
-            control_register_address: u16,
-            rom_data: Vec<u8>,
-            ram_data: Vec<u8>) -> Self {
-        assert_eq!(rom_data.len(), ROM_SIZE,
-                   "ROM data size {} does not match ROM size {}", rom_data.len(), ROM_SIZE);
-        assert_eq!(ram_data.len(), RAM_SIZE,
-                   "RAM data size {} does not match RAM size {}", ram_data.len(), RAM_SIZE);
+        name: &'static str,
+        control_register_address: u16,
+        rom_data: Vec<u8>,
+        ram_data: Vec<u8>,
+    ) -> Self {
+        assert_eq!(
+            rom_data.len(),
+            ROM_SIZE,
+            "ROM data size {} does not match ROM size {}",
+            rom_data.len(),
+            ROM_SIZE
+        );
+        assert_eq!(
+            ram_data.len(),
+            RAM_SIZE,
+            "RAM data size {} does not match RAM size {}",
+            ram_data.len(),
+            RAM_SIZE
+        );
         let mut device = Vireo::new(name, control_register_address);
         device.rom_data = rom_data;
         device.ram_data = ram_data;
@@ -171,13 +180,19 @@ impl Vireo {
     fn report_rejected_write(&self, address: u16) {
         if let Some(sender) = &self.error_sender {
             use crate::emulator::device::DeviceEvent;
-            let _ = sender.send(DeviceEvent::RejectedWrite { device: self.identity(), address });
+            let _ = sender.send(DeviceEvent::RejectedWrite {
+                device: self.identity(),
+                address,
+            });
         }
     }
 
     fn control_register(&self) -> u8 {
-        (if self.window_inhibit { CTRL_WINDOW_INHIBIT } else { 0 })
-            | (if self.ram_only { CTRL_RAM_ONLY } else { 0 })
+        (if self.window_inhibit {
+            CTRL_WINDOW_INHIBIT
+        } else {
+            0
+        }) | (if self.ram_only { CTRL_RAM_ONLY } else { 0 })
             | (if self.map_upper { CTRL_MAP_UPPER } else { 0 })
             | (self.segment & CTRL_SEGMENT_MASK)
     }
@@ -204,11 +219,9 @@ impl Vireo {
             (false, addr)
         }
     }
-
 }
 
 impl IoDevice for Vireo {
-
     fn read(&mut self, address: u16) -> u8 {
         self.peek(address)
     }
@@ -261,13 +274,22 @@ impl IoDevice for Vireo {
 
     fn reset(&mut self) {
         self.set_control_register(CTRL_WINDOW_INHIBIT);
-        log_msg!(self.log_sender, LogLevel::Info, LogCategory::Device, "{} reset", self.identity());
+        log_msg!(
+            self.log_sender,
+            LogLevel::Info,
+            LogCategory::Device,
+            "{} reset",
+            self.identity()
+        );
     }
 
-    fn name(&self) -> &str { self.name }
+    fn name(&self) -> &str {
+        self.name
+    }
 
-    fn identity_address(&self) -> u16 { self.control_register_address }
-
+    fn identity_address(&self) -> u16 {
+        self.control_register_address
+    }
 }
 
 #[cfg(test)]
@@ -588,12 +610,17 @@ mod tests {
 
         match rx.try_recv() {
             Ok(event) => {
-                assert!(matches!(event, DeviceEvent::RejectedWrite{ address: 0xFFFF, .. }));
+                assert!(matches!(
+                    event,
+                    DeviceEvent::RejectedWrite {
+                        address: 0xFFFF,
+                        ..
+                    }
+                ));
             }
             Err(e) => panic!("Expected a DeviceEvent, but channel was empty: {:?}", e),
         }
     }
-
 
     #[test]
     fn reset_restores_default_config() {
@@ -617,7 +644,9 @@ mod tests {
         device.reset();
         let received = rx.recv().unwrap();
         assert_eq!(received.category, LogCategory::Device);
-        assert_eq!(received.message, format!("{DEVICE_NAME}@0x{CTRL_REGISTER_ADDRESS:04x} reset"));
+        assert_eq!(
+            received.message,
+            format!("{DEVICE_NAME}@0x{CTRL_REGISTER_ADDRESS:04x} reset")
+        );
     }
-
 }

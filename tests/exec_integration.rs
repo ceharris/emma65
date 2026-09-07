@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use emma65::emulator::cpu::StepResult;
 use emma65::emulator::device::{Console, Mc6850, R6551};
 use emma65::emulator::{
-    AddressRange, Bus, ChannelRelay, ClockSpeed, CpuBuilder,
-    CpuVariant, DeviceId, InternalPipeTransport, InvalidOpcodePolicy, TraceCallback, TraceKind, TraceRecord,
+    AddressRange, Bus, ChannelRelay, ClockSpeed, CpuBuilder, CpuVariant, DeviceId,
+    InternalPipeTransport, InvalidOpcodePolicy, TraceCallback, TraceKind, TraceRecord,
     TransportRelay, run,
 };
 
@@ -33,13 +33,23 @@ async fn free_run_console_output() {
     // (inbound path) is unused, so a hand-fed one with no data is enough.
     let (_tx, rx) = crossbeam_channel::unbounded::<u8>();
     let mut console = Console::new("console").with_address(0xF000);
-    console.attach_transport(Box::new(local), TransportRelay::Byte(ChannelRelay::spawn(rx, 256)));
+    console.attach_transport(
+        Box::new(local),
+        TransportRelay::Byte(ChannelRelay::spawn(rx, 256)),
+    );
 
     // 64 KB RAM; Console at $F000–$F001.
     let bus = Bus::config()
-        .ram_with_fill(AddressRange::new(0x0000, 0xEFFF), 0).unwrap()
-        .device(AddressRange::new(0xF000, 0xF001), DeviceId(1), Box::new(console)).unwrap()
-        .ram_with_fill(AddressRange::new(0xF002, 0xFFFF), 0).unwrap()
+        .ram_with_fill(AddressRange::new(0x0000, 0xEFFF), 0)
+        .unwrap()
+        .device(
+            AddressRange::new(0xF000, 0xF001),
+            DeviceId(1),
+            Box::new(console),
+        )
+        .unwrap()
+        .ram_with_fill(AddressRange::new(0xF002, 0xFFFF), 0)
+        .unwrap()
         .build();
 
     let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -56,11 +66,7 @@ async fn free_run_console_output() {
     //   STA $F000  8D 00 F0   -- write 'B' to console
     //   BRA -2     80 FE      -- loop forever
     let prog: &[u8] = &[
-        0xA9, 0x41,
-        0x8D, 0x00, 0xF0,
-        0xA9, 0x42,
-        0x8D, 0x00, 0xF0,
-        0x80, 0xFE,
+        0xA9, 0x41, 0x8D, 0x00, 0xF0, 0xA9, 0x42, 0x8D, 0x00, 0xF0, 0x80, 0xFE,
     ];
     for (i, &b) in prog.iter().enumerate() {
         cpu.bus_mut().write(0x0200 + i as u16, b).unwrap();
@@ -85,8 +91,15 @@ async fn free_run_console_output() {
 
     let cpu = handle.take_cpu().await;
 
-    assert_eq!(received, vec![0x41, 0x42], "expected 'A' then 'B' on the transport");
-    assert!(cpu.cycles() > 0, "CPU should have executed at least one instruction");
+    assert_eq!(
+        received,
+        vec![0x41, 0x42],
+        "expected 'A' then 'B' on the transport"
+    );
+    assert!(
+        cpu.cycles() > 0,
+        "CPU should have executed at least one instruction"
+    );
 }
 
 /// Verifies that bus trace records captured during CPU execution carry the correct
@@ -106,7 +119,8 @@ fn bus_trace_captures_reads_and_writes() {
     let records = Arc::new(Mutex::new(Vec::<TraceRecord>::new()));
 
     let bus = Bus::config()
-        .ram_with_fill(AddressRange::new(0x0000, 0xFFFF), 0).unwrap()
+        .ram_with_fill(AddressRange::new(0x0000, 0xFFFF), 0)
+        .unwrap()
         .build();
 
     let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -121,12 +135,7 @@ fn bus_trace_captures_reads_and_writes() {
     //   STA $0300  8D 00 03
     //   LDA $0300  AD 00 03
     //   STP        DB
-    let prog: &[u8] = &[
-        0xA9, 0x55,
-        0x8D, 0x00, 0x03,
-        0xAD, 0x00, 0x03,
-        0xDB,
-    ];
+    let prog: &[u8] = &[0xA9, 0x55, 0x8D, 0x00, 0x03, 0xAD, 0x00, 0x03, 0xDB];
     for (i, &b) in prog.iter().enumerate() {
         cpu.bus_mut().write(0x0200 + i as u16, b).unwrap();
     }
@@ -154,30 +163,53 @@ fn bus_trace_captures_reads_and_writes() {
     let recs = records.lock().unwrap();
 
     // Exactly one write to $0300 with value $55.
-    let writes_to_0300: Vec<_> = recs.iter()
+    let writes_to_0300: Vec<_> = recs
+        .iter()
         .filter(|r| matches!(r.kind, TraceKind::Write { addr: 0x0300, .. }))
         .collect();
-    assert_eq!(writes_to_0300.len(), 1, "expected exactly one write to $0300");
+    assert_eq!(
+        writes_to_0300.len(),
+        1,
+        "expected exactly one write to $0300"
+    );
     match writes_to_0300[0].kind {
         TraceKind::Write { value, .. } => assert_eq!(value, 0x55),
         _ => unreachable!(),
     }
 
     // At least one read from $0300 with value $55.
-    let reads_from_0300: Vec<_> = recs.iter()
+    let reads_from_0300: Vec<_> = recs
+        .iter()
         .filter(|r| matches!(r.kind, TraceKind::Read { addr: 0x0300, .. }))
         .collect();
-    assert!(!reads_from_0300.is_empty(), "expected at least one read from $0300");
     assert!(
-        reads_from_0300.iter().any(|r| matches!(r.kind, TraceKind::Read { value: 0x55, .. })),
+        !reads_from_0300.is_empty(),
+        "expected at least one read from $0300"
+    );
+    assert!(
+        reads_from_0300
+            .iter()
+            .any(|r| matches!(r.kind, TraceKind::Read { value: 0x55, .. })),
         "read from $0300 should yield $55",
     );
 
     // At least one fetch of the LDA-immediate opcode ($A9) from $0200.
-    let fetches_0200: Vec<_> = recs.iter()
-        .filter(|r| matches!(r.kind, TraceKind::Read { addr: 0x0200, value: 0xA9 }))
+    let fetches_0200: Vec<_> = recs
+        .iter()
+        .filter(|r| {
+            matches!(
+                r.kind,
+                TraceKind::Read {
+                    addr: 0x0200,
+                    value: 0xA9
+                }
+            )
+        })
         .collect();
-    assert!(!fetches_0200.is_empty(), "expected opcode fetch from $0200 (LDA #imm = $A9)");
+    assert!(
+        !fetches_0200.is_empty(),
+        "expected opcode fetch from $0200 (LDA #imm = $A9)"
+    );
 
     // Instruction ids are monotonically non-decreasing across the whole trace.
     for window in recs.windows(2) {
@@ -191,16 +223,22 @@ fn bus_trace_captures_reads_and_writes() {
 
     // The Registers snapshot immediately preceding the STA $0300 write already
     // shows A = $55, confirming pre-instruction timing on a real program.
-    let write_pos = recs.iter()
+    let write_pos = recs
+        .iter()
         .position(|r| matches!(r.kind, TraceKind::Write { addr: 0x0300, .. }))
         .unwrap();
-    let preceding_registers = recs[..write_pos].iter().rev()
+    let preceding_registers = recs[..write_pos]
+        .iter()
+        .rev()
         .find_map(|r| match r.kind {
             TraceKind::Registers(regs) => Some(regs),
             _ => None,
         })
         .expect("a Registers record should precede the STA $0300 write");
-    assert_eq!(preceding_registers.a, 0x55, "A should already hold $55 before STA executes");
+    assert_eq!(
+        preceding_registers.a, 0x55,
+        "A should already hold $55 before STA executes"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -211,9 +249,16 @@ fn bus_trace_captures_reads_and_writes() {
 /// and setting the reset vector to $0200.
 fn build_acia_cpu(acia: R6551, prog: &[u8]) -> emma65::emulator::Cpu {
     let bus = Bus::config()
-        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0).unwrap()
-        .device(AddressRange::new(0xDF00, 0xDF03), DeviceId(1), Box::new(acia.with_address(0xDF00))).unwrap()
-        .ram_with_fill(AddressRange::new(0xDF04, 0xFFFF), 0).unwrap()
+        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0)
+        .unwrap()
+        .device(
+            AddressRange::new(0xDF00, 0xDF03),
+            DeviceId(1),
+            Box::new(acia.with_address(0xDF00)),
+        )
+        .unwrap()
+        .ram_with_fill(AddressRange::new(0xDF04, 0xFFFF), 0)
+        .unwrap()
         .build();
     let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
         .clock_speed(ClockSpeed::mhz(1.8432))
@@ -242,7 +287,10 @@ async fn _external_clock_throughput_at_1_8432_mhz() {
     let (local, _remote) = InternalPipeTransport::pair_direct().unwrap();
     let (tx, rx) = crossbeam_channel::unbounded::<u8>();
     let mut acia = R6551::new(""); // control defaults to 0x00 → external clock
-    acia.attach_transport(Box::new(local), TransportRelay::Byte(ChannelRelay::spawn(rx, 256)));
+    acia.attach_transport(
+        Box::new(local),
+        TransportRelay::Byte(ChannelRelay::spawn(rx, 256)),
+    );
 
     // Program: poll RDRF (status bit 3), read each byte into $0300+X, loop N times, STP.
     // $0200: LDA #$03       A9 03      -- IRD and DTR bits
@@ -259,18 +307,8 @@ async fn _external_clock_throughput_at_1_8432_mhz() {
     // $0217: BNE loop       D0 EE      -- next PC=$0219, target=$0207, offset=-18=0xEE
     // $0219: STP            DB
     let prog: &[u8] = &[
-        0xA9, 0x03,
-        0x8D, 0x02, 0xDF,
-        0xA2, 0x00,
-        0xAD, 0x01, 0xDF,
-        0x29, 0x08,
-        0xF0, 0xF9,
-        0xAD, 0x00, 0xDF,
-        0x9D, 0x00, 0x03,
-        0xE8,
-        0xE0, N as u8,
-        0xD0, 0xEE,
-        0xDB,
+        0xA9, 0x03, 0x8D, 0x02, 0xDF, 0xA2, 0x00, 0xAD, 0x01, 0xDF, 0x29, 0x08, 0xF0, 0xF9, 0xAD,
+        0x00, 0xDF, 0x9D, 0x00, 0x03, 0xE8, 0xE0, N as u8, 0xD0, 0xEE, 0xDB,
     ];
 
     let cpu = build_acia_cpu(acia, prog);
@@ -284,10 +322,9 @@ async fn _external_clock_throughput_at_1_8432_mhz() {
     let handle = run(cpu);
 
     // The program ends with STP; wait for it with a 2-second wall-clock ceiling.
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        handle.wait(),
-    ).await.expect("R6551 external-clock throughput test timed out");
+    let result = tokio::time::timeout(std::time::Duration::from_secs(2), handle.wait())
+        .await
+        .expect("R6551 external-clock throughput test timed out");
 
     assert!(
         matches!(result, StepResult::Stopped),
@@ -314,9 +351,11 @@ async fn _19200_baud_throughput_at_1_8432_mhz() {
 
     let (local, _remote) = InternalPipeTransport::pair_direct().unwrap();
     let (tx, rx) = crossbeam_channel::unbounded::<u8>();
-    let mut acia = R6551::new("")
-        .with_clock_hz(CLOCK_HZ);
-    acia.attach_transport(Box::new(local), TransportRelay::Byte(ChannelRelay::spawn(rx, 256)));
+    let mut acia = R6551::new("").with_clock_hz(CLOCK_HZ);
+    acia.attach_transport(
+        Box::new(local),
+        TransportRelay::Byte(ChannelRelay::spawn(rx, 256)),
+    );
 
     // Control = 0x1F: internal clock (bit 4=1), 19200 baud (bits 3-0 = 0xF)
     // Write control register in the program before polling.
@@ -336,20 +375,9 @@ async fn _19200_baud_throughput_at_1_8432_mhz() {
     // $021C: BNE loop       D0 EE      -- next PC=$021E, target=$020C, offset=-18=0xEE
     // $021E: STP            DB
     let prog: &[u8] = &[
-        0xA9, 0x1F,
-        0x8D, 0x03, 0xDF,
-        0xA9, 0x03,
-        0x8D, 0x02, 0xDF,
-        0xA2, 0x00,
-        0xAD, 0x01, 0xDF,
-        0x29, 0x08,
-        0xF0, 0xF9,
-        0xAD, 0x00, 0xDF,
-        0x9D, 0x00, 0x03,
-        0xE8,
-        0xE0, N as u8,
-        0xD0, 0xEE,
-        0xDB,
+        0xA9, 0x1F, 0x8D, 0x03, 0xDF, 0xA9, 0x03, 0x8D, 0x02, 0xDF, 0xA2, 0x00, 0xAD, 0x01, 0xDF,
+        0x29, 0x08, 0xF0, 0xF9, 0xAD, 0x00, 0xDF, 0x9D, 0x00, 0x03, 0xE8, 0xE0, N as u8, 0xD0,
+        0xEE, 0xDB,
     ];
 
     let cpu = build_acia_cpu(acia, prog);
@@ -365,7 +393,9 @@ async fn _19200_baud_throughput_at_1_8432_mhz() {
     let (result, cpu) = tokio::time::timeout(
         std::time::Duration::from_secs(5),
         handle.take_cpu_with_result(),
-    ).await.expect("R6551 19200 baud throughput test timed out");
+    )
+    .await
+    .expect("R6551 19200 baud throughput test timed out");
     let elapsed = wall_start.elapsed();
 
     assert!(
@@ -406,12 +436,18 @@ async fn mc6850_throughput_at_1_8432_mhz() {
     let (local, _remote) = InternalPipeTransport::pair_direct().unwrap();
     let (tx, rx) = crossbeam_channel::unbounded::<u8>();
     let mut mc = Mc6850::new("mc6580").with_address(0xDF00);
-    mc.attach_transport(Box::new(local), TransportRelay::Byte(ChannelRelay::spawn(rx, 256)));
+    mc.attach_transport(
+        Box::new(local),
+        TransportRelay::Byte(ChannelRelay::spawn(rx, 256)),
+    );
 
     let bus = Bus::config()
-        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0).unwrap()
-        .device(AddressRange::new(0xDF00, 0xDF01), DeviceId(1), Box::new(mc)).unwrap()
-        .ram_with_fill(AddressRange::new(0xDF02, 0xFFFF), 0).unwrap()
+        .ram_with_fill(AddressRange::new(0x0000, 0xDEFF), 0)
+        .unwrap()
+        .device(AddressRange::new(0xDF00, 0xDF01), DeviceId(1), Box::new(mc))
+        .unwrap()
+        .ram_with_fill(AddressRange::new(0xDF02, 0xFFFF), 0)
+        .unwrap()
         .build();
 
     // Program: write control (CD=10, RIE=0, TC=00), poll RDRF (status bit 0), receive N bytes.
@@ -429,17 +465,8 @@ async fn mc6850_throughput_at_1_8432_mhz() {
     // $0217: BNE loop       D0 EE      -- next PC=$0219, target=$0207, offset=-18=0xEE
     // $0219: STP            DB
     let prog: &[u8] = &[
-        0xA9, 0x02, 0x8D, 0x00, 0xDF,
-        0xA2, 0x00,
-        0xAD, 0x00, 0xDF,
-        0x29, 0x01,
-        0xF0, 0xF9,
-        0xAD, 0x01, 0xDF,
-        0x9D, 0x00, 0x03,
-        0xE8,
-        0xE0, N as u8,
-        0xD0, 0xEE,
-        0xDB,
+        0xA9, 0x02, 0x8D, 0x00, 0xDF, 0xA2, 0x00, 0xAD, 0x00, 0xDF, 0x29, 0x01, 0xF0, 0xF9, 0xAD,
+        0x01, 0xDF, 0x9D, 0x00, 0x03, 0xE8, 0xE0, N as u8, 0xD0, 0xEE, 0xDB,
     ];
 
     let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -462,10 +489,9 @@ async fn mc6850_throughput_at_1_8432_mhz() {
 
     let handle = run(cpu);
 
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        handle.wait(),
-    ).await.expect("MC6850 throughput test timed out");
+    let result = tokio::time::timeout(std::time::Duration::from_secs(2), handle.wait())
+        .await
+        .expect("MC6850 throughput test timed out");
 
     assert!(
         matches!(result, StepResult::Stopped),

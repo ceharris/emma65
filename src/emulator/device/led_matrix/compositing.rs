@@ -18,7 +18,11 @@ impl Rgb565 {
     /// against out-of-range callers. The building block both `from_rgb888` and the (later)
     /// default palette are built on.
     pub fn new(r5: u8, g6: u8, b5: u8) -> Self {
-        Self { r: r5 & 0x1F, g: g6 & 0x3F, b: b5 & 0x1F }
+        Self {
+            r: r5 & 0x1F,
+            g: g6 & 0x3F,
+            b: b5 & 0x1F,
+        }
     }
 
     /// Mask (spec §4.2.1): shifts each 8-bit component down to its native bit width, discarding
@@ -56,15 +60,28 @@ impl Rgb565 {
 /// `power_on` and `brightness` apply `CMD_SET_POWER`/`CMD_SET_BRIGHTNESS`'s visible effect: a
 /// powered-off matrix composites to fully black (opaque) regardless of palette content; otherwise
 /// each channel is linearly scaled by `brightness / 255` via [`scale_channel`].
-pub fn composite_matrix(pixels: &[u8], palette: &[Rgb565], power_on: bool, brightness: u8) -> Vec<u8> {
-    debug_assert_eq!(pixels.len(), super::PIXELS_PER_MATRIX, "pixels must be exactly one matrix's worth");
+pub fn composite_matrix(
+    pixels: &[u8],
+    palette: &[Rgb565],
+    power_on: bool,
+    brightness: u8,
+) -> Vec<u8> {
+    debug_assert_eq!(
+        pixels.len(),
+        super::PIXELS_PER_MATRIX,
+        "pixels must be exactly one matrix's worth"
+    );
     debug_assert!(!palette.is_empty(), "palette must be non-empty");
 
     let mut rgba = vec![0u8; pixels.len() * 4];
     for (i, &index) in pixels.iter().enumerate() {
         let (r, g, b) = if power_on {
             let (r, g, b) = palette[index as usize % palette.len()].to_rgb888();
-            (scale_channel(r, brightness), scale_channel(g, brightness), scale_channel(b, brightness))
+            (
+                scale_channel(r, brightness),
+                scale_channel(g, brightness),
+                scale_channel(b, brightness),
+            )
         } else {
             (0, 0, 0)
         };
@@ -123,7 +140,11 @@ pub fn default_palette() -> Vec<Rgb565> {
     for r in 0..6u8 {
         for g in 0..6u8 {
             for b in 0..6u8 {
-                palette.push(Rgb565::new(round_scale(r, 31, 5), round_scale(g, 63, 5), round_scale(b, 31, 5)));
+                palette.push(Rgb565::new(
+                    round_scale(r, 31, 5),
+                    round_scale(g, 63, 5),
+                    round_scale(b, 31, 5),
+                ));
             }
         }
     }
@@ -152,15 +173,24 @@ mod tests {
     #[test]
     fn from_rgb888_masks_to_native_bit_width() {
         assert_eq!(Rgb565::from_rgb888(0x00, 0x00, 0x00), Rgb565::new(0, 0, 0));
-        assert_eq!(Rgb565::from_rgb888(0xFF, 0xFF, 0xFF), Rgb565::new(0x1F, 0x3F, 0x1F));
+        assert_eq!(
+            Rgb565::from_rgb888(0xFF, 0xFF, 0xFF),
+            Rgb565::new(0x1F, 0x3F, 0x1F)
+        );
         // A component not a multiple of 8 (red/blue) or 4 (green) is truncated, not rounded.
-        assert_eq!(Rgb565::from_rgb888(0x0F, 0x0F, 0x0F), Rgb565::new(0x01, 0x03, 0x01));
+        assert_eq!(
+            Rgb565::from_rgb888(0x0F, 0x0F, 0x0F),
+            Rgb565::new(0x01, 0x03, 0x01)
+        );
     }
 
     #[test]
     fn to_rgb888_round_trips_zero_and_max_exactly() {
         assert_eq!(Rgb565::new(0, 0, 0).to_rgb888(), (0x00, 0x00, 0x00));
-        assert_eq!(Rgb565::new(0x1F, 0x3F, 0x1F).to_rgb888(), (0xFF, 0xFF, 0xFF));
+        assert_eq!(
+            Rgb565::new(0x1F, 0x3F, 0x1F).to_rgb888(),
+            (0xFF, 0xFF, 0xFF)
+        );
     }
 
     #[test]
@@ -182,13 +212,23 @@ mod tests {
 
     #[test]
     fn zero_and_max_round_trip_exactly() {
-        assert_eq!(Rgb565::from_rgb888(0x00, 0x00, 0x00).to_rgb888(), (0x00, 0x00, 0x00));
-        assert_eq!(Rgb565::from_rgb888(0xFF, 0xFF, 0xFF).to_rgb888(), (0xFF, 0xFF, 0xFF));
+        assert_eq!(
+            Rgb565::from_rgb888(0x00, 0x00, 0x00).to_rgb888(),
+            (0x00, 0x00, 0x00)
+        );
+        assert_eq!(
+            Rgb565::from_rgb888(0xFF, 0xFF, 0xFF).to_rgb888(),
+            (0xFF, 0xFF, 0xFF)
+        );
     }
 
     #[test]
     fn composite_matrix_maps_each_pixel_to_its_palette_color() {
-        let palette = [Rgb565::new(0, 0, 0), Rgb565::new(0x1F, 0, 0), Rgb565::new(0, 0x3F, 0)];
+        let palette = [
+            Rgb565::new(0, 0, 0),
+            Rgb565::new(0x1F, 0, 0),
+            Rgb565::new(0, 0x3F, 0),
+        ];
         let mut pixels = vec![0u8; super::super::PIXELS_PER_MATRIX];
         pixels[0] = 1; // top-left: red
         pixels[super::super::PIXELS_PER_MATRIX - 1] = 2; // bottom-right: green
@@ -211,7 +251,15 @@ mod tests {
 
         let rgba = composite_matrix(&pixels, &palette, true, 0xFF);
 
-        assert_eq!(&rgba[0..4], &[palette[0].to_rgb888().0, palette[0].to_rgb888().1, palette[0].to_rgb888().2, 0xFF]);
+        assert_eq!(
+            &rgba[0..4],
+            &[
+                palette[0].to_rgb888().0,
+                palette[0].to_rgb888().1,
+                palette[0].to_rgb888().2,
+                0xFF
+            ]
+        );
     }
 
     #[test]
@@ -273,7 +321,11 @@ mod tests {
         // spec §2.1 worked values.
         assert_eq!(palette[0], Rgb565::new(0, 0, 0), "index 0 is black");
         assert_eq!(palette[9], Rgb565::new(31, 0, 0), "index 9 is bright red");
-        assert_eq!(palette[255], Rgb565::new(31, 63, 31), "index 255 is the top of the grayscale ramp");
+        assert_eq!(
+            palette[255],
+            Rgb565::new(31, 63, 31),
+            "index 255 is the top of the grayscale ramp"
+        );
     }
 
     #[test]

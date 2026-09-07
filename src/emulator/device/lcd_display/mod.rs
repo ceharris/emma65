@@ -83,7 +83,9 @@ impl Geometry {
     /// to apply `line_shift` correctly and is handed only a `&Geometry`, not this device's own
     /// precomputed `dual_line` field.
     pub(crate) fn is_dual_line(&self) -> bool {
-        self.segments.iter().any(|row| row.iter().any(|&(start, _)| start >= 0x40))
+        self.segments
+            .iter()
+            .any(|row| row.iter().any(|&(start, _)| start >= 0x40))
     }
 }
 
@@ -147,10 +149,18 @@ impl AddressCounterTarget {
     fn advance(&mut self, forward: bool) {
         match self {
             AddressCounterTarget::Ddram(addr) => {
-                *addr = if forward { (*addr + 1) % 80 } else { (*addr + 80 - 1) % 80 };
+                *addr = if forward {
+                    (*addr + 1) % 80
+                } else {
+                    (*addr + 80 - 1) % 80
+                };
             }
             AddressCounterTarget::Cgram(addr) => {
-                *addr = if forward { (*addr + 1) % 64 } else { (*addr + 64 - 1) % 64 };
+                *addr = if forward {
+                    (*addr + 1) % 64
+                } else {
+                    (*addr + 64 - 1) % 64
+                };
             }
         }
     }
@@ -258,7 +268,11 @@ impl LcdDisplay {
         background: Rgb24,
         foreground: Rgb24,
     ) -> Self {
-        debug_assert_eq!(address_range.len(), 2, "LcdDisplay's bus footprint is always 2 bytes (spec §4.1)");
+        debug_assert_eq!(
+            address_range.len(),
+            2,
+            "LcdDisplay's bus footprint is always 2 bytes (spec §4.1)"
+        );
         Self {
             name,
             address_range,
@@ -331,7 +345,12 @@ impl LcdDisplay {
     /// `transport`; thereafter [`Self::push_frame`] also sends a frame message over it whenever it
     /// sends one to the frame sink (if attached).
     pub fn attach_external_transport(&mut self, mut transport: Box<dyn Transport>) {
-        let header = protocol::encode_header(self.geometry.columns, self.geometry.rows, self.background, self.foreground);
+        let header = protocol::encode_header(
+            self.geometry.columns,
+            self.geometry.rows,
+            self.background,
+            self.foreground,
+        );
         transport.send_bytes(&header);
         self.external_transport = Some(transport);
     }
@@ -345,10 +364,16 @@ impl LcdDisplay {
     /// doc §6, §7), so `cursor_blink` just selects a static solid-block-vs-underline style.
     fn compositing_cursor(&self) -> CursorState {
         let position = match self.ac {
-            AddressCounterTarget::Ddram(addr) => compositing::ddram_cursor_position(addr, self.geometry, &self.line_shift),
+            AddressCounterTarget::Ddram(addr) => {
+                compositing::ddram_cursor_position(addr, self.geometry, &self.line_shift)
+            }
             AddressCounterTarget::Cgram(_) => None,
         };
-        CursorState { position, visible: self.cursor_on, blinking: self.cursor_blink }
+        CursorState {
+            position,
+            visible: self.cursor_on,
+            blinking: self.cursor_blink,
+        }
     }
 
     /// Composites the current display state and pushes it to the frame sink, if attached (design
@@ -388,14 +413,20 @@ impl LcdDisplay {
             // still-pending older frame is implicitly replaced here, since only the latest
             // composited state is ever worth delivering (see `pending_frame`'s doc comment, issue
             // #581).
-            self.pending_frame = if transport.has_outbound_capacity(message.len()) && transport.send_bytes(&message) {
+            self.pending_frame = if transport.has_outbound_capacity(message.len())
+                && transport.send_bytes(&message)
+            {
                 None
             } else {
                 Some(message)
             };
         }
         if let Some(sink) = &self.frame_sink {
-            let frame = LcdDisplayFrame { pixels, columns: self.geometry.columns, rows: self.geometry.rows };
+            let frame = LcdDisplayFrame {
+                pixels,
+                columns: self.geometry.columns,
+                rows: self.geometry.rows,
+            };
             // As with `external_transport` above, a still-pending older frame is implicitly
             // replaced here, since only the latest composited state is ever worth delivering
             // (issue #598, mirroring `pending_frame`'s issue #581 treatment).
@@ -414,7 +445,8 @@ impl LcdDisplay {
     /// Sets `busy_cycles_remaining` from a duration in microseconds, converted to whole CPU
     /// cycles at the currently effective clock speed (spec §5).
     fn set_busy(&mut self, duration_us: u64) {
-        self.busy_cycles_remaining = ((self.clock_hz as u128 * duration_us as u128) / 1_000_000).max(1) as u64;
+        self.busy_cycles_remaining =
+            ((self.clock_hz as u128 * duration_us as u128) / 1_000_000).max(1) as u64;
     }
 
     /// Folds a raw HD44780 DDRAM address (as encoded in a `Set DDRAM Address` instruction, or as
@@ -534,7 +566,11 @@ impl LcdDisplay {
     fn shift_display(&mut self, forward: bool) {
         let (count, modulus): (usize, u8) = if self.dual_line { (2, 40) } else { (1, 80) };
         for offset in self.line_shift.iter_mut().take(count) {
-            *offset = if forward { (*offset + 1) % modulus } else { (*offset + modulus - 1) % modulus };
+            *offset = if forward {
+                (*offset + 1) % modulus
+            } else {
+                (*offset + modulus - 1) % modulus
+            };
         }
     }
 
@@ -694,7 +730,13 @@ impl IoDevice for LcdDisplay {
         self.ac = AddressCounterTarget::Ddram(0);
         self.line_shift = [0; 2];
         self.busy_cycles_remaining = 0;
-        log_msg!(self.log_sender, LogLevel::Info, LogCategory::Device, "{} reset", self.identity());
+        log_msg!(
+            self.log_sender,
+            LogLevel::Info,
+            LogCategory::Device,
+            "{} reset",
+            self.identity()
+        );
     }
 
     fn name(&self) -> &str {
@@ -726,32 +768,65 @@ mod tests {
     const DEVICE_NAME: &str = "lcd_display";
     const BASE_ADDRESS: u16 = 0xD000;
 
-    const DUAL_LINE_GEOMETRY: Geometry =
-        Geometry { rows: 2, columns: 16, segments: &[&[(0x00, 16)], &[(0x40, 16)]], supports_5x10: false };
-    const SINGLE_LINE_GEOMETRY: Geometry =
-        Geometry { rows: 1, columns: 40, segments: &[&[(0x00, 40)]], supports_5x10: false };
+    const DUAL_LINE_GEOMETRY: Geometry = Geometry {
+        rows: 2,
+        columns: 16,
+        segments: &[&[(0x00, 16)], &[(0x40, 16)]],
+        supports_5x10: false,
+    };
+    const SINGLE_LINE_GEOMETRY: Geometry = Geometry {
+        rows: 1,
+        columns: 40,
+        segments: &[&[(0x00, 40)]],
+        supports_5x10: false,
+    };
     /// Mirrors the real `8-character-5x10`/`16-character-5x10` geometries (issue #603): the only
     /// two module layouts with the physical common-line count a true datasheet 5×10 glyph needs.
-    const TRUE_5X10_GEOMETRY: Geometry =
-        Geometry { rows: 1, columns: 8, segments: &[&[(0x00, 8)]], supports_5x10: true };
+    const TRUE_5X10_GEOMETRY: Geometry = Geometry {
+        rows: 1,
+        columns: 8,
+        segments: &[&[(0x00, 8)]],
+        supports_5x10: true,
+    };
 
     fn address_range() -> AddressRange {
         AddressRange::new(BASE_ADDRESS, BASE_ADDRESS + 1)
     }
 
     fn device() -> LcdDisplay {
-        LcdDisplay::new(DEVICE_NAME, address_range(), &DUAL_LINE_GEOMETRY, Some(1_000_000),
-            CgRom::default(), Rgb24::new(0, 0, 0), Rgb24::new(255, 255, 255))
+        LcdDisplay::new(
+            DEVICE_NAME,
+            address_range(),
+            &DUAL_LINE_GEOMETRY,
+            Some(1_000_000),
+            CgRom::default(),
+            Rgb24::new(0, 0, 0),
+            Rgb24::new(255, 255, 255),
+        )
     }
 
     fn single_line_device() -> LcdDisplay {
-        LcdDisplay::new(DEVICE_NAME, address_range(), &SINGLE_LINE_GEOMETRY, Some(1_000_000),
-            CgRom::default(), Rgb24::new(0, 0, 0), Rgb24::new(255, 255, 255))
+        LcdDisplay::new(
+            DEVICE_NAME,
+            address_range(),
+            &SINGLE_LINE_GEOMETRY,
+            Some(1_000_000),
+            CgRom::default(),
+            Rgb24::new(0, 0, 0),
+            Rgb24::new(255, 255, 255),
+        )
     }
 
     fn true_5x10_device() -> LcdDisplay {
-        LcdDisplay::new(DEVICE_NAME, address_range(), &TRUE_5X10_GEOMETRY, Some(1_000_000),
-            CgRom::default(), Rgb24::new(0, 0, 0), Rgb24::new(255, 255, 255))
+        LcdDisplay::new(
+            DEVICE_NAME,
+            address_range(),
+            &TRUE_5X10_GEOMETRY,
+            Some(1_000_000),
+            CgRom::default(),
+            Rgb24::new(0, 0, 0),
+            Rgb24::new(255, 255, 255),
+        )
     }
 
     fn instruction_addr() -> u16 {
@@ -782,7 +857,10 @@ mod tests {
         let device = device();
         assert_eq!(device.name(), DEVICE_NAME);
         assert_eq!(device.identity_address(), BASE_ADDRESS);
-        assert_eq!(device.identity(), format!("{DEVICE_NAME}@{BASE_ADDRESS:#06x}"));
+        assert_eq!(
+            device.identity(),
+            format!("{DEVICE_NAME}@{BASE_ADDRESS:#06x}")
+        );
     }
 
     #[test]
@@ -855,29 +933,49 @@ mod tests {
         device.write(instruction_addr(), 0x80); // Set DDRAM Address 0
         device.write(instruction_addr(), 0x00);
         tick_past_busy(&mut device);
-        assert_eq!(device.peek(data_addr()), 0x41, "the interleaved instruction must not disturb the in-progress data nibble pairing");
+        assert_eq!(
+            device.peek(data_addr()),
+            0x41,
+            "the interleaved instruction must not disturb the in-progress data nibble pairing"
+        );
     }
 
     #[test]
     fn busy_gates_a_too_early_access_without_extending_the_busy_period() {
         let mut device = device();
         device.write(instruction_addr(), 0x01); // Clear Display (long)
-        assert_ne!(device.peek(instruction_addr()) & 0x80, 0, "expected busy immediately after Clear Display");
+        assert_ne!(
+            device.peek(instruction_addr()) & 0x80,
+            0,
+            "expected busy immediately after Clear Display"
+        );
 
         // A write arriving while busy is discarded outright.
         device.write(data_addr(), 0xFF);
         device.tick(1); // not remotely enough to clear a long busy period
         assert_ne!(device.peek(instruction_addr()) & 0x80, 0, "still busy");
-        assert_eq!(device.peek(data_addr()), 0x20, "the discarded write must not have reached DDRAM");
+        assert_eq!(
+            device.peek(data_addr()),
+            0x20,
+            "the discarded write must not have reached DDRAM"
+        );
 
         tick_past_busy(&mut device);
-        assert_eq!(device.peek(instruction_addr()) & 0x80, 0, "busy must clear once its period elapses");
+        assert_eq!(
+            device.peek(instruction_addr()) & 0x80,
+            0,
+            "busy must clear once its period elapses"
+        );
 
         device.write(data_addr(), 0x41);
         tick_past_busy(&mut device);
         device.write(instruction_addr(), 0x80); // Set DDRAM Address 0
         tick_past_busy(&mut device);
-        assert_eq!(device.peek(data_addr()), 0x41, "a write after busy clears must succeed");
+        assert_eq!(
+            device.peek(data_addr()),
+            0x41,
+            "a write after busy clears must succeed"
+        );
     }
 
     #[test]
@@ -889,13 +987,21 @@ mod tests {
         // Clear Display (0x01), sent as two nibbles: high nibble 0x0_, low nibble 0x1_.
         device.write(instruction_addr(), 0x01);
         device.write(instruction_addr(), 0x10);
-        assert_ne!(device.peek(instruction_addr()) & 0x80, 0, "expected busy after Clear Display");
+        assert_ne!(
+            device.peek(instruction_addr()) & 0x80,
+            0,
+            "expected busy after Clear Display"
+        );
 
         // A second instruction, sent as two nibbles, arrives while busy: both nibbles are still
         // consumed by the nibble-pairing state machine, but the assembled instruction is discarded.
         device.write(instruction_addr(), 0x00);
         device.write(instruction_addr(), 0x60);
-        assert_ne!(device.peek(instruction_addr()) & 0x80, 0, "still busy; the discarded instruction must not have reset busy");
+        assert_ne!(
+            device.peek(instruction_addr()) & 0x80,
+            0,
+            "still busy; the discarded instruction must not have reset busy"
+        );
 
         tick_past_busy(&mut device);
         // Nibble state must be back to Idle (not stuck mid-pair) -- a fresh instruction assembles
@@ -939,7 +1045,11 @@ mod tests {
 
         device.write(data_addr(), 0x2A);
         tick_past_busy(&mut device);
-        assert_eq!(device.peek(instruction_addr()) & 0x7F, 0, "increment past 79 must wrap to 0");
+        assert_eq!(
+            device.peek(instruction_addr()) & 0x7F,
+            0,
+            "increment past 79 must wrap to 0"
+        );
     }
 
     #[test]
@@ -952,7 +1062,11 @@ mod tests {
 
         device.write(data_addr(), 0x2A);
         tick_past_busy(&mut device);
-        assert_eq!(device.peek(instruction_addr()) & 0x7F, 79, "decrement past 0 must wrap to 79");
+        assert_eq!(
+            device.peek(instruction_addr()) & 0x7F,
+            79,
+            "decrement past 0 must wrap to 79"
+        );
     }
 
     #[test]
@@ -964,7 +1078,11 @@ mod tests {
 
         device.write(data_addr(), 0x1F);
         tick_past_busy(&mut device);
-        assert_eq!(device.peek(instruction_addr()) & 0x7F, 0, "increment past 63 must wrap to 0");
+        assert_eq!(
+            device.peek(instruction_addr()) & 0x7F,
+            0,
+            "increment past 63 must wrap to 0"
+        );
     }
 
     #[test]
@@ -972,13 +1090,21 @@ mod tests {
         let mut device = device(); // DUAL_LINE_GEOMETRY
         device.write(instruction_addr(), 0xC0); // Set DDRAM Address 0x40 (raw): line 2, position 0
         tick_past_busy(&mut device);
-        assert_eq!(device.peek(instruction_addr()) & 0x7F, 40, "0x40 must fold to physical index 40, not 64");
+        assert_eq!(
+            device.peek(instruction_addr()) & 0x7F,
+            40,
+            "0x40 must fold to physical index 40, not 64"
+        );
 
         device.write(data_addr(), b'A');
         tick_past_busy(&mut device);
         device.write(instruction_addr(), 0x80); // Set DDRAM Address 0 (line 1)
         tick_past_busy(&mut device);
-        assert_eq!(device.peek(data_addr()), 0, "line 1's own address 0 must be untouched by the line-2 write");
+        assert_eq!(
+            device.peek(data_addr()),
+            0,
+            "line 1's own address 0 must be untouched by the line-2 write"
+        );
     }
 
     #[test]
@@ -1028,7 +1154,11 @@ mod tests {
 
         device.write(instruction_addr(), 0x80); // Set DDRAM Address 0
         tick_past_busy(&mut device);
-        assert_eq!(device.peek(data_addr()), 0x41, "Return Home must not touch DDRAM contents");
+        assert_eq!(
+            device.peek(data_addr()),
+            0x41,
+            "Return Home must not touch DDRAM contents"
+        );
     }
 
     #[test]
@@ -1036,7 +1166,11 @@ mod tests {
         let mut device = device(); // DUAL_LINE_GEOMETRY: two independent 40-byte lines
         device.write(instruction_addr(), 0x10 | 0x08 | 0x04); // SC=1, RL=1 (shift right)
         tick_past_busy(&mut device);
-        assert_eq!(device.line_shift, [1, 1], "a shared shift must move both lines, not just the one AC targets");
+        assert_eq!(
+            device.line_shift,
+            [1, 1],
+            "a shared shift must move both lines, not just the one AC targets"
+        );
     }
 
     #[test]
@@ -1050,11 +1184,23 @@ mod tests {
         device.write(instruction_addr(), 0x10 | 0x04); // SC=0, RL=1 (cursor right)
         tick_past_busy(&mut device);
 
-        assert_eq!(device.peek(instruction_addr()) & 0x7F, 1, "cursor-only shift must move the address counter");
-        assert_eq!(device.line_shift, [0, 0], "cursor-only shift must not touch shift offsets");
+        assert_eq!(
+            device.peek(instruction_addr()) & 0x7F,
+            1,
+            "cursor-only shift must move the address counter"
+        );
+        assert_eq!(
+            device.line_shift,
+            [0, 0],
+            "cursor-only shift must not touch shift offsets"
+        );
         device.write(instruction_addr(), 0x80); // Set DDRAM Address 0
         tick_past_busy(&mut device);
-        assert_eq!(device.peek(data_addr()), 0x41, "cursor-only shift must not touch DDRAM contents");
+        assert_eq!(
+            device.peek(data_addr()),
+            0x41,
+            "cursor-only shift must not touch DDRAM contents"
+        );
     }
 
     #[test]
@@ -1066,7 +1212,11 @@ mod tests {
         device.write(data_addr(), b'A');
         tick_past_busy(&mut device);
 
-        assert_eq!(device.line_shift, [39, 39], "S accompanying a decrementing write must shift backward");
+        assert_eq!(
+            device.line_shift,
+            [39, 39],
+            "S accompanying a decrementing write must shift backward"
+        );
     }
 
     #[test]
@@ -1089,7 +1239,11 @@ mod tests {
 
         let received = rx.recv().unwrap();
         assert_eq!(received.category, LogCategory::Device);
-        assert!(received.message.contains("5x10"), "expected a 5x10-related warning, got: {}", received.message);
+        assert!(
+            received.message.contains("5x10"),
+            "expected a 5x10-related warning, got: {}",
+            received.message
+        );
     }
 
     #[test]
@@ -1102,7 +1256,11 @@ mod tests {
 
         let received = rx.recv().unwrap();
         assert_eq!(received.category, LogCategory::Device);
-        assert!(received.message.contains("dual-line"), "expected a dual-line-related warning, got: {}", received.message);
+        assert!(
+            received.message.contains("dual-line"),
+            "expected a dual-line-related warning, got: {}",
+            received.message
+        );
     }
 
     #[test]
@@ -1145,7 +1303,10 @@ mod tests {
         device.reset();
         let received = rx.recv().unwrap();
         assert_eq!(received.category, LogCategory::Device);
-        assert_eq!(received.message, format!("{DEVICE_NAME}@0x{BASE_ADDRESS:04x} reset"));
+        assert_eq!(
+            received.message,
+            format!("{DEVICE_NAME}@0x{BASE_ADDRESS:04x} reset")
+        );
     }
 
     #[test]
@@ -1156,7 +1317,9 @@ mod tests {
 
         device.write(data_addr(), 0x41);
 
-        let frame = rx.try_recv().expect("expected a composited frame after a completed data write");
+        let frame = rx
+            .try_recv()
+            .expect("expected a composited frame after a completed data write");
         assert_eq!(frame.columns, 16);
         assert_eq!(frame.rows, 2);
         assert_eq!(frame.pixels.len(), 16 * 5 * 2 * 8 * 4);
@@ -1169,7 +1332,10 @@ mod tests {
         device.attach_frame_sink(tx);
 
         device.write(instruction_addr(), 0x08 | 0x04); // Display On/Off Control, D=1
-        assert!(rx.try_recv().is_ok(), "expected a composited frame after a completed instruction");
+        assert!(
+            rx.try_recv().is_ok(),
+            "expected a composited frame after a completed instruction"
+        );
     }
 
     #[test]
@@ -1179,10 +1345,14 @@ mod tests {
         device.attach_frame_sink(tx);
 
         device.write(instruction_addr(), 0x01); // Clear Display (long busy)
-        rx.try_recv().expect("expected a frame from the Clear Display instruction itself");
+        rx.try_recv()
+            .expect("expected a frame from the Clear Display instruction itself");
 
         device.write(data_addr(), 0xFF); // discarded while busy
-        assert!(rx.try_recv().is_err(), "a busy-discarded write must not push a frame");
+        assert!(
+            rx.try_recv().is_err(),
+            "a busy-discarded write must not push a frame"
+        );
     }
 
     #[test]
@@ -1196,7 +1366,10 @@ mod tests {
         let (tx, mut rx) = mpsc::channel(4);
         device.attach_frame_sink(tx);
         device.read(data_addr());
-        assert!(rx.try_recv().is_err(), "a read must never push a frame (spec §8.3 lists only writes)");
+        assert!(
+            rx.try_recv().is_err(),
+            "a read must never push a frame (spec §8.3 lists only writes)"
+        );
     }
 
     #[test]
@@ -1208,11 +1381,15 @@ mod tests {
         device.shutdown();
 
         device.write(data_addr(), 0x41);
-        assert!(rx.try_recv().is_err(), "channel should be closed once the sink is dropped");
+        assert!(
+            rx.try_recv().is_err(),
+            "channel should be closed once the sink is dropped"
+        );
     }
 
     #[test]
-    fn a_frame_that_cannot_be_sent_immediately_to_the_frame_sink_is_retried_on_tick_until_it_succeeds() {
+    fn a_frame_that_cannot_be_sent_immediately_to_the_frame_sink_is_retried_on_tick_until_it_succeeds()
+     {
         // Regression test for issue #598: previously, `push_frame` handed a frame to `frame_sink`
         // with a bare `try_send` and discarded the result, so a channel the debugger's LCD Display
         // bridge task hadn't drained yet silently and permanently lost that frame -- unlike
@@ -1226,15 +1403,24 @@ mod tests {
         tick_past_busy(&mut device);
 
         device.write(data_addr(), 0x42); // channel is still full: must be stashed, not dropped
-        assert!(device.pending_sink_frame.is_some(), "a failed try_send must be stashed for retry");
+        assert!(
+            device.pending_sink_frame.is_some(),
+            "a failed try_send must be stashed for retry"
+        );
 
         tick_past_busy(&mut device); // channel is still full: must remain pending, not be lost
         assert!(device.pending_sink_frame.is_some());
 
         rx.try_recv().unwrap(); // drain the first frame, freeing capacity for the retry
         tick_past_busy(&mut device);
-        assert!(device.pending_sink_frame.is_none(), "a retry that succeeds must clear the pending frame");
-        assert!(rx.try_recv().is_ok(), "the retried frame must have reached the sink");
+        assert!(
+            device.pending_sink_frame.is_none(),
+            "a retry that succeeds must clear the pending frame"
+        );
+        assert!(
+            rx.try_recv().is_ok(),
+            "the retried frame must have reached the sink"
+        );
     }
 
     #[test]
@@ -1247,19 +1433,32 @@ mod tests {
         tick_past_busy(&mut device); // fills the channel's one slot with the resulting (blank) frame
 
         device.write(data_addr(), 0x41); // channel still full (never drained): stashed as pending
-        let first_pending = device.pending_sink_frame.as_ref().expect("expected a stashed pending frame").pixels.clone();
+        let first_pending = device
+            .pending_sink_frame
+            .as_ref()
+            .expect("expected a stashed pending frame")
+            .pixels
+            .clone();
         tick_past_busy(&mut device); // clears busy without changing DDRAM content; retry still fails
 
         device.write(data_addr(), 0x42); // different DDRAM content -> a different composited frame
         let second_pending = device.pending_sink_frame.as_ref().unwrap().pixels.clone();
 
-        assert_ne!(first_pending, second_pending, "the newer frame must replace the older one, not queue behind it");
+        assert_ne!(
+            first_pending, second_pending,
+            "the newer frame must replace the older one, not queue behind it"
+        );
 
         rx.try_recv().unwrap(); // drain the original queued frame, freeing capacity for the retry
         tick_past_busy(&mut device);
         assert!(device.pending_sink_frame.is_none());
-        let delivered = rx.try_recv().expect("the retried frame must have reached the sink");
-        assert_eq!(delivered.pixels, second_pending, "only the latest frame should ever reach the sink, never a backlog");
+        let delivered = rx
+            .try_recv()
+            .expect("the retried frame must have reached the sink");
+        assert_eq!(
+            delivered.pixels, second_pending,
+            "only the latest frame should ever reach the sink, never a backlog"
+        );
     }
 
     // -- External transport (`plan/lcd-display-external-protocol.md`) --
@@ -1358,7 +1557,10 @@ mod tests {
         collect_bytes(&mut remote); // drain the frame from the Clear Display instruction itself
 
         device.write(data_addr(), 0xFF); // discarded while busy
-        assert!(collect_bytes(&mut remote).is_empty(), "a busy-discarded write must not send a frame message");
+        assert!(
+            collect_bytes(&mut remote).is_empty(),
+            "a busy-discarded write must not send a frame message"
+        );
     }
 
     #[test]
@@ -1366,7 +1568,10 @@ mod tests {
         let (mut device, mut remote) = device_with_external_transport();
         collect_bytes(&mut remote); // drain the header
         device.read(data_addr());
-        assert!(collect_bytes(&mut remote).is_empty(), "a read must never send a frame message (spec §8.3 lists only writes)");
+        assert!(
+            collect_bytes(&mut remote).is_empty(),
+            "a read must never send a frame message (spec §8.3 lists only writes)"
+        );
     }
 
     #[test]
@@ -1399,7 +1604,8 @@ mod tests {
 
     impl ControllableTransportHandle {
         fn set_accepting(&self, accepting: bool) {
-            self.accepting.store(accepting, std::sync::atomic::Ordering::SeqCst);
+            self.accepting
+                .store(accepting, std::sync::atomic::Ordering::SeqCst);
         }
 
         fn sent(&self) -> Vec<Vec<u8>> {
@@ -1422,7 +1628,12 @@ mod tests {
                 send_attempts: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
                 sent: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             };
-            (Self { handle: handle.clone() }, handle)
+            (
+                Self {
+                    handle: handle.clone(),
+                },
+                handle,
+            )
         }
     }
 
@@ -1432,8 +1643,14 @@ mod tests {
         }
 
         fn send_bytes(&mut self, bytes: &[u8]) -> bool {
-            self.handle.send_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            if self.handle.accepting.load(std::sync::atomic::Ordering::SeqCst) {
+            self.handle
+                .send_attempts
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if self
+                .handle
+                .accepting
+                .load(std::sync::atomic::Ordering::SeqCst)
+            {
                 self.handle.sent.lock().unwrap().push(bytes.to_vec());
                 true
             } else {
@@ -1442,7 +1659,9 @@ mod tests {
         }
 
         fn has_outbound_capacity(&self, _len: usize) -> bool {
-            self.handle.accepting.load(std::sync::atomic::Ordering::SeqCst)
+            self.handle
+                .accepting
+                .load(std::sync::atomic::Ordering::SeqCst)
         }
 
         fn is_connected(&self) -> bool {
@@ -1460,7 +1679,10 @@ mod tests {
         device.attach_external_transport(Box::new(transport)); // header itself is dropped here
 
         device.write(data_addr(), 0x41);
-        assert!(device.pending_frame.is_some(), "a failed send must be stashed for retry");
+        assert!(
+            device.pending_frame.is_some(),
+            "a failed send must be stashed for retry"
+        );
 
         tick_past_busy(&mut device); // still failing: must remain pending, not be lost
         assert!(device.pending_frame.is_some());
@@ -1468,7 +1690,10 @@ mod tests {
 
         handle.set_accepting(true);
         tick_past_busy(&mut device);
-        assert!(device.pending_frame.is_none(), "a retry that succeeds must clear the pending frame");
+        assert!(
+            device.pending_frame.is_none(),
+            "a retry that succeeds must clear the pending frame"
+        );
         assert_eq!(handle.sent().len(), 1);
     }
 
@@ -1485,24 +1710,35 @@ mod tests {
         let (transport, handle) = ControllableTransport::new();
         handle.set_accepting(false);
         device.attach_external_transport(Box::new(transport));
-        handle.send_attempts.store(0, std::sync::atomic::Ordering::SeqCst); // discount the header send
+        handle
+            .send_attempts
+            .store(0, std::sync::atomic::Ordering::SeqCst); // discount the header send
 
         device.write(data_addr(), 0x41);
         assert!(device.pending_frame.is_some());
-        assert_eq!(handle.send_attempts(), 0, "a known-congested channel must not even be attempted");
+        assert_eq!(
+            handle.send_attempts(),
+            0,
+            "a known-congested channel must not even be attempted"
+        );
 
         for _ in 0..1000 {
             tick_past_busy(&mut device);
         }
         assert_eq!(
-            handle.send_attempts(), 0,
+            handle.send_attempts(),
+            0,
             "retrying against a still-congested channel must never attempt the send, no matter how many ticks pass"
         );
         assert!(device.pending_frame.is_some());
 
         handle.set_accepting(true);
         tick_past_busy(&mut device);
-        assert_eq!(handle.send_attempts(), 1, "capacity becoming available must trigger exactly one attempt");
+        assert_eq!(
+            handle.send_attempts(),
+            1,
+            "capacity becoming available must trigger exactly one attempt"
+        );
         assert!(device.pending_frame.is_none());
     }
 
@@ -1523,12 +1759,19 @@ mod tests {
         device.write(data_addr(), 0x42); // different DDRAM content -> a different composited frame
         let second_pending = device.pending_frame.clone();
 
-        assert_ne!(first_pending, second_pending, "the newer frame must replace the older one, not queue behind it");
+        assert_ne!(
+            first_pending, second_pending,
+            "the newer frame must replace the older one, not queue behind it"
+        );
 
         handle.set_accepting(true);
         tick_past_busy(&mut device);
         let sent = handle.sent();
-        assert_eq!(sent.len(), 1, "only the latest frame should ever reach the transport, never a backlog");
+        assert_eq!(
+            sent.len(),
+            1,
+            "only the latest frame should ever reach the transport, never a backlog"
+        );
         assert_eq!(Some(sent[0].clone()), second_pending);
     }
 }

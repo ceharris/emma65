@@ -5,9 +5,9 @@ use std::sync::Mutex;
 use emma65::emulator::StatusRegister;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::CpuState;
 use crate::cpu_bus::{CpuBusCache, snapshot_cpu_bus};
 use crate::disassembly::LiveSnapshotRx;
-use crate::CpuState;
 
 /// Bitmask of P-register bits that changed on the most recent step.
 ///
@@ -48,7 +48,9 @@ pub enum RegisterField {
 
 /// Validates that `value` fits in a `u8`, for the byte-sized register fields.
 fn single_byte(value: u32, field: RegisterField) -> Result<u8, String> {
-    value.try_into().map_err(|_| format!("{field:?} value out of range: must be 0-255"))
+    value
+        .try_into()
+        .map_err(|_| format!("{field:?} value out of range: must be 0-255"))
 }
 
 /// Sets a single CPU register to `value`, interpreted per `field`'s width.
@@ -76,10 +78,13 @@ pub fn set_register(
         RegisterField::Y => cpu.registers_mut().y = single_byte(value, field)?,
         RegisterField::S => cpu.registers_mut().s = single_byte(value, field)?,
         RegisterField::P => {
-            cpu.registers_mut().p = StatusRegister::from_byte(single_byte(value, field)?) | StatusRegister::UNUSED;
+            cpu.registers_mut().p =
+                StatusRegister::from_byte(single_byte(value, field)?) | StatusRegister::UNUSED;
         }
         RegisterField::Pc => {
-            cpu.registers_mut().pc = value.try_into().map_err(|_| "Pc value out of range: must be 0-65535".to_string())?;
+            cpu.registers_mut().pc = value
+                .try_into()
+                .map_err(|_| "Pc value out of range: must be 0-65535".to_string())?;
         }
     }
 
@@ -133,7 +138,10 @@ pub fn get_registers(
         });
     }
     // CPU is free-running — read from the live snapshot channel.
-    let live = live_snapshot_rx.0.lock().unwrap()
+    let live = live_snapshot_rx
+        .0
+        .lock()
+        .unwrap()
         .as_ref()
         .and_then(|rx| rx.borrow().clone())
         .ok_or("CPU not ready")?;

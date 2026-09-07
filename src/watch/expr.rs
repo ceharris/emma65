@@ -1,11 +1,11 @@
 use super::token::Token;
 use std::fmt;
 
-/// The data type used for all watch expressions. 
-/// 
-/// * All operands are coerced to this type. 
+/// The data type used for all watch expressions.
+///
+/// * All operands are coerced to this type.
 /// * All operators have this as the result type.
-/// 
+///
 pub type Operand = u32;
 
 /// The width of a return value for a memory fetch operator.
@@ -21,7 +21,7 @@ pub enum FetchWidth {
 
 /// Type identifiers used to represent the operation implied by a token representing
 /// a binary operator.
-/// 
+///
 #[derive(Clone, Debug, PartialEq)]
 pub enum BinaryOperatorType {
     Add,
@@ -62,7 +62,7 @@ pub enum UnaryOperatorType {
 pub enum ExprType<'a> {
     /// A number whose value is given by the operand
     Number(Operand),
-    /// A register whose identity is given by the operand 
+    /// A register whose identity is given by the operand
     Register(Operand),
     /// A flag whose identity is given by the operand
     Flag(Operand),
@@ -73,7 +73,7 @@ pub enum ExprType<'a> {
     Assign(Operand, Box<Expr<'a>>),
     /// A unary operator of the specified type, whose operand is represented by the given expression.
     UnaryOperator(UnaryOperatorType, Box<Expr<'a>>),
-    /// A binary operator of the specified type, whose left and right operands are given by the 
+    /// A binary operator of the specified type, whose left and right operands are given by the
     /// given expressions, respectively.
     BinaryOperator(BinaryOperatorType, Box<Expr<'a>>, Box<Expr<'a>>),
 }
@@ -86,8 +86,12 @@ impl PartialEq for ExprType<'_> {
             (ExprType::Flag(a), ExprType::Flag(b)) => a == b,
             (ExprType::Variable(a), ExprType::Variable(b)) => a == b,
             (ExprType::Assign(a, ae), ExprType::Assign(b, be)) => a == b && ae == be,
-            (ExprType::UnaryOperator(a1, a2), ExprType::UnaryOperator(b1, b2)) => a1 == b1 && a2 == b2,
-            (ExprType::BinaryOperator(a1, a2, a3), ExprType::BinaryOperator(b1, b2, b3)) => a1 == b1 && a2 == b2 && a3 == b3,
+            (ExprType::UnaryOperator(a1, a2), ExprType::UnaryOperator(b1, b2)) => {
+                a1 == b1 && a2 == b2
+            }
+            (ExprType::BinaryOperator(a1, a2, a3), ExprType::BinaryOperator(b1, b2, b3)) => {
+                a1 == b1 && a2 == b2 && a3 == b3
+            }
             _ => false,
         }
     }
@@ -102,7 +106,9 @@ impl fmt::Debug for ExprType<'_> {
             ExprType::Variable(id) => write!(f, "(variable {:?})", id),
             ExprType::Assign(id, rhs) => write!(f, "(assign {:?} {:?})", id, rhs),
             ExprType::UnaryOperator(op_type, operand) => write!(f, "{:?} {:?}", op_type, operand),
-            ExprType::BinaryOperator(op_type, left, right) => write!(f, "{:?} {:?} {:?}", op_type, left, right),
+            ExprType::BinaryOperator(op_type, left, right) => {
+                write!(f, "{:?} {:?} {:?}", op_type, left, right)
+            }
         }
     }
 }
@@ -115,7 +121,6 @@ pub struct Expr<'a> {
 }
 
 impl<'a> Expr<'a> {
-
     pub fn number(token: &Token<'a>, value: u32) -> Self {
         Self {
             token: token.clone(),
@@ -157,7 +162,12 @@ impl<'a> Expr<'a> {
         }
     }
 
-    pub fn unary(op: &Token<'a>, op_type: UnaryOperatorType, operand: Expr<'a>, signed: bool) -> Self {
+    pub fn unary(
+        op: &Token<'a>,
+        op_type: UnaryOperatorType,
+        operand: Expr<'a>,
+        signed: bool,
+    ) -> Self {
         Self {
             token: op.clone(),
             expr_type: ExprType::UnaryOperator(op_type, Box::new(operand)),
@@ -165,7 +175,13 @@ impl<'a> Expr<'a> {
         }
     }
 
-    pub fn binary(op: &Token<'a>, op_type: BinaryOperatorType, left: Expr<'a>, right: Expr<'a>, signed: bool) -> Self {
+    pub fn binary(
+        op: &Token<'a>,
+        op_type: BinaryOperatorType,
+        left: Expr<'a>,
+        right: Expr<'a>,
+        signed: bool,
+    ) -> Self {
         Self {
             token: op.clone(),
             expr_type: ExprType::BinaryOperator(op_type, Box::new(left), Box::new(right)),

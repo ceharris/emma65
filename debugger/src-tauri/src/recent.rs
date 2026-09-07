@@ -56,9 +56,13 @@ pub fn load_and_prune_recent(dir: &Path) -> Vec<PathBuf> {
 /// Writes `paths` to `recent.toml` under `dir`, creating the directory if it doesn't exist.
 fn save_recent_to(dir: &Path, paths: &[PathBuf]) -> Result<(), String> {
     fs::create_dir_all(dir).map_err(|e| format!("Failed to create config directory: {e}"))?;
-    let config = RecentConfig { paths: paths.to_vec() };
-    let contents = toml::to_string(&config).map_err(|e| format!("Failed to serialize recent profiles: {e}"))?;
-    fs::write(dir.join("recent.toml"), contents).map_err(|e| format!("Failed to write recent profiles: {e}"))
+    let config = RecentConfig {
+        paths: paths.to_vec(),
+    };
+    let contents = toml::to_string(&config)
+        .map_err(|e| format!("Failed to serialize recent profiles: {e}"))?;
+    fs::write(dir.join("recent.toml"), contents)
+        .map_err(|e| format!("Failed to write recent profiles: {e}"))
 }
 
 /// Formats `path` for display in the Open Recent submenu: profiles under
@@ -110,8 +114,11 @@ pub(crate) fn record_recent_profile(app: &AppHandle, profile_dir: &Path) {
     // active. The submenu itself omits `profile_dir` — no point offering to
     // switch to the profile that's already active — and reads better
     // sorted by its visible label rather than by recency.
-    let mut entries: Vec<(String, PathBuf)> =
-        paths.iter().filter(|p| p.as_path() != profile_dir).map(|p| (display_label(p), p.clone())).collect();
+    let mut entries: Vec<(String, PathBuf)> = paths
+        .iter()
+        .filter(|p| p.as_path() != profile_dir)
+        .map(|p| (display_label(p), p.clone()))
+        .collect();
     entries.sort_by(|a, b| a.0.cmp(&b.0));
     rebuild_submenu(app, &entries, !paths.is_empty());
 }
@@ -161,7 +168,10 @@ pub(crate) fn emit_open_clear_recent_dialog(app: &AppHandle) {
 /// that only ever returns existing directories.
 pub(crate) async fn open_recent_profile(app: AppHandle, path: PathBuf) {
     if let Err(e) = fs::create_dir_all(&path) {
-        eprintln!("Failed to prepare profile directory {}: {e}", path.display());
+        eprintln!(
+            "Failed to prepare profile directory {}: {e}",
+            path.display()
+        );
         return;
     }
     if let Err(e) = profile::copy_missing_files_from_default(&path) {
@@ -176,7 +186,10 @@ mod tests {
     use crate::test_support::HOME_ENV_LOCK;
 
     fn temp_home(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("emma65-recent-test-{name}-{:?}", std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!(
+            "emma65-recent-test-{name}-{:?}",
+            std::thread::current().id()
+        ));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -184,7 +197,10 @@ mod tests {
 
     #[test]
     fn save_and_load_round_trip_via_tempdir() {
-        let dir = std::env::temp_dir().join(format!("emma65-recent-io-test-{:?}", std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!(
+            "emma65-recent-io-test-{:?}",
+            std::thread::current().id()
+        ));
         let paths = vec![PathBuf::from("/a/b"), PathBuf::from("/c/d")];
         save_recent_to(&dir, &paths).unwrap();
         let loaded = load_recent_from(&dir);
@@ -194,14 +210,19 @@ mod tests {
 
     #[test]
     fn load_recent_from_returns_empty_when_missing() {
-        let dir = std::env::temp_dir().join(format!("emma65-recent-missing-test-{:?}", std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!(
+            "emma65-recent-missing-test-{:?}",
+            std::thread::current().id()
+        ));
         assert!(load_recent_from(&dir).is_empty());
     }
 
     #[test]
     fn load_and_prune_recent_drops_entries_for_missing_directories() {
-        let dir = std::env::temp_dir()
-            .join(format!("emma65-recent-prune-test-{:?}", std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!(
+            "emma65-recent-prune-test-{:?}",
+            std::thread::current().id()
+        ));
         let _ = fs::remove_dir_all(&dir);
         let existing = dir.join("profiles/exists");
         fs::create_dir_all(&existing).unwrap();
@@ -217,8 +238,10 @@ mod tests {
 
     #[test]
     fn load_and_prune_recent_leaves_recent_toml_untouched_when_nothing_is_missing() {
-        let dir = std::env::temp_dir()
-            .join(format!("emma65-recent-prune-noop-test-{:?}", std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!(
+            "emma65-recent-prune-noop-test-{:?}",
+            std::thread::current().id()
+        ));
         let _ = fs::remove_dir_all(&dir);
         let existing = dir.join("profiles/exists");
         fs::create_dir_all(&existing).unwrap();

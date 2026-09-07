@@ -25,7 +25,10 @@ use std::net::SocketAddr;
 
 use tokio::net::TcpListener;
 
-use super::{CHANNEL_CAPACITY, ChannelRelay, ClientListener, ListenerCore, Transport, TransportEvent, TransportReporter};
+use super::{
+    CHANNEL_CAPACITY, ChannelRelay, ClientListener, ListenerCore, Transport, TransportEvent,
+    TransportReporter,
+};
 
 /// Transport that listens for incoming TCP socket connections.
 pub struct TcpSocketTransport {
@@ -39,7 +42,10 @@ impl TcpSocketTransport {
     /// Binds a TCP listener at `addr` and starts accepting connections,
     /// using the crate's default channel/ring capacity for both the
     /// inbound relay and the outbound ring.
-    pub async fn listen(addr: SocketAddr, reporter: TransportReporter) -> std::io::Result<(Self, ChannelRelay<TransportEvent>)> {
+    pub async fn listen(
+        addr: SocketAddr,
+        reporter: TransportReporter,
+    ) -> std::io::Result<(Self, ChannelRelay<TransportEvent>)> {
         Self::listen_with_capacity(addr, reporter, CHANNEL_CAPACITY).await
     }
 
@@ -94,7 +100,8 @@ impl ClientListener for TcpListener {
     }
 
     fn format_peer(info: Self::PeerInfo, conn_tag: u8) -> String {
-        info.map(|addr| addr.to_string()).unwrap_or_else(|_| format!("conn#{conn_tag}"))
+        info.map(|addr| addr.to_string())
+            .unwrap_or_else(|_| format!("conn#{conn_tag}"))
     }
 }
 
@@ -106,7 +113,13 @@ mod tests {
     use tokio::net::TcpStream;
 
     fn only_data(events: Vec<TransportEvent>) -> Vec<(u8, u8)> {
-        events.into_iter().filter_map(|e| match e { TransportEvent::Data(tag, byte) => Some((tag, byte)), _ => None }).collect()
+        events
+            .into_iter()
+            .filter_map(|e| match e {
+                TransportEvent::Data(tag, byte) => Some((tag, byte)),
+                _ => None,
+            })
+            .collect()
     }
 
     /// Shuts `transport` down (stopping the background Tokio tasks, not just
@@ -120,7 +133,12 @@ mod tests {
     }
 
     async fn make_transport() -> (TcpSocketTransport, ChannelRelay<TransportEvent>, SocketAddr) {
-        let (t, relay) = TcpSocketTransport::listen("127.0.0.1:0".parse().unwrap(), TransportReporter::pending(None)).await.unwrap();
+        let (t, relay) = TcpSocketTransport::listen(
+            "127.0.0.1:0".parse().unwrap(),
+            TransportReporter::pending(None),
+        )
+        .await
+        .unwrap();
         let addr = t.local_addr();
         (t, relay, addr)
     }
@@ -157,7 +175,13 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         let mut got = Vec::new();
         relay.drain_into(|event| got.push(event));
-        assert_eq!(only_data(got).into_iter().map(|(_, b)| b).collect::<Vec<_>>(), vec![0x01]);
+        assert_eq!(
+            only_data(got)
+                .into_iter()
+                .map(|(_, b)| b)
+                .collect::<Vec<_>>(),
+            vec![0x01]
+        );
         drop(c1);
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 
@@ -167,7 +191,13 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         let mut got2 = Vec::new();
         relay.drain_into(|event| got2.push(event));
-        assert_eq!(only_data(got2).into_iter().map(|(_, b)| b).collect::<Vec<_>>(), vec![0x02]);
+        assert_eq!(
+            only_data(got2)
+                .into_iter()
+                .map(|(_, b)| b)
+                .collect::<Vec<_>>(),
+            vec![0x02]
+        );
 
         close(transport, relay);
     }
@@ -187,7 +217,10 @@ mod tests {
         let (sender, mut receiver) = device_event_channel();
         let reporter = TransportReporter::pending(Some(sender));
         reporter.bind("test-device-103");
-        let (mut transport, relay) = TcpSocketTransport::listen("127.0.0.1:0".parse().unwrap(), reporter.clone()).await.unwrap();
+        let (mut transport, relay) =
+            TcpSocketTransport::listen("127.0.0.1:0".parse().unwrap(), reporter.clone())
+                .await
+                .unwrap();
 
         assert!(!transport.is_connected());
         for _ in 0..10 {
@@ -195,7 +228,10 @@ mod tests {
         }
 
         reporter.report_counts();
-        assert!(receiver.try_recv().is_err(), "sending with no client connected must not count as an outbound drop");
+        assert!(
+            receiver.try_recv().is_err(),
+            "sending with no client connected must not count as an outbound drop"
+        );
 
         close(transport, relay);
     }
@@ -247,12 +283,20 @@ mod tests {
         let mut events = Vec::new();
         relay.drain_into(|event| events.push(event));
 
-        let connected_tags: Vec<u8> = events.iter()
-            .filter_map(|e| match e { TransportEvent::Connected(tag) => Some(*tag), _ => None })
+        let connected_tags: Vec<u8> = events
+            .iter()
+            .filter_map(|e| match e {
+                TransportEvent::Connected(tag) => Some(*tag),
+                _ => None,
+            })
             .collect();
         let data = only_data(events.clone());
 
-        assert_eq!(connected_tags.len(), 2, "expected a Connected event for each client");
+        assert_eq!(
+            connected_tags.len(),
+            2,
+            "expected a Connected event for each client"
+        );
         assert_ne!(connected_tags[0], connected_tags[1]);
 
         assert_eq!(data.len(), 2);
@@ -283,7 +327,10 @@ mod tests {
                 saw_disconnect = true;
             }
         }
-        assert!(saw_disconnect, "expected a Disconnected event after dropping c1");
+        assert!(
+            saw_disconnect,
+            "expected a Disconnected event after dropping c1"
+        );
 
         drop(c2);
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
@@ -297,13 +344,22 @@ mod tests {
         let (sender, mut receiver) = device_event_channel();
         let reporter = TransportReporter::pending(Some(sender));
         reporter.bind("test-device-99");
-        let (mut transport, relay) = TcpSocketTransport::listen_with_capacity("127.0.0.1:0".parse().unwrap(), reporter.clone(), 1).await.unwrap();
+        let (mut transport, relay) = TcpSocketTransport::listen_with_capacity(
+            "127.0.0.1:0".parse().unwrap(),
+            reporter.clone(),
+            1,
+        )
+        .await
+        .unwrap();
         let addr = transport.local_addr();
 
         let _client = TcpStream::connect(addr).await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         assert!(transport.is_connected());
-        assert!(matches!(receiver.try_recv(), Ok(DeviceEvent::TransportConnected { .. })));
+        assert!(matches!(
+            receiver.try_recv(),
+            Ok(DeviceEvent::TransportConnected { .. })
+        ));
 
         // Capacity 1, two sends back-to-back with no `.await` in between —
         // the spawned Tokio task can't be scheduled to drain in between, so
@@ -329,12 +385,21 @@ mod tests {
         let (sender, mut receiver) = device_event_channel();
         let reporter = TransportReporter::pending(Some(sender));
         reporter.bind("test-device-100");
-        let (transport, relay) = TcpSocketTransport::listen_with_capacity("127.0.0.1:0".parse().unwrap(), reporter.clone(), 1).await.unwrap();
+        let (transport, relay) = TcpSocketTransport::listen_with_capacity(
+            "127.0.0.1:0".parse().unwrap(),
+            reporter.clone(),
+            1,
+        )
+        .await
+        .unwrap();
         let addr = transport.local_addr();
 
         let mut client = TcpStream::connect(addr).await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-        assert!(matches!(receiver.try_recv(), Ok(DeviceEvent::TransportConnected { .. })));
+        assert!(matches!(
+            receiver.try_recv(),
+            Ok(DeviceEvent::TransportConnected { .. })
+        ));
 
         // Never drain the relay: with channel/ring capacity 1, a burst large
         // enough is guaranteed to overflow before it's exhausted.
@@ -360,14 +425,20 @@ mod tests {
         let (sender, mut receiver) = device_event_channel();
         let reporter = TransportReporter::pending(Some(sender));
         reporter.bind("test-device-102");
-        let (transport, relay) = TcpSocketTransport::listen("127.0.0.1:0".parse().unwrap(), reporter).await.unwrap();
+        let (transport, relay) =
+            TcpSocketTransport::listen("127.0.0.1:0".parse().unwrap(), reporter)
+                .await
+                .unwrap();
         let addr = transport.local_addr();
 
         let client = TcpStream::connect(addr).await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
         let peer = match receiver.try_recv() {
-            Ok(DeviceEvent::TransportConnected { device, peer: Some(peer) }) => {
+            Ok(DeviceEvent::TransportConnected {
+                device,
+                peer: Some(peer),
+            }) => {
                 assert_eq!(device, "test-device-102");
                 assert!(!peer.is_empty());
                 peer
@@ -379,7 +450,11 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 
         match receiver.try_recv() {
-            Ok(DeviceEvent::TransportDisconnected { device, peer: Some(disconnected_peer), .. }) => {
+            Ok(DeviceEvent::TransportDisconnected {
+                device,
+                peer: Some(disconnected_peer),
+                ..
+            }) => {
                 assert_eq!(device, "test-device-102");
                 assert_eq!(disconnected_peer, peer);
             }

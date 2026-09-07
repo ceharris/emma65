@@ -62,7 +62,9 @@ impl PartialEq for ExprType<'_> {
             (ExprType::Number(a), ExprType::Number(b)) => a == b,
             (ExprType::Symbol(a), ExprType::Symbol(b)) => a == b,
             (ExprType::Unary(a1, a2), ExprType::Unary(b1, b2)) => a1 == b1 && a2 == b2,
-            (ExprType::Binary(a1, a2, a3), ExprType::Binary(b1, b2, b3)) => a1 == b1 && a2 == b2 && a3 == b3,
+            (ExprType::Binary(a1, a2, a3), ExprType::Binary(b1, b2, b3)) => {
+                a1 == b1 && a2 == b2 && a3 == b3
+            }
             (ExprType::Grouping(a), ExprType::Grouping(b)) => a == b,
             _ => false,
         }
@@ -75,7 +77,9 @@ impl fmt::Debug for ExprType<'_> {
             ExprType::Number(value) => write!(f, "(number {:?})", value),
             ExprType::Symbol(name) => write!(f, "(symbol {:?})", name),
             ExprType::Unary(op_type, operand) => write!(f, "{:?} {:?}", op_type, operand),
-            ExprType::Binary(op_type, left, right) => write!(f, "{:?} {:?} {:?}", op_type, left, right),
+            ExprType::Binary(op_type, left, right) => {
+                write!(f, "{:?} {:?} {:?}", op_type, left, right)
+            }
             ExprType::Grouping(inner) => write!(f, "(group {:?})", inner),
         }
     }
@@ -88,7 +92,6 @@ pub struct Expr<'a> {
 }
 
 impl<'a> Expr<'a> {
-
     pub fn number(token: &Token<'a>, value: Operand) -> Self {
         Self {
             token: token.clone(),
@@ -110,7 +113,12 @@ impl<'a> Expr<'a> {
         }
     }
 
-    pub fn binary(op: &Token<'a>, op_type: BinaryOperatorType, left: Expr<'a>, right: Expr<'a>) -> Self {
+    pub fn binary(
+        op: &Token<'a>,
+        op_type: BinaryOperatorType,
+        left: Expr<'a>,
+        right: Expr<'a>,
+    ) -> Self {
         Self {
             token: op.clone(),
             expr_type: ExprType::Binary(op_type, Box::new(left), Box::new(right)),

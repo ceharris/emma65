@@ -16,7 +16,6 @@ use super::expr::Operand;
 /// evaluated modulo the size of the address space.
 ///
 pub trait WatchContext {
-
     /// Reads the contents of a machine register, returning an unsigned value zero-extended
     /// to the width of [`Operand`].
     fn read_register_u32(&self, register_id: Operand) -> Operand;

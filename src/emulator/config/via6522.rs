@@ -1,4 +1,6 @@
-use super::{DeviceModule, DeviceModuleError, InstantiationContext, TransportSpec, TransportSpecFormat};
+use super::{
+    DeviceModule, DeviceModuleError, InstantiationContext, TransportSpec, TransportSpecFormat,
+};
 use crate::emulator::bus::DeviceIdAllocator;
 use crate::emulator::device::{ProtocolMessageEncoding, Via6522};
 use crate::emulator::{AddressRange, BusConfig, IoDevice, TransportRelay};
@@ -26,29 +28,34 @@ pub struct Via6522Attributes {
 }
 
 impl DeviceModule for Via6522Module {
-
     fn name(&self) -> &'static str {
         "via/6522"
     }
 
-    async fn instantiate(&self, bus_config: BusConfig, address: u16, 
-                         attributes: &HashMap<String, Value>, context: &InstantiationContext,
-                         id_allocator: Arc<Mutex<DeviceIdAllocator>>)
-            -> Result<BusConfig, DeviceModuleError> {
-        
+    async fn instantiate(
+        &self,
+        bus_config: BusConfig,
+        address: u16,
+        attributes: &HashMap<String, Value>,
+        context: &InstantiationContext,
+        id_allocator: Arc<Mutex<DeviceIdAllocator>>,
+    ) -> Result<BusConfig, DeviceModuleError> {
         let attrs = Dict::from_iter(attributes.clone());
         let config: Via6522Attributes = figment::Figment::new()
             .merge(Serialized::defaults(attrs))
             .extract()
             .map_err(|e| DeviceModuleError::Config(format!("configuration error: {e}")))?;
 
-        let transport_spec = config.transport
+        let transport_spec = config
+            .transport
             .map(TransportSpec::try_from)
             .transpose()
             .map_err(DeviceModuleError::Config)?;
 
         let irq = config.irq.unwrap_or(DEFAULT_IRQ);
-        let device_id = id_allocator.lock().unwrap()
+        let device_id = id_allocator
+            .lock()
+            .unwrap()
             .for_irq(irq)
             .map_err(DeviceModuleError::BusConfig)?;
 
@@ -59,14 +66,21 @@ impl DeviceModule for Via6522Module {
             }
             if let Some(transport_spec) = transport_spec {
                 let (transport, relay) = transport_spec
-                    .to_transport_with_reporter(context.transport_reporter(dev.identity()), context.pipe_exit_reporter(dev.identity())).await
+                    .to_transport_with_reporter(
+                        context.transport_reporter(dev.identity()),
+                        context.pipe_exit_reporter(dev.identity()),
+                    )
+                    .await
                     .map_err(DeviceModuleError::Transport)?;
                 let tagged_relay = match relay {
                     TransportRelay::Tagged(relay) => relay,
-                    TransportRelay::Byte(_) => return Err(DeviceModuleError::Config(
-                        "via/6522 requires a multipoint transport (tcp/unix); \
+                    TransportRelay::Byte(_) => {
+                        return Err(DeviceModuleError::Config(
+                            "via/6522 requires a multipoint transport (tcp/unix); \
                          point-to-point transports (pty/pipe) don't support per-client tagging"
-                            .to_string())),
+                                .to_string(),
+                        ));
+                    }
                 };
                 dev.attach_transport(transport, tagged_relay);
             }
@@ -76,10 +90,12 @@ impl DeviceModule for Via6522Module {
             dev
         };
 
-        bus_config.device(
-            AddressRange::new(address, address + (BUS_SIZE - 1)),
-            device_id, Box::new(device))
+        bus_config
+            .device(
+                AddressRange::new(address, address + (BUS_SIZE - 1)),
+                device_id,
+                Box::new(device),
+            )
             .map_err(DeviceModuleError::BusConfig)
     }
-
 }

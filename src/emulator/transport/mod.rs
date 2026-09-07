@@ -24,9 +24,9 @@
 //! still depends on the caller's thread exiting on its own.
 pub mod internal_pipe;
 pub mod pipe;
+pub mod pty;
 pub mod tcp_socket;
 pub mod unix_socket;
-pub mod pty;
 
 pub use self::internal_pipe::InternalPipeTransport;
 pub use self::pipe::PipeTransport;
@@ -121,8 +121,12 @@ impl TransportReporter {
     /// Reports a hard transport error. Currently only ever called with
     /// `TransportError::Io`.
     pub fn report_error(&self, error: TransportError) {
-        let Some(device) = self.device_name.get().cloned() else { return };
-        let Some(sender) = &self.error_sender else { return };
+        let Some(device) = self.device_name.get().cloned() else {
+            return;
+        };
+        let Some(sender) = &self.error_sender else {
+            return;
+        };
         let _ = sender.send(DeviceEvent::TransportError { device, error });
     }
 
@@ -150,34 +154,56 @@ impl TransportReporter {
     /// `InboundEventsDropped` for any nonzero count. Called from the existing
     /// outbound-pump/ingress tokio tasks on a `tokio::time::interval`.
     pub fn report_counts(&self) {
-        let Some(device) = self.device_name.get() else { return };
-        let Some(sender) = &self.error_sender else { return };
+        let Some(device) = self.device_name.get() else {
+            return;
+        };
+        let Some(sender) = &self.error_sender else {
+            return;
+        };
 
         let outbound = self.outbound_drops.swap(0, Ordering::Relaxed);
         if outbound > 0 {
-            let _ = sender.send(DeviceEvent::OutboundBytesDropped { device: device.clone(), count: outbound });
+            let _ = sender.send(DeviceEvent::OutboundBytesDropped {
+                device: device.clone(),
+                count: outbound,
+            });
         }
 
         let inbound = self.inbound_drops.swap(0, Ordering::Relaxed);
         if inbound > 0 {
-            let _ = sender.send(DeviceEvent::InboundEventsDropped { device: device.clone(), count: inbound });
+            let _ = sender.send(DeviceEvent::InboundEventsDropped {
+                device: device.clone(),
+                count: inbound,
+            });
         }
     }
 
     /// Reports a connect edge. `peer` is `None` for point-to-point
     /// transports and `Some(name)` per-client for multipoint ones.
     pub fn report_connected(&self, peer: Option<String>) {
-        let Some(device) = self.device_name.get().cloned() else { return };
-        let Some(sender) = &self.error_sender else { return };
+        let Some(device) = self.device_name.get().cloned() else {
+            return;
+        };
+        let Some(sender) = &self.error_sender else {
+            return;
+        };
         let _ = sender.send(DeviceEvent::TransportConnected { device, peer });
     }
 
     /// Reports a disconnect edge; see [`report_connected`](Self::report_connected)
     /// for `peer`.
     pub fn report_disconnected(&self, peer: Option<String>, reason: String) {
-        let Some(device) = self.device_name.get().cloned() else { return };
-        let Some(sender) = &self.error_sender else { return };
-        let _ = sender.send(DeviceEvent::TransportDisconnected { device, peer, reason });
+        let Some(device) = self.device_name.get().cloned() else {
+            return;
+        };
+        let Some(sender) = &self.error_sender else {
+            return;
+        };
+        let _ = sender.send(DeviceEvent::TransportDisconnected {
+            device,
+            peer,
+            reason,
+        });
     }
 }
 
@@ -226,7 +252,10 @@ mod transport_reporter_tests {
         reporter.report_error(TransportError::Disconnected);
 
         match receiver.try_recv() {
-            Ok(DeviceEvent::TransportError { device, error: TransportError::Disconnected }) => {
+            Ok(DeviceEvent::TransportError {
+                device,
+                error: TransportError::Disconnected,
+            }) => {
                 assert_eq!(device, "test-device-1");
             }
             other => panic!("unexpected event: {other:?}"),
@@ -321,7 +350,9 @@ pub(crate) struct TagAllocator {
 
 impl TagAllocator {
     pub(crate) fn new() -> Self {
-        Self { in_use: Mutex::new([false; 256]) }
+        Self {
+            in_use: Mutex::new([false; 256]),
+        }
     }
 
     /// Allocates and returns the lowest-numbered unused tag, or `None` if
@@ -401,7 +432,11 @@ impl<T: Send + 'static> ChannelRelay<T> {
                 }
             }
         });
-        Self { consumer, handle: Some(handle), stop: Some(stop_tx) }
+        Self {
+            consumer,
+            handle: Some(handle),
+            stop: Some(stop_tx),
+        }
     }
 
     /// Wraps an already-running relay thread's `Consumer<T>`/`JoinHandle`
@@ -410,7 +445,11 @@ impl<T: Send + 'static> ChannelRelay<T> {
     /// source with no `crossbeam_channel` hop and drive their own
     /// [`push_and_park`] loop against their own `Producer<T>`.
     pub(crate) fn from_parts(consumer: Consumer<T>, handle: JoinHandle<()>) -> Self {
-        Self { consumer, handle: Some(handle), stop: None }
+        Self {
+            consumer,
+            handle: Some(handle),
+            stop: None,
+        }
     }
 
     /// Pops one item from the ring, if available.
@@ -533,7 +572,11 @@ impl TransportRelay {
 /// `item` is dropped and this returns `false`. Shared by
 /// [`ChannelRelay::spawn`]'s thread body and `InternalPipeTransport`'s custom
 /// relay thread, so the retry loop exists in exactly one place.
-pub(crate) fn push_and_park<T>(producer: &mut Producer<T>, mut item: T, stop: &Receiver<()>) -> bool {
+pub(crate) fn push_and_park<T>(
+    producer: &mut Producer<T>,
+    mut item: T,
+    stop: &Receiver<()>,
+) -> bool {
     loop {
         match producer.push(item) {
             Ok(()) => return true,
@@ -655,8 +698,7 @@ pub(crate) struct ClientSession {
 /// than blocking), and writes bytes fanned out via `session.fanout_rx` to
 /// the client. Generic over any split-able async stream, so it's shared
 /// between `TcpSocketTransport` and `UnixSocketTransport`.
-pub(crate) async fn run_client_task<R, W>(mut reader: R, mut writer: W,
-    session: ClientSession)
+pub(crate) async fn run_client_task<R, W>(mut reader: R, mut writer: W, session: ClientSession)
 where
     R: AsyncRead + Unpin + Send,
     W: AsyncWrite + Unpin + Send,
@@ -749,7 +791,11 @@ pub(crate) trait ClientListener {
     /// fn`) is required so `tokio::spawn(run_listener_task(...))` type-checks
     /// from inside the generic [`ListenerCore::spawn`], not just from a
     /// concrete, non-generic call site.
-    fn accept(&self) -> impl std::future::Future<Output = std::io::Result<(Self::Reader, Self::Writer, Self::PeerInfo)>> + Send;
+    fn accept(
+        &self,
+    ) -> impl std::future::Future<
+        Output = std::io::Result<(Self::Reader, Self::Writer, Self::PeerInfo)>,
+    > + Send;
 
     fn format_peer(info: Self::PeerInfo, conn_tag: u8) -> String;
 }
@@ -770,7 +816,13 @@ pub(crate) async fn run_listener_task<L: ClientListener>(
     reporter: TransportReporter,
 ) {
     let (fanout_tx, _) = broadcast::channel::<u8>(BROADCAST_CAPACITY);
-    tokio::spawn(pump_outbound(outbound, fanout_tx.clone(), outbound_notify, shutdown_rx.clone(), reporter.clone()));
+    tokio::spawn(pump_outbound(
+        outbound,
+        fanout_tx.clone(),
+        outbound_notify,
+        shutdown_rx.clone(),
+        reporter.clone(),
+    ));
 
     let tag_allocator = Arc::new(TagAllocator::new());
 

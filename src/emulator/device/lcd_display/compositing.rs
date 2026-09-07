@@ -68,7 +68,11 @@ fn glyph_rows(byte: u8, cgram: &[u8; 64], cgrom: &CgRom, font_5x10: bool) -> Vec
         let glyph = cgrom.glyph(byte);
         if font_5x10 {
             let padding = CELL_HEIGHT_5X10 - glyph.len();
-            glyph.iter().copied().chain(std::iter::repeat_n(0, padding)).collect()
+            glyph
+                .iter()
+                .copied()
+                .chain(std::iter::repeat_n(0, padding))
+                .collect()
         } else {
             glyph[..CELL_HEIGHT_5X8].to_vec()
         }
@@ -98,7 +102,11 @@ fn shifted_address(dual_line: bool, start: u8, column: u8, line_shift: &[u8; 2])
 /// (spec §8.3) -- used by `LcdDisplay::compositing_cursor` to translate the address counter's raw
 /// DDRAM address into a cursor position without duplicating this module's own segment/shift-aware
 /// addressing (`composite`'s own forward walk, run in reverse).
-pub(crate) fn ddram_cursor_position(ddram_addr: u8, geometry: &Geometry, line_shift: &[u8; 2]) -> Option<(u8, u8)> {
+pub(crate) fn ddram_cursor_position(
+    ddram_addr: u8,
+    geometry: &Geometry,
+    line_shift: &[u8; 2],
+) -> Option<(u8, u8)> {
     let dual_line = geometry.is_dual_line();
     for (row_index, row_segments) in geometry.segments.iter().enumerate() {
         let mut col = 0u8;
@@ -116,7 +124,15 @@ pub(crate) fn ddram_cursor_position(ddram_addr: u8, geometry: &Geometry, line_sh
 
 /// Draws one glyph's rows into `pixels` at the cell whose top-left pixel is
 /// `(col * CELL_WIDTH, row * cell_height)`.
-fn draw_glyph(pixels: &mut [u8], width_px: usize, col: usize, row: usize, cell_height: usize, rows: &[u8], color: Rgb24) {
+fn draw_glyph(
+    pixels: &mut [u8],
+    width_px: usize,
+    col: usize,
+    row: usize,
+    cell_height: usize,
+    rows: &[u8],
+    color: Rgb24,
+) {
     for (glyph_row, &row_bits) in rows.iter().enumerate() {
         let pixel_y = row * cell_height + glyph_row;
         for glyph_col in 0..CELL_WIDTH {
@@ -133,8 +149,20 @@ fn draw_glyph(pixels: &mut [u8], width_px: usize, col: usize, row: usize, cell_h
 /// Draws the cursor at the cell whose top-left pixel is `(col * CELL_WIDTH, row * cell_height)`:
 /// a solid block (every pixel) when `blinking`, otherwise an underline (just the bottom row) --
 /// spec §8.3.
-fn draw_cursor(pixels: &mut [u8], width_px: usize, col: usize, row: usize, cell_height: usize, blinking: bool, color: Rgb24) {
-    let rows = if blinking { 0..cell_height } else { cell_height - 1..cell_height };
+fn draw_cursor(
+    pixels: &mut [u8],
+    width_px: usize,
+    col: usize,
+    row: usize,
+    cell_height: usize,
+    blinking: bool,
+    color: Rgb24,
+) {
+    let rows = if blinking {
+        0..cell_height
+    } else {
+        cell_height - 1..cell_height
+    };
     for pixel_y in row * cell_height + rows.start..row * cell_height + rows.end {
         for glyph_col in 0..CELL_WIDTH {
             let pixel_x = col * CELL_WIDTH + glyph_col;
@@ -179,7 +207,11 @@ pub fn composite(
     // register behavior) -- rendering only honors it on a geometry with the physical common lines
     // a true 5×10 glyph needs (issue #603).
     let font_5x10 = font_5x10 && geometry.supports_5x10;
-    let cell_height = if font_5x10 { CELL_HEIGHT_5X10 } else { CELL_HEIGHT_5X8 };
+    let cell_height = if font_5x10 {
+        CELL_HEIGHT_5X10
+    } else {
+        CELL_HEIGHT_5X8
+    };
     let columns = geometry.columns as usize;
     let rows = geometry.rows as usize;
     let width_px = columns * CELL_WIDTH;
@@ -206,10 +238,26 @@ pub fn composite(
             for offset in 0..count {
                 let addr = shifted_address(dual_line, start, offset, line_shift);
                 let rows = glyph_rows(ddram[addr as usize], cgram, cgrom, font_5x10);
-                draw_glyph(&mut pixels, width_px, col, row_index, cell_height, &rows, foreground);
+                draw_glyph(
+                    &mut pixels,
+                    width_px,
+                    col,
+                    row_index,
+                    cell_height,
+                    &rows,
+                    foreground,
+                );
 
                 if cursor.visible && cursor.position == Some((row_index as u8, col as u8)) {
-                    draw_cursor(&mut pixels, width_px, col, row_index, cell_height, cursor.blinking, foreground);
+                    draw_cursor(
+                        &mut pixels,
+                        width_px,
+                        col,
+                        row_index,
+                        cell_height,
+                        cursor.blinking,
+                        foreground,
+                    );
                 }
 
                 col += 1;
@@ -230,9 +278,18 @@ mod tests {
     // `supports_5x10: true` mirrors the real `8-character-5x10`/`16-character-5x10` geometries
     // (issue #603); tests exercising `font_5x10 = false` are unaffected since `composite` only
     // consults this field when `font_5x10` is also true.
-    const SINGLE_ROW: Geometry = Geometry { rows: 1, columns: 2, segments: &[&[(0x00, 2)]], supports_5x10: true };
-    const DUAL_ROW: Geometry =
-        Geometry { rows: 2, columns: 2, segments: &[&[(0x00, 2)], &[(0x40, 2)]], supports_5x10: false };
+    const SINGLE_ROW: Geometry = Geometry {
+        rows: 1,
+        columns: 2,
+        segments: &[&[(0x00, 2)]],
+        supports_5x10: true,
+    };
+    const DUAL_ROW: Geometry = Geometry {
+        rows: 2,
+        columns: 2,
+        segments: &[&[(0x00, 2)], &[(0x40, 2)]],
+        supports_5x10: false,
+    };
 
     fn empty_ddram() -> [u8; 80] {
         [0x20; 80]
@@ -268,9 +325,23 @@ mod tests {
     fn display_off_renders_all_background() {
         let mut ddram = empty_ddram();
         ddram[0] = 0x41; // 'A' -- must not show through
-        let pixels = composite(&ddram, &blank_cgram(), &SINGLE_ROW, &[0, 0], no_cursor(), false, false, &CgRom::default(), BG, FG);
+        let pixels = composite(
+            &ddram,
+            &blank_cgram(),
+            &SINGLE_ROW,
+            &[0, 0],
+            no_cursor(),
+            false,
+            false,
+            &CgRom::default(),
+            BG,
+            FG,
+        );
 
-        assert_eq!(pixels.len(), SINGLE_ROW.columns as usize * CELL_WIDTH * 8 * 4);
+        assert_eq!(
+            pixels.len(),
+            SINGLE_ROW.columns as usize * CELL_WIDTH * 8 * 4
+        );
         assert!(all_pixels_are(&pixels, BG));
     }
 
@@ -278,7 +349,18 @@ mod tests {
     fn ascii_glyph_composites_expected_pixels() {
         let mut ddram = empty_ddram();
         ddram[0] = 0x41; // 'A'
-        let pixels = composite(&ddram, &blank_cgram(), &SINGLE_ROW, &[0, 0], no_cursor(), true, false, &CgRom::default(), BG, FG);
+        let pixels = composite(
+            &ddram,
+            &blank_cgram(),
+            &SINGLE_ROW,
+            &[0, 0],
+            no_cursor(),
+            true,
+            false,
+            &CgRom::default(),
+            BG,
+            FG,
+        );
         let width_px = SINGLE_ROW.columns as usize * CELL_WIDTH;
 
         // Row 0 of 'A' is lit at col 2 in the default (A00) CGROM.
@@ -291,41 +373,89 @@ mod tests {
     fn second_cell_composites_at_correct_column_offset() {
         let mut ddram = empty_ddram();
         ddram[1] = 0x41; // 'A' in the second visible column
-        let pixels = composite(&ddram, &blank_cgram(), &SINGLE_ROW, &[0, 0], no_cursor(), true, false, &CgRom::default(), BG, FG);
+        let pixels = composite(
+            &ddram,
+            &blank_cgram(),
+            &SINGLE_ROW,
+            &[0, 0],
+            no_cursor(),
+            true,
+            false,
+            &CgRom::default(),
+            BG,
+            FG,
+        );
         let width_px = SINGLE_ROW.columns as usize * CELL_WIDTH;
 
-        assert_eq!(pixel_at(&pixels, width_px, CELL_WIDTH + 2, 0), [FG.r, FG.g, FG.b, 0xFF]);
+        assert_eq!(
+            pixel_at(&pixels, width_px, CELL_WIDTH + 2, 0),
+            [FG.r, FG.g, FG.b, 0xFF]
+        );
     }
 
     #[test]
     fn dual_line_second_row_reads_from_second_ddram_line() {
         let mut ddram = empty_ddram();
         ddram[40] = 0x41; // 'A' at the start of the second physical line (raw address 0x40 folds to 40)
-        let pixels = composite(&ddram, &blank_cgram(), &DUAL_ROW, &[0, 0], no_cursor(), true, false, &CgRom::default(), BG, FG);
+        let pixels = composite(
+            &ddram,
+            &blank_cgram(),
+            &DUAL_ROW,
+            &[0, 0],
+            no_cursor(),
+            true,
+            false,
+            &CgRom::default(),
+            BG,
+            FG,
+        );
         let width_px = DUAL_ROW.columns as usize * CELL_WIDTH;
         let second_display_row = 1;
 
-        assert_eq!(pixel_at(&pixels, width_px, 2, second_display_row * 8), [FG.r, FG.g, FG.b, 0xFF]);
+        assert_eq!(
+            pixel_at(&pixels, width_px, 2, second_display_row * 8),
+            [FG.r, FG.g, FG.b, 0xFF]
+        );
     }
 
     // Mirrors the real `40x2` geometry (spec §7.1): wide dual-line segments whose column offsets
     // push well past the raw `0x40` second-segment start, exercising the fold from raw HD44780
     // address to physical `ddram` index (regression for the `shifted_address` addressing bug
     // found while reasoning about Work Unit 3's real geometry table).
-    const WIDE_DUAL_ROW: Geometry =
-        Geometry { rows: 2, columns: 40, segments: &[&[(0x00, 40)], &[(0x40, 40)]], supports_5x10: false };
+    const WIDE_DUAL_ROW: Geometry = Geometry {
+        rows: 2,
+        columns: 40,
+        segments: &[&[(0x00, 40)], &[(0x40, 40)]],
+        supports_5x10: false,
+    };
 
     #[test]
     fn wide_dual_line_last_column_stays_in_bounds_and_reads_correct_cell() {
         let mut ddram = empty_ddram();
         ddram[79] = 0x41; // 'A' at the last physical byte of the second line
-        let pixels = composite(&ddram, &blank_cgram(), &WIDE_DUAL_ROW, &[0, 0], no_cursor(), true, false, &CgRom::default(), BG, FG);
+        let pixels = composite(
+            &ddram,
+            &blank_cgram(),
+            &WIDE_DUAL_ROW,
+            &[0, 0],
+            no_cursor(),
+            true,
+            false,
+            &CgRom::default(),
+            BG,
+            FG,
+        );
         let width_px = WIDE_DUAL_ROW.columns as usize * CELL_WIDTH;
         let last_col = WIDE_DUAL_ROW.columns as usize - 1;
         let second_display_row = 1;
 
         assert_eq!(
-            pixel_at(&pixels, width_px, last_col * CELL_WIDTH + 2, second_display_row * 8),
+            pixel_at(
+                &pixels,
+                width_px,
+                last_col * CELL_WIDTH + 2,
+                second_display_row * 8
+            ),
             [FG.r, FG.g, FG.b, 0xFF]
         );
     }
@@ -345,12 +475,31 @@ mod tests {
         let mut ddram = empty_ddram();
         ddram[20] = 0x41; // row 3's segment starts at raw 0x14, which folds to physical line 0, index 20
         ddram[60] = 0x41; // row 4's segment starts at raw 0x54, which folds to physical line 1, index 60
-        let pixels = composite(&ddram, &blank_cgram(), &PAIRED_ROW_GEOMETRY, &[0, 0], no_cursor(), true, false, &CgRom::default(), BG, FG);
+        let pixels = composite(
+            &ddram,
+            &blank_cgram(),
+            &PAIRED_ROW_GEOMETRY,
+            &[0, 0],
+            no_cursor(),
+            true,
+            false,
+            &CgRom::default(),
+            BG,
+            FG,
+        );
         let width_px = PAIRED_ROW_GEOMETRY.columns as usize * CELL_WIDTH;
 
         // 'A' row 0 of the glyph has only the middle column set (see ascii_glyph_composites_expected_pixels).
-        assert_eq!(pixel_at(&pixels, width_px, 2, 2 * 8), [FG.r, FG.g, FG.b, 0xFF], "row 3 (index 2)");
-        assert_eq!(pixel_at(&pixels, width_px, 2, 3 * 8), [FG.r, FG.g, FG.b, 0xFF], "row 4 (index 3)");
+        assert_eq!(
+            pixel_at(&pixels, width_px, 2, 2 * 8),
+            [FG.r, FG.g, FG.b, 0xFF],
+            "row 3 (index 2)"
+        );
+        assert_eq!(
+            pixel_at(&pixels, width_px, 2, 3 * 8),
+            [FG.r, FG.g, FG.b, 0xFF],
+            "row 4 (index 3)"
+        );
     }
 
     #[test]
@@ -358,7 +507,18 @@ mod tests {
         let mut ddram = empty_ddram();
         ddram[1] = 0x41; // 'A' one position to the right of the unshifted window
         // Shifting line 0 left by one brings ddram[1] into the first visible column.
-        let pixels = composite(&ddram, &blank_cgram(), &SINGLE_ROW, &[1, 0], no_cursor(), true, false, &CgRom::default(), BG, FG);
+        let pixels = composite(
+            &ddram,
+            &blank_cgram(),
+            &SINGLE_ROW,
+            &[1, 0],
+            no_cursor(),
+            true,
+            false,
+            &CgRom::default(),
+            BG,
+            FG,
+        );
         let width_px = SINGLE_ROW.columns as usize * CELL_WIDTH;
 
         assert_eq!(pixel_at(&pixels, width_px, 2, 0), [FG.r, FG.g, FG.b, 0xFF]);
@@ -374,12 +534,31 @@ mod tests {
         let mut cgram = blank_cgram();
         let character_row = 3;
         cgram[2 * CELL_HEIGHT_5X8 + character_row] = 0b10101; // alternating pixels
-        let pixels = composite(&ddram, &cgram, &SINGLE_ROW, &[0, 0], no_cursor(), true, false, &CgRom::default(), BG, FG);
+        let pixels = composite(
+            &ddram,
+            &cgram,
+            &SINGLE_ROW,
+            &[0, 0],
+            no_cursor(),
+            true,
+            false,
+            &CgRom::default(),
+            BG,
+            FG,
+        );
         let width_px = SINGLE_ROW.columns as usize * CELL_WIDTH;
 
         for (col, expect_set) in [(0, true), (1, false), (2, true), (3, false), (4, true)] {
-            let expected = if expect_set { [FG.r, FG.g, FG.b, 0xFF] } else { [BG.r, BG.g, BG.b, 0xFF] };
-            assert_eq!(pixel_at(&pixels, width_px, col, character_row), expected, "column {col}");
+            let expected = if expect_set {
+                [FG.r, FG.g, FG.b, 0xFF]
+            } else {
+                [BG.r, BG.g, BG.b, 0xFF]
+            };
+            assert_eq!(
+                pixel_at(&pixels, width_px, col, character_row),
+                expected,
+                "column {col}"
+            );
         }
     }
 
@@ -396,11 +575,25 @@ mod tests {
         let character_group = 1;
         let last_rendered_row = 10;
         cgram[character_group * 16 + last_rendered_row] = 0b11111;
-        let pixels = composite(&ddram, &cgram, &SINGLE_ROW, &[0, 0], no_cursor(), true, true, &CgRom::default(), BG, FG);
+        let pixels = composite(
+            &ddram,
+            &cgram,
+            &SINGLE_ROW,
+            &[0, 0],
+            no_cursor(),
+            true,
+            true,
+            &CgRom::default(),
+            BG,
+            FG,
+        );
         let width_px = SINGLE_ROW.columns as usize * CELL_WIDTH;
 
         for col in 0..CELL_WIDTH {
-            assert_eq!(pixel_at(&pixels, width_px, col, last_rendered_row), [FG.r, FG.g, FG.b, 0xFF]);
+            assert_eq!(
+                pixel_at(&pixels, width_px, col, last_rendered_row),
+                [FG.r, FG.g, FG.b, 0xFF]
+            );
         }
     }
 
@@ -414,31 +607,77 @@ mod tests {
         let mut cgram = blank_cgram();
         let character_group = 1;
         cgram[character_group * 16 + 11] = 0b11111; // one row past the rendered 0..11 range
-        let pixels = composite(&ddram, &cgram, &SINGLE_ROW, &[0, 0], no_cursor(), true, true, &CgRom::default(), BG, FG);
+        let pixels = composite(
+            &ddram,
+            &cgram,
+            &SINGLE_ROW,
+            &[0, 0],
+            no_cursor(),
+            true,
+            true,
+            &CgRom::default(),
+            BG,
+            FG,
+        );
 
-        assert!(all_pixels_are(&pixels, BG), "CGRAM rows 11..16 must never be rendered");
+        assert!(
+            all_pixels_are(&pixels, BG),
+            "CGRAM rows 11..16 must never be rendered"
+        );
     }
 
     #[test]
     fn font_5x10_is_a_no_op_on_a_geometry_that_does_not_support_it() {
         let mut ddram = empty_ddram();
         ddram[0] = 0x41; // 'A'
-        let pixels = composite(&ddram, &blank_cgram(), &DUAL_ROW, &[0, 0], no_cursor(), true, true, &CgRom::default(), BG, FG);
+        let pixels = composite(
+            &ddram,
+            &blank_cgram(),
+            &DUAL_ROW,
+            &[0, 0],
+            no_cursor(),
+            true,
+            true,
+            &CgRom::default(),
+            BG,
+            FG,
+        );
 
         // DUAL_ROW is not 5x10-capable, so the frame must still be sized for 8-row cells.
-        assert_eq!(pixels.len(), DUAL_ROW.columns as usize * CELL_WIDTH * DUAL_ROW.rows as usize * CELL_HEIGHT_5X8 * 4);
+        assert_eq!(
+            pixels.len(),
+            DUAL_ROW.columns as usize * CELL_WIDTH * DUAL_ROW.rows as usize * CELL_HEIGHT_5X8 * 4
+        );
     }
 
     #[test]
     fn underline_cursor_draws_only_bottom_row() {
         let ddram = empty_ddram();
-        let cursor = CursorState { position: Some((0, 0)), visible: true, blinking: false };
-        let pixels = composite(&ddram, &blank_cgram(), &SINGLE_ROW, &[0, 0], cursor, true, false, &CgRom::default(), BG, FG);
+        let cursor = CursorState {
+            position: Some((0, 0)),
+            visible: true,
+            blinking: false,
+        };
+        let pixels = composite(
+            &ddram,
+            &blank_cgram(),
+            &SINGLE_ROW,
+            &[0, 0],
+            cursor,
+            true,
+            false,
+            &CgRom::default(),
+            BG,
+            FG,
+        );
         let width_px = SINGLE_ROW.columns as usize * CELL_WIDTH;
         let bottom_row = CELL_HEIGHT_5X8 - 1;
 
         for col in 0..CELL_WIDTH {
-            assert_eq!(pixel_at(&pixels, width_px, col, bottom_row), [FG.r, FG.g, FG.b, 0xFF]);
+            assert_eq!(
+                pixel_at(&pixels, width_px, col, bottom_row),
+                [FG.r, FG.g, FG.b, 0xFF]
+            );
         }
         // Any other row stays background (glyph is blank space).
         assert_eq!(pixel_at(&pixels, width_px, 0, 0), [BG.r, BG.g, BG.b, 0xFF]);
@@ -447,13 +686,32 @@ mod tests {
     #[test]
     fn blinking_cursor_draws_solid_block() {
         let ddram = empty_ddram();
-        let cursor = CursorState { position: Some((0, 1)), visible: true, blinking: true };
-        let pixels = composite(&ddram, &blank_cgram(), &SINGLE_ROW, &[0, 0], cursor, true, false, &CgRom::default(), BG, FG);
+        let cursor = CursorState {
+            position: Some((0, 1)),
+            visible: true,
+            blinking: true,
+        };
+        let pixels = composite(
+            &ddram,
+            &blank_cgram(),
+            &SINGLE_ROW,
+            &[0, 0],
+            cursor,
+            true,
+            false,
+            &CgRom::default(),
+            BG,
+            FG,
+        );
         let width_px = SINGLE_ROW.columns as usize * CELL_WIDTH;
 
         for row in 0..CELL_HEIGHT_5X8 {
             for col in CELL_WIDTH..2 * CELL_WIDTH {
-                assert_eq!(pixel_at(&pixels, width_px, col, row), [FG.r, FG.g, FG.b, 0xFF], "row {row} col {col}");
+                assert_eq!(
+                    pixel_at(&pixels, width_px, col, row),
+                    [FG.r, FG.g, FG.b, 0xFF],
+                    "row {row} col {col}"
+                );
             }
         }
     }
@@ -461,8 +719,23 @@ mod tests {
     #[test]
     fn cursor_not_visible_leaves_glyph_untouched() {
         let ddram = empty_ddram();
-        let cursor = CursorState { position: Some((0, 0)), visible: false, blinking: true };
-        let pixels = composite(&ddram, &blank_cgram(), &SINGLE_ROW, &[0, 0], cursor, true, false, &CgRom::default(), BG, FG);
+        let cursor = CursorState {
+            position: Some((0, 0)),
+            visible: false,
+            blinking: true,
+        };
+        let pixels = composite(
+            &ddram,
+            &blank_cgram(),
+            &SINGLE_ROW,
+            &[0, 0],
+            cursor,
+            true,
+            false,
+            &CgRom::default(),
+            BG,
+            FG,
+        );
 
         assert!(all_pixels_are(&pixels, BG));
     }

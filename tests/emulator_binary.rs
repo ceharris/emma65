@@ -52,7 +52,11 @@ fn run_with_cli_args() {
         .args(device_args(rom.path()))
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]
@@ -81,7 +85,11 @@ image = "{}"
         .args(["--config", cfg.path().to_str().unwrap()])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]
@@ -96,13 +104,20 @@ size = 256
 "#;
     let cfg = tempfile::Builder::new().suffix(".toml").tempfile().unwrap();
     std::fs::write(cfg.path(), toml.as_bytes()).unwrap();
-    let mut args = vec!["--config".to_string(), cfg.path().to_str().unwrap().to_string()];
+    let mut args = vec![
+        "--config".to_string(),
+        cfg.path().to_str().unwrap().to_string(),
+    ];
     args.extend(device_args(rom.path()));
     let output = std::process::Command::new(emulator_bin())
         .args(&args)
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]
@@ -112,12 +127,18 @@ fn run_with_env_var_cpu_variant() {
     let output = std::process::Command::new(emulator_bin())
         .env("EMMA65_CPU_VARIANT", "WDC65C02")
         .args([
-            "--device", "ram@0x0000,size=32768,fill=0",
-            "--device", &format!("rom@0x8000,size=32768,image={}", rom.path().display()),
+            "--device",
+            "ram@0x0000,size=32768,fill=0",
+            "--device",
+            &format!("rom@0x8000,size=32768,image={}", rom.path().display()),
         ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "stderr: {}", String::from_utf8_lossy(&output.stderr));
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]
@@ -126,8 +147,10 @@ fn run_with_invalid_env_var_cpu_variant() {
     let output = std::process::Command::new(emulator_bin())
         .env("EMMA65_CPU_VARIANT", "NOT_A_VARIANT")
         .args([
-            "--device", "ram@0x0000,size=32768,fill=0",
-            "--device", &format!("rom@0x8000,size=32768,image={}", rom.path().display()),
+            "--device",
+            "ram@0x0000,size=32768,fill=0",
+            "--device",
+            &format!("rom@0x8000,size=32768,image={}", rom.path().display()),
         ])
         .output()
         .unwrap();
@@ -143,8 +166,10 @@ fn run_with_invalid_env_var_cpu_variant() {
 fn run_with_unknown_device_type() {
     let output = std::process::Command::new(emulator_bin())
         .args([
-            "--cpu-variant", "WDC65C02",
-            "--device", "bogus@0x1000,size=256",
+            "--cpu-variant",
+            "WDC65C02",
+            "--device",
+            "bogus@0x1000,size=256",
         ])
         .output()
         .unwrap();
@@ -190,7 +215,9 @@ fn run_with_no_args_uses_bundled_default_and_keeps_running() {
             let mut stderr = String::new();
             use std::io::Read;
             let _ = child.stderr.take().unwrap().read_to_string(&mut stderr);
-            panic!("expected the bundled default to keep running, but it exited with {status}: {stderr}");
+            panic!(
+                "expected the bundled default to keep running, but it exited with {status}: {stderr}"
+            );
         }
     }
 }
@@ -217,7 +244,9 @@ fn run_with_profile_msbasic_keeps_running() {
             let mut stderr = String::new();
             use std::io::Read;
             let _ = child.stderr.take().unwrap().read_to_string(&mut stderr);
-            panic!("expected --profile msbasic to keep running, but it exited with {status}: {stderr}");
+            panic!(
+                "expected --profile msbasic to keep running, but it exited with {status}: {stderr}"
+            );
         }
     }
 }
@@ -230,14 +259,22 @@ fn run_with_unknown_profile_fails_with_useful_message() {
         .unwrap();
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("nope"), "expected profile id in stderr, got: {stderr}");
+    assert!(
+        stderr.contains("nope"),
+        "expected profile id in stderr, got: {stderr}"
+    );
 }
 
 #[test]
 fn run_with_profile_and_config_together_is_rejected() {
     let cfg = tempfile::Builder::new().suffix(".toml").tempfile().unwrap();
     let output = std::process::Command::new(emulator_bin())
-        .args(["--profile", "default", "--config", cfg.path().to_str().unwrap()])
+        .args([
+            "--profile",
+            "default",
+            "--config",
+            cfg.path().to_str().unwrap(),
+        ])
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -248,9 +285,12 @@ fn run_with_missing_rom_image() {
     // Point the ROM image attribute at a path that doesn't exist.
     let output = std::process::Command::new(emulator_bin())
         .args([
-            "--cpu-variant", "WDC65C02",
-            "--device", "ram@0x0000,size=32768,fill=0",
-            "--device", "rom@0x8000,size=32768,image=/nonexistent/path/rom.bin",
+            "--cpu-variant",
+            "WDC65C02",
+            "--device",
+            "ram@0x0000,size=32768,fill=0",
+            "--device",
+            "rom@0x8000,size=32768,image=/nonexistent/path/rom.bin",
         ])
         .output()
         .unwrap();

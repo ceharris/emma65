@@ -57,15 +57,20 @@ pub struct LayoutState(pub Mutex<DockLayoutData>);
 /// missing or unparseable — a schema change in a future dockview version
 /// degrades to "layout not restored" rather than a crash.
 pub fn load_dock_layout_from(dir: &Path) -> DockLayoutData {
-    fs::read_to_string(dir.join("layout.json")).ok().and_then(|contents| serde_json::from_str(&contents).ok()).unwrap_or_default()
+    fs::read_to_string(dir.join("layout.json"))
+        .ok()
+        .and_then(|contents| serde_json::from_str(&contents).ok())
+        .unwrap_or_default()
 }
 
 /// Writes `data` to `layout.json` under `dir`, creating the directory if it
 /// doesn't exist.
 fn save_dock_layout_to(dir: &Path, data: &DockLayoutData) -> Result<(), String> {
     fs::create_dir_all(dir).map_err(|e| format!("Failed to create config directory: {e}"))?;
-    let contents = serde_json::to_string(data).map_err(|e| format!("Failed to serialize dock layout: {e}"))?;
-    fs::write(dir.join("layout.json"), contents).map_err(|e| format!("Failed to write dock layout: {e}"))
+    let contents =
+        serde_json::to_string(data).map_err(|e| format!("Failed to serialize dock layout: {e}"))?;
+    fs::write(dir.join("layout.json"), contents)
+        .map_err(|e| format!("Failed to write dock layout: {e}"))
 }
 
 /// Returns the last persisted dock layout data.
@@ -81,7 +86,11 @@ pub fn get_dock_layout(state: State<LayoutState>) -> DockLayoutData {
 /// written by, the same `onDidLayoutChange` tick in `DockLayout.tsx`, so
 /// they're accepted and persisted together rather than via separate calls.
 #[tauri::command]
-pub fn set_dock_layout(layout: Value, panel_positions: Value, state: State<LayoutState>) -> Result<(), String> {
+pub fn set_dock_layout(
+    layout: Value,
+    panel_positions: Value,
+    state: State<LayoutState>,
+) -> Result<(), String> {
     let data = {
         let mut guard = state.0.lock().unwrap();
         guard.dockview = Some(layout);
@@ -156,10 +165,20 @@ pub(crate) fn set_lcd_display_detached(app: &AppHandle, detached: bool) -> Resul
 /// whatever was on screen before this ran).
 #[tauri::command]
 pub fn restore_dock_layout(app: AppHandle) -> Result<(), String> {
-    let (terminal_was_detached, display_was_detached, led_matrix_was_detached, lcd_display_was_detached) = {
+    let (
+        terminal_was_detached,
+        display_was_detached,
+        led_matrix_was_detached,
+        lcd_display_was_detached,
+    ) = {
         let state = app.state::<LayoutState>();
         let guard = state.0.lock().unwrap();
-        (guard.terminal_detached, guard.display_detached, guard.led_matrix_detached, guard.lcd_display_detached)
+        (
+            guard.terminal_detached,
+            guard.display_detached,
+            guard.led_matrix_detached,
+            guard.lcd_display_detached,
+        )
     };
     if terminal_was_detached {
         crate::terminal::reattach_terminal(&app);
@@ -199,13 +218,19 @@ mod tests {
 
     #[test]
     fn returns_default_when_layout_file_missing() {
-        let dir = std::env::temp_dir().join(format!("emma65-layout-test-missing-{:?}", std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!(
+            "emma65-layout-test-missing-{:?}",
+            std::thread::current().id()
+        ));
         assert_eq!(load_dock_layout_from(&dir), DockLayoutData::default());
     }
 
     #[test]
     fn returns_default_when_layout_file_unparseable() {
-        let dir = std::env::temp_dir().join(format!("emma65-layout-test-corrupt-{:?}", std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!(
+            "emma65-layout-test-corrupt-{:?}",
+            std::thread::current().id()
+        ));
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("layout.json"), "not valid json").unwrap();
         assert_eq!(load_dock_layout_from(&dir), DockLayoutData::default());
@@ -214,14 +239,19 @@ mod tests {
 
     #[test]
     fn save_and_load_round_trip_via_tempdir() {
-        let dir = std::env::temp_dir().join(format!("emma65-layout-test-roundtrip-{:?}", std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!(
+            "emma65-layout-test-roundtrip-{:?}",
+            std::thread::current().id()
+        ));
         let data = DockLayoutData {
             dockview: Some(serde_json::json!({"grid": {"root": {"type": "leaf"}}})),
             terminal_detached: true,
             display_detached: false,
             led_matrix_detached: false,
             lcd_display_detached: false,
-            panel_positions: Some(serde_json::json!({"trace": {"group_id": "group_1", "index": 0}})),
+            panel_positions: Some(
+                serde_json::json!({"trace": {"group_id": "group_1", "index": 0}}),
+            ),
         };
         save_dock_layout_to(&dir, &data).unwrap();
         let loaded = load_dock_layout_from(&dir);

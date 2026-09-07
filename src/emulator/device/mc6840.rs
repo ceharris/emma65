@@ -58,27 +58,29 @@
 use super::protocol::manager::ProtocolManager;
 use super::protocol::ptm::PtmProtocolMessage;
 use super::protocol::{ProtocolMessageEncoding, ptm};
-use crate::emulator::{ChannelRelay, IoDevice, LogCategory, LogLevel, LogSender, Transport, TransportEvent, log_msg};
+use crate::emulator::{
+    ChannelRelay, IoDevice, LogCategory, LogLevel, LogSender, Transport, TransportEvent, log_msg,
+};
 
 const T1: usize = 0;
 const T2: usize = 1;
 const T3: usize = 2;
 
-const CTRL_CR1_ENABLE: u8          = 0b00000001;
-const CTRL_T3_PRESCALE: u8         = 0b00000001;
-const CTRL_INTERNAL_RESET: u8      = 0b00000001;
+const CTRL_CR1_ENABLE: u8 = 0b00000001;
+const CTRL_T3_PRESCALE: u8 = 0b00000001;
+const CTRL_INTERNAL_RESET: u8 = 0b00000001;
 
-const CTRL_INTERNAL_CLOCK: u8      = 0b00000010;
-const CTRL_COUNTER_DUAL_8BIT: u8   = 0b00000100;
-const CTRL_IRQ_ENABLE: u8          = 0b01000000;
-const CTRL_OUTPUT_ENABLE: u8       = 0b10000000;
+const CTRL_INTERNAL_CLOCK: u8 = 0b00000010;
+const CTRL_COUNTER_DUAL_8BIT: u8 = 0b00000100;
+const CTRL_IRQ_ENABLE: u8 = 0b01000000;
+const CTRL_OUTPUT_ENABLE: u8 = 0b10000000;
 
-const CTRL_MODE_MASK: u8           = 0b00111000;
-const CTRL_MODE_COMPARE: u8        = 0b00001000;
-const CTRL_MODE_DEFERRED_INIT: u8  = 0b00010000;
-const CTRL_MODE_SINGLE_SHOT: u8    = 0b00100000;
-const CTRL_MODE_PULSE_WIDTH: u8    = 0b00010000;
-const CTRL_MODE_GREATER: u8        = 0b00100000;
+const CTRL_MODE_MASK: u8 = 0b00111000;
+const CTRL_MODE_COMPARE: u8 = 0b00001000;
+const CTRL_MODE_DEFERRED_INIT: u8 = 0b00010000;
+const CTRL_MODE_SINGLE_SHOT: u8 = 0b00100000;
+const CTRL_MODE_PULSE_WIDTH: u8 = 0b00010000;
+const CTRL_MODE_GREATER: u8 = 0b00100000;
 
 const RESET_COUNT: u16 = 0xFFFF;
 
@@ -91,7 +93,6 @@ struct Prescaler {
 }
 
 impl Prescaler {
-
     fn new(divisor: u8) -> Self {
         Self {
             divisor,
@@ -107,7 +108,6 @@ impl Prescaler {
         }
         carry_out
     }
-
 }
 
 /// Which transition an edge-triggered `Synchronizer` recognizes.
@@ -138,7 +138,6 @@ struct Synchronizer {
 }
 
 impl Synchronizer {
-
     /// Creates a new instance.
     /// ## Arguments
     /// - `depth` - 4 for Clock/Gate, 3 for Reset.
@@ -202,7 +201,6 @@ impl Synchronizer {
     fn settled_at(&self, level: bool) -> bool {
         self.prev_recognized == level && self.pipeline.iter().all(|&l| l == level)
     }
-
 }
 
 /// A timer unit of the MC6840 PTM.
@@ -248,7 +246,6 @@ struct Timer {
 }
 
 impl Timer {
-
     fn new() -> Self {
         Timer {
             latch: RESET_COUNT,
@@ -366,14 +363,17 @@ impl Timer {
             }
             self.counter = u16::from_le_bytes([lsb, msb])
         } else {
-            assert!(self.is_comparing() || self.carry_in || self.counter > 0, "expected non-zero counter");
+            assert!(
+                self.is_comparing() || self.carry_in || self.counter > 0,
+                "expected non-zero counter"
+            );
             self.counter = self.counter.wrapping_sub(1);
         }
     }
 
     fn clock_counter(&mut self) {
         if !self.triggered {
-            return
+            return;
         }
         if self.is_continuous() && self.gate_level {
             return;
@@ -430,15 +430,20 @@ impl Timer {
     }
 
     fn tick(&mut self) {
-        let edge_detected = self.gate_sync.sample_for(self.gate_level, self.awaiting_edge);
+        let edge_detected = self
+            .gate_sync
+            .sample_for(self.gate_level, self.awaiting_edge);
         let gate_triggered = edge_detected && self.awaiting_edge == Edge::Falling;
-        let init_compare = !self.irq_active && (
-            self.compare_status != CompareStatus::Started || self.is_compare_greater());
+        let init_compare = !self.irq_active
+            && (self.compare_status != CompareStatus::Started || self.is_compare_greater());
         let init_counter = self.is_generating() || init_compare;
         if gate_triggered && init_counter {
             self.init();
         } else {
-            if self.is_comparing() && self.compare_status == CompareStatus::Started && !self.irq_active() {
+            if self.is_comparing()
+                && self.compare_status == CompareStatus::Started
+                && !self.irq_active()
+            {
                 self.check_comparison(edge_detected);
             }
             // clock_sync's result is only consulted when external_clock is set, so
@@ -513,8 +518,16 @@ impl Timer {
         // while carry_in is still pending, and that rewrite must only affect
         // the *next* reload's period, not the magnitude of the in-flight
         // carry-in countdown.
-        let effective_count: u32 = if self.latch == 0 { 0x1_0000 } else { self.latch as u32 };
-        let virtual_counter: u32 = if self.carry_in { 0x1_0000 } else { self.counter as u32 };
+        let effective_count: u32 = if self.latch == 0 {
+            0x1_0000
+        } else {
+            self.latch as u32
+        };
+        let virtual_counter: u32 = if self.carry_in {
+            0x1_0000
+        } else {
+            self.counter as u32
+        };
         let ticks_to_reload = virtual_counter + 1;
         if remaining < ticks_to_reload {
             self.counter = (virtual_counter - remaining) as u16;
@@ -559,7 +572,6 @@ impl Timer {
         self.irq_active = self.irq_enabled;
         self.output_state = false;
     }
-
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -570,7 +582,6 @@ struct AsyncIoState {
 }
 
 impl AsyncIoState {
-
     fn new(timers: &[Timer; 3]) -> Self {
         let mut state = AsyncIoState {
             clocks: [false; 3],
@@ -584,7 +595,6 @@ impl AsyncIoState {
         }
         state
     }
-
 }
 
 pub struct Mc6840 {
@@ -604,7 +614,6 @@ pub struct Mc6840 {
 }
 
 impl Mc6840 {
-
     pub fn new(name: &'static str) -> Self {
         Mc6840 {
             name,
@@ -615,9 +624,9 @@ impl Mc6840 {
             lsb_buffer: 0,
             msb_buffer: 0,
             timers: [
-                Timer::new(),   // T1
-                Timer::new(),   // T2
-                Timer::new(),   // T3
+                Timer::new(), // T1
+                Timer::new(), // T2
+                Timer::new(), // T3
             ],
             cr1_enabled: false,
             reset_active: false,
@@ -645,39 +654,68 @@ impl Mc6840 {
     /// Attaches a transport and its paired tagged relay. All attached
     /// transports receive every port and control-signal state change; any
     /// number of peripherals may be connected simultaneously.
-    pub fn attach_transport(&mut self, transport: Box<dyn Transport>, relay: ChannelRelay<TransportEvent>) {
-        self.protocol_manager = Some(ProtocolManager::new(self.protocol, transport, relay,
-                                                          ptm::new_encoder, ptm::new_decoder));
+    pub fn attach_transport(
+        &mut self,
+        transport: Box<dyn Transport>,
+        relay: ChannelRelay<TransportEvent>,
+    ) {
+        self.protocol_manager = Some(ProtocolManager::new(
+            self.protocol,
+            transport,
+            relay,
+            ptm::new_encoder,
+            ptm::new_decoder,
+        ));
     }
 
     fn current_state(&self) -> Vec<PtmProtocolMessage> {
         let state = AsyncIoState::new(&self.timers);
         let messages = vec![
-            PtmProtocolMessage::ClockState { clocks: state.clocks },
+            PtmProtocolMessage::ClockState {
+                clocks: state.clocks,
+            },
             PtmProtocolMessage::GateState { gates: state.gates },
-            PtmProtocolMessage::OutputState { outputs: state.outputs },
+            PtmProtocolMessage::OutputState {
+                outputs: state.outputs,
+            },
         ];
         messages
     }
 
-    fn updated_state(&self, before: &AsyncIoState, after: &AsyncIoState) -> Vec<PtmProtocolMessage> {
+    fn updated_state(
+        &self,
+        before: &AsyncIoState,
+        after: &AsyncIoState,
+    ) -> Vec<PtmProtocolMessage> {
         let mut messages = Vec::new();
         if before.clocks != after.clocks {
-            messages.push(PtmProtocolMessage::ClockState { clocks: after.clocks });
+            messages.push(PtmProtocolMessage::ClockState {
+                clocks: after.clocks,
+            });
         }
         if before.gates != after.gates {
             messages.push(PtmProtocolMessage::GateState { gates: after.gates });
         }
         if before.outputs != after.outputs {
-            messages.push(PtmProtocolMessage::OutputState { outputs: after.outputs });
+            messages.push(PtmProtocolMessage::OutputState {
+                outputs: after.outputs,
+            });
         }
         messages
     }
 
     fn poll_transports(&mut self) {
-        if self.protocol_manager.as_ref().is_some_and(|pm| pm.has_pending()) {
+        if self
+            .protocol_manager
+            .as_ref()
+            .is_some_and(|pm| pm.has_pending())
+        {
             let state = self.current_state();
-            let messages = self.protocol_manager.as_mut().unwrap().poll_transport(&state);
+            let messages = self
+                .protocol_manager
+                .as_mut()
+                .unwrap()
+                .poll_transport(&state);
             for message in messages {
                 self.apply_message(message);
             }
@@ -717,35 +755,33 @@ impl Mc6840 {
 
     fn apply_message(&mut self, message: PtmProtocolMessage) {
         match message {
-            PtmProtocolMessage::ClockEdge { clocks, positive} => {
+            PtmProtocolMessage::ClockEdge { clocks, positive } => {
                 for (i, clock) in clocks.iter().enumerate() {
                     if *clock {
                         self.timers[i].clock_level = positive;
                     }
                 }
             }
-            PtmProtocolMessage::GateEdge { gates, positive} => {
+            PtmProtocolMessage::GateEdge { gates, positive } => {
                 for (i, gate) in gates.iter().enumerate() {
                     if *gate {
                         self.timers[i].gate_level = positive;
                     }
                 }
             }
-            _ => ()
+            _ => (),
         }
     }
-
 }
 
 impl IoDevice for Mc6840 {
-
     fn read(&mut self, address: u16) -> u8 {
         let offset = address - self.address;
         match offset {
             1 => {
                 self.latched_status = self.status();
                 self.latched_status
-            },
+            }
             2 | 4 | 6 => {
                 let timer_id = ((offset - 2) / 2) as usize;
                 let irq_mask = 1 << timer_id as u8;
@@ -793,7 +829,7 @@ impl IoDevice for Mc6840 {
             1 => {
                 self.timers[T2].set_control_register(value);
                 self.cr1_enabled = value & CTRL_CR1_ENABLE != 0;
-            },
+            }
             2 | 4 | 6 => self.msb_buffer = value,
             3 | 5 | 7 => {
                 let timer_id = ((offset - 3) / 2) as usize;
@@ -830,7 +866,10 @@ impl IoDevice for Mc6840 {
         // Snapshotting/diffing/encoding a live state update has no observer
         // (and, with a timer actually running, would otherwise happen on
         // nearly every tick) unless a client is actually connected.
-        let has_clients = self.protocol_manager.as_ref().is_some_and(|pm| pm.has_clients());
+        let has_clients = self
+            .protocol_manager
+            .as_ref()
+            .is_some_and(|pm| pm.has_clients());
         let before = has_clients.then(|| AsyncIoState::new(&self.timers));
         if !self.reset_active {
             self.tick_timers(cycles);
@@ -849,7 +888,13 @@ impl IoDevice for Mc6840 {
         self.address = address;
         self.protocol_manager = protocol_manager;
         self.log_sender = log_sender;
-        log_msg!(self.log_sender, LogLevel::Info, LogCategory::Device, "{} reset", self.identity());
+        log_msg!(
+            self.log_sender,
+            LogLevel::Info,
+            LogCategory::Device,
+            "{} reset",
+            self.identity()
+        );
         self.internal_reset();
         self.send_state_to_all(self.current_state());
     }
@@ -858,25 +903,28 @@ impl IoDevice for Mc6840 {
         self.status() != 0
     }
 
-    fn name(&self) -> &str { self.name }
+    fn name(&self) -> &str {
+        self.name
+    }
 
-    fn identity_address(&self) -> u16 { self.address }
+    fn identity_address(&self) -> u16 {
+        self.address
+    }
 
     fn shutdown(&mut self) {
         if let Some(pm) = self.protocol_manager.as_mut() {
             pm.shutdown();
         }
     }
-
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const IRQ_TIMER_1: u8   = 0b00000001;
-    const IRQ_TIMER_2: u8   = 0b00000010;
-    const IRQ_TIMER_3: u8   = 0b00000100;
+    const IRQ_TIMER_1: u8 = 0b00000001;
+    const IRQ_TIMER_2: u8 = 0b00000010;
+    const IRQ_TIMER_3: u8 = 0b00000100;
     const CTRL_MODE_GENERATE: u8 = 0;
     const CTRL_MODE_CONTINUOUS: u8 = 0;
     const CTRL_MODE_FREQUENCY: u8 = 0;
@@ -910,8 +958,10 @@ mod tests {
         device.timers[T1].irq_active = true;
         device.timers[T2].irq_active = true;
         device.timers[T3].irq_active = true;
-        assert_eq!(device.read(1),
-                   IRQ_COMPOSITE | IRQ_TIMER_1 | IRQ_TIMER_2 | IRQ_TIMER_3);
+        assert_eq!(
+            device.read(1),
+            IRQ_COMPOSITE | IRQ_TIMER_1 | IRQ_TIMER_2 | IRQ_TIMER_3
+        );
     }
 
     #[test]
@@ -999,7 +1049,10 @@ mod tests {
         let mut device = device();
         assert!(!device.cr1_enabled, "expected CR3 enabled");
         device.write(0, !CTRL_T3_PRESCALE);
-        assert!(device.timers[T3].prescaler.is_none(), "expected no prescaler");
+        assert!(
+            device.timers[T3].prescaler.is_none(),
+            "expected no prescaler"
+        );
         assert!(!device.timers[T3].external_clock, "expected internal clock");
         assert_eq!(device.timers[T3].mode, CTRL_MODE_MASK);
         assert!(device.timers[T3].irq_enabled, "expected IRQ enabled");
@@ -1024,18 +1077,39 @@ mod tests {
     fn rewriting_cr3_with_prescale_bit_unchanged_preserves_prescaler_count() {
         let mut device = device();
         // enable prescale, internal clock, mode = generate/continuous/immediate-init, latch=1
-        device.write(0, CTRL_T3_PRESCALE | CTRL_INTERNAL_CLOCK | CTRL_MODE_GENERATE | CTRL_MODE_CONTINUOUS | CTRL_MODE_IMMEDIATE_INIT);
+        device.write(
+            0,
+            CTRL_T3_PRESCALE
+                | CTRL_INTERNAL_CLOCK
+                | CTRL_MODE_GENERATE
+                | CTRL_MODE_CONTINUOUS
+                | CTRL_MODE_IMMEDIATE_INIT,
+        );
         device.timers[T3].latch = 1;
         device.timers[T3].init();
         // advance the prescaler partway through its divide-by-8 count
         device.tick(3);
         let count_before = device.timers[T3].prescaler.as_ref().unwrap().count;
-        assert_ne!(count_before, 8, "expected prescaler to have already advanced");
+        assert_ne!(
+            count_before, 8,
+            "expected prescaler to have already advanced"
+        );
         // rewrite CR3 with the prescale bit still set (unrelated bits changed) --
         // must not disturb the in-flight divide-by-8 count
-        device.write(0, CTRL_T3_PRESCALE | CTRL_INTERNAL_CLOCK | CTRL_MODE_GENERATE | CTRL_MODE_CONTINUOUS | CTRL_MODE_IMMEDIATE_INIT | CTRL_IRQ_ENABLE);
-        assert_eq!(device.timers[T3].prescaler.as_ref().unwrap().count, count_before,
-                   "CR3 rewrite with prescale bit unchanged reset the in-flight prescaler count");
+        device.write(
+            0,
+            CTRL_T3_PRESCALE
+                | CTRL_INTERNAL_CLOCK
+                | CTRL_MODE_GENERATE
+                | CTRL_MODE_CONTINUOUS
+                | CTRL_MODE_IMMEDIATE_INIT
+                | CTRL_IRQ_ENABLE,
+        );
+        assert_eq!(
+            device.timers[T3].prescaler.as_ref().unwrap().count,
+            count_before,
+            "CR3 rewrite with prescale bit unchanged reset the in-flight prescaler count"
+        );
     }
 
     #[test]
@@ -1067,14 +1141,20 @@ mod tests {
         for i in 0..3 {
             device.write(2 * i + 2, 0x55);
             device.write(2 * i + 3, 0xAA);
-            assert_eq!(device.timers[i as usize].latch, u16::from_le_bytes([0xAA, 0x55]));
+            assert_eq!(
+                device.timers[i as usize].latch,
+                u16::from_le_bytes([0xAA, 0x55])
+            );
         }
     }
 
     #[test]
     fn write_latch_immediate_load() {
         let mut device = device();
-        device.write(1, CTRL_MODE_GENERATE | CTRL_MODE_CONTINUOUS | CTRL_MODE_IMMEDIATE_INIT);
+        device.write(
+            1,
+            CTRL_MODE_GENERATE | CTRL_MODE_CONTINUOUS | CTRL_MODE_IMMEDIATE_INIT,
+        );
         device.write(2 + 2 * (T2 as u16), 0x55);
         device.write(3 + 2 * (T2 as u16), 0xAA);
         assert_eq!(device.timers[T2].latch, 0x55AA);
@@ -1085,7 +1165,10 @@ mod tests {
     fn write_latch_deferred_init() {
         let mut device = device();
         device.timers[T2].counter = 0;
-        device.write(1, CTRL_MODE_GENERATE | CTRL_MODE_CONTINUOUS | CTRL_MODE_DEFERRED_INIT);
+        device.write(
+            1,
+            CTRL_MODE_GENERATE | CTRL_MODE_CONTINUOUS | CTRL_MODE_DEFERRED_INIT,
+        );
         device.write(2 + 2 * (T2 as u16), 0x55);
         device.write(3 + 2 * (T2 as u16), 0xAA);
         assert_eq!(device.timers[T2].latch, 0x55AA);
@@ -1095,7 +1178,10 @@ mod tests {
     #[test]
     fn write_mode_generate_continuous_immediate_init() {
         let mut device = device();
-        device.write(1, CTRL_MODE_GENERATE | CTRL_MODE_CONTINUOUS | CTRL_MODE_IMMEDIATE_INIT);
+        device.write(
+            1,
+            CTRL_MODE_GENERATE | CTRL_MODE_CONTINUOUS | CTRL_MODE_IMMEDIATE_INIT,
+        );
         assert!(device.timers[T2].is_continuous());
         assert!(!device.timers[T2].is_deferred_init());
     }
@@ -1111,7 +1197,10 @@ mod tests {
     #[test]
     fn write_mode_generate_continuous_deferred_init() {
         let mut device = device();
-        device.write(1, CTRL_MODE_GENERATE | CTRL_MODE_CONTINUOUS | CTRL_MODE_DEFERRED_INIT);
+        device.write(
+            1,
+            CTRL_MODE_GENERATE | CTRL_MODE_CONTINUOUS | CTRL_MODE_DEFERRED_INIT,
+        );
         assert!(device.timers[T2].is_continuous());
         assert!(device.timers[T2].is_deferred_init());
     }
@@ -1119,7 +1208,10 @@ mod tests {
     #[test]
     fn write_mode_compare_pulse_width_less() {
         let mut device = device();
-        device.write(1, CTRL_MODE_COMPARE | CTRL_MODE_PULSE_WIDTH | CTRL_MODE_LESS);
+        device.write(
+            1,
+            CTRL_MODE_COMPARE | CTRL_MODE_PULSE_WIDTH | CTRL_MODE_LESS,
+        );
         assert!(device.timers[T2].is_comparing());
         assert!(!device.timers[T2].is_frequency());
         assert!(!device.timers[T2].is_compare_greater());
@@ -1128,7 +1220,10 @@ mod tests {
     #[test]
     fn write_mode_generate_single_shot_immediate_init() {
         let mut device = device();
-        device.write(1, CTRL_MODE_GENERATE | CTRL_MODE_SINGLE_SHOT | CTRL_MODE_IMMEDIATE_INIT);
+        device.write(
+            1,
+            CTRL_MODE_GENERATE | CTRL_MODE_SINGLE_SHOT | CTRL_MODE_IMMEDIATE_INIT,
+        );
         assert!(device.timers[T2].is_single_shot());
         assert!(!device.timers[T2].is_deferred_init());
     }
@@ -1136,7 +1231,10 @@ mod tests {
     #[test]
     fn write_mode_compare_frequency_greater() {
         let mut device = device();
-        device.write(1, CTRL_MODE_COMPARE | CTRL_MODE_FREQUENCY | CTRL_MODE_GREATER);
+        device.write(
+            1,
+            CTRL_MODE_COMPARE | CTRL_MODE_FREQUENCY | CTRL_MODE_GREATER,
+        );
         assert!(device.timers[T2].is_frequency());
         assert!(device.timers[T2].is_compare_greater());
     }
@@ -1144,7 +1242,10 @@ mod tests {
     #[test]
     fn write_mode_generate_single_shot_deferred_init() {
         let mut device = device();
-        device.write(1, CTRL_MODE_GENERATE | CTRL_MODE_SINGLE_SHOT | CTRL_MODE_DEFERRED_INIT);
+        device.write(
+            1,
+            CTRL_MODE_GENERATE | CTRL_MODE_SINGLE_SHOT | CTRL_MODE_DEFERRED_INIT,
+        );
         assert!(device.timers[T2].is_single_shot());
         assert!(device.timers[T2].is_deferred_init());
     }
@@ -1152,7 +1253,10 @@ mod tests {
     #[test]
     fn write_mode_compare_pulse_width_greater() {
         let mut device = device();
-        device.write(1, CTRL_MODE_COMPARE | CTRL_MODE_PULSE_WIDTH | CTRL_MODE_GREATER);
+        device.write(
+            1,
+            CTRL_MODE_COMPARE | CTRL_MODE_PULSE_WIDTH | CTRL_MODE_GREATER,
+        );
         assert!(device.timers[T2].is_comparing());
         assert!(!device.timers[T2].is_frequency());
         assert!(device.timers[T2].is_compare_greater());
@@ -1170,8 +1274,10 @@ mod tests {
         device.timers[T1].irq_active = true;
         device.timers[T2].irq_active = true;
         device.timers[T3].irq_active = true;
-        assert_eq!(device.read(1),
-                   IRQ_COMPOSITE | IRQ_TIMER_1 | IRQ_TIMER_2 | IRQ_TIMER_3);
+        assert_eq!(
+            device.read(1),
+            IRQ_COMPOSITE | IRQ_TIMER_1 | IRQ_TIMER_2 | IRQ_TIMER_3
+        );
     }
 
     #[test]
@@ -1376,7 +1482,13 @@ mod tests {
         assert_eq!(timer.counter, 0);
     }
 
-    fn setup_generate_mode_timer(mode: u8, latch: u16, irq_enabled: bool, gate_level: bool, pre_advance: u32) -> Timer {
+    fn setup_generate_mode_timer(
+        mode: u8,
+        latch: u16,
+        irq_enabled: bool,
+        gate_level: bool,
+        pre_advance: u32,
+    ) -> Timer {
         let mut timer = Timer::new();
         timer.gate_level = gate_level;
         timer.set_control_register(mode);
@@ -1414,8 +1526,20 @@ mod tests {
                     for &gate_level in &gate_levels {
                         for &irq_enabled in &irq_enabled_values {
                             for &cycles in &cycles_values {
-                                let mut expected = setup_generate_mode_timer(mode, latch, irq_enabled, gate_level, pre_advance);
-                                let mut actual = setup_generate_mode_timer(mode, latch, irq_enabled, gate_level, pre_advance);
+                                let mut expected = setup_generate_mode_timer(
+                                    mode,
+                                    latch,
+                                    irq_enabled,
+                                    gate_level,
+                                    pre_advance,
+                                );
+                                let mut actual = setup_generate_mode_timer(
+                                    mode,
+                                    latch,
+                                    irq_enabled,
+                                    gate_level,
+                                    pre_advance,
+                                );
                                 for _ in 0..cycles {
                                     expected.tick();
                                 }
@@ -1423,11 +1547,26 @@ mod tests {
                                 let context = format!(
                                     "mode={mode:#04x} latch={latch} pre_advance={pre_advance} gate_level={gate_level} irq_enabled={irq_enabled} cycles={cycles}"
                                 );
-                                assert_eq!(actual.counter, expected.counter, "counter mismatch: {context}");
-                                assert_eq!(actual.carry_in, expected.carry_in, "carry_in mismatch: {context}");
-                                assert_eq!(actual.triggered, expected.triggered, "triggered mismatch: {context}");
-                                assert_eq!(actual.output_state, expected.output_state, "output_state mismatch: {context}");
-                                assert_eq!(actual.irq_active, expected.irq_active, "irq_active mismatch: {context}");
+                                assert_eq!(
+                                    actual.counter, expected.counter,
+                                    "counter mismatch: {context}"
+                                );
+                                assert_eq!(
+                                    actual.carry_in, expected.carry_in,
+                                    "carry_in mismatch: {context}"
+                                );
+                                assert_eq!(
+                                    actual.triggered, expected.triggered,
+                                    "triggered mismatch: {context}"
+                                );
+                                assert_eq!(
+                                    actual.output_state, expected.output_state,
+                                    "output_state mismatch: {context}"
+                                );
+                                assert_eq!(
+                                    actual.irq_active, expected.irq_active,
+                                    "irq_active mismatch: {context}"
+                                );
                             }
                         }
                     }
@@ -1458,11 +1597,26 @@ mod tests {
                     }
                     actual.tick_batch(cycles);
                     let context = format!("mode={mode:#04x} latch={latch} cycles={cycles}");
-                    assert_eq!(actual.counter, expected.counter, "counter mismatch: {context}");
-                    assert_eq!(actual.carry_in, expected.carry_in, "carry_in mismatch: {context}");
-                    assert_eq!(actual.triggered, expected.triggered, "triggered mismatch: {context}");
-                    assert_eq!(actual.output_state, expected.output_state, "output_state mismatch: {context}");
-                    assert_eq!(actual.irq_active, expected.irq_active, "irq_active mismatch: {context}");
+                    assert_eq!(
+                        actual.counter, expected.counter,
+                        "counter mismatch: {context}"
+                    );
+                    assert_eq!(
+                        actual.carry_in, expected.carry_in,
+                        "carry_in mismatch: {context}"
+                    );
+                    assert_eq!(
+                        actual.triggered, expected.triggered,
+                        "triggered mismatch: {context}"
+                    );
+                    assert_eq!(
+                        actual.output_state, expected.output_state,
+                        "output_state mismatch: {context}"
+                    );
+                    assert_eq!(
+                        actual.irq_active, expected.irq_active,
+                        "irq_active mismatch: {context}"
+                    );
                 }
             }
         }
@@ -1476,7 +1630,9 @@ mod tests {
     #[test]
     fn tick_batch_chained_small_calls_match_sequential_tick() {
         fn lcg_next(state: &mut u64) -> u64 {
-            *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            *state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             *state >> 33
         }
 
@@ -1491,7 +1647,8 @@ mod tests {
             for &latch in &latches {
                 let mut expected = setup_generate_mode_timer(mode, latch, true, false, 0);
                 let mut actual = setup_generate_mode_timer(mode, latch, true, false, 0);
-                let mut rng_state: u64 = 0x1234_5678_9abc_def0 ^ (latch as u64) ^ ((mode as u64) << 16);
+                let mut rng_state: u64 =
+                    0x1234_5678_9abc_def0 ^ (latch as u64) ^ ((mode as u64) << 16);
                 let mut done = 0u64;
                 while done < total_cycles {
                     let chunk = lcg_next(&mut rng_state) % 11; // 0..=10
@@ -1501,14 +1658,27 @@ mod tests {
                     }
                     actual.tick_batch(chunk as u32);
                     done += chunk;
-                    let context = format!(
-                        "mode={mode:#04x} latch={latch} done={done}"
+                    let context = format!("mode={mode:#04x} latch={latch} done={done}");
+                    assert_eq!(
+                        actual.counter, expected.counter,
+                        "counter mismatch: {context}"
                     );
-                    assert_eq!(actual.counter, expected.counter, "counter mismatch: {context}");
-                    assert_eq!(actual.carry_in, expected.carry_in, "carry_in mismatch: {context}");
-                    assert_eq!(actual.triggered, expected.triggered, "triggered mismatch: {context}");
-                    assert_eq!(actual.output_state, expected.output_state, "output_state mismatch: {context}");
-                    assert_eq!(actual.irq_active, expected.irq_active, "irq_active mismatch: {context}");
+                    assert_eq!(
+                        actual.carry_in, expected.carry_in,
+                        "carry_in mismatch: {context}"
+                    );
+                    assert_eq!(
+                        actual.triggered, expected.triggered,
+                        "triggered mismatch: {context}"
+                    );
+                    assert_eq!(
+                        actual.output_state, expected.output_state,
+                        "output_state mismatch: {context}"
+                    );
+                    assert_eq!(
+                        actual.irq_active, expected.irq_active,
+                        "irq_active mismatch: {context}"
+                    );
                 }
             }
         }
@@ -1534,7 +1704,10 @@ mod tests {
             timer.latch = 0;
             timer.init();
             assert_eq!(timer.counter, 0);
-            assert!(timer.carry_in, "expected carry_in pending from the latch=0 load");
+            assert!(
+                timer.carry_in,
+                "expected carry_in pending from the latch=0 load"
+            );
             // Switch to deferred-init mode, as real firmware reprogramming a
             // live timer would, and rewrite the latch -- write() only calls
             // init() when !is_deferred_init(), so this rewrite must not
@@ -1554,7 +1727,10 @@ mod tests {
 
         assert_eq!(actual.counter, expected.counter, "counter mismatch");
         assert_eq!(actual.carry_in, expected.carry_in, "carry_in mismatch");
-        assert_eq!(actual.irq_active, expected.irq_active, "irq_active mismatch");
+        assert_eq!(
+            actual.irq_active, expected.irq_active,
+            "irq_active mismatch"
+        );
     }
 
     #[test]
@@ -1617,38 +1793,57 @@ mod tests {
     fn compare_frequency_lt_when_lt() {
         let mut timer = Timer::new();
         timer.irq_enabled = true;
-        timer.set_control_register(CTRL_IRQ_ENABLE | CTRL_INTERNAL_CLOCK | CTRL_MODE_COMPARE | CTRL_MODE_FREQUENCY | CTRL_MODE_LESS);
+        timer.set_control_register(
+            CTRL_IRQ_ENABLE
+                | CTRL_INTERNAL_CLOCK
+                | CTRL_MODE_COMPARE
+                | CTRL_MODE_FREQUENCY
+                | CTRL_MODE_LESS,
+        );
         timer.latch = 3;
-        timer.gate_level = true;  timer.tick();     // ?, ?, ?, H
-        timer.gate_level = false; timer.tick();     // ?, ?, H, L
-        timer.gate_level = true;  timer.tick();     // ?, H, L, H
-        timer.gate_level = false; timer.tick();     // H, L, H, L
-        timer.gate_level = true;  timer.tick();     // L, H, L, H
+        timer.gate_level = true;
+        timer.tick(); // ?, ?, ?, H
+        timer.gate_level = false;
+        timer.tick(); // ?, ?, H, L
+        timer.gate_level = true;
+        timer.tick(); // ?, H, L, H
+        timer.gate_level = false;
+        timer.tick(); // H, L, H, L
+        timer.gate_level = true;
+        timer.tick(); // L, H, L, H
         assert_eq!(timer.compare_status, CompareStatus::Idle);
-        timer.gate_level = true;  timer.tick();     // H, L, H, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // H, L, H, H (falling edge detected)
         // falling edge should init counter to start measurement
         assert_eq!(timer.compare_status, CompareStatus::Started);
         assert_eq!(timer.counter, 3);
-        timer.gate_level = true;  timer.tick();     // L, H, H, H
+        timer.gate_level = true;
+        timer.tick(); // L, H, H, H
         assert_eq!(timer.counter, 2);
-        timer.gate_level = true;  timer.tick();     // H, H, H, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // H, H, H, H (falling edge detected)
         // not timeout => compare satisfied, raise interrupt
         assert_eq!(timer.compare_status, CompareStatus::Stopped);
         assert_eq!(timer.counter, 1);
         assert!(timer.irq_active());
         // timer should continue to decrement
-        timer.gate_level = false; timer.tick();     // H, H, H, L
+        timer.gate_level = false;
+        timer.tick(); // H, H, H, L
         assert_eq!(timer.counter, 0);
         timer.clear_irq();
-        timer.gate_level = true;  timer.tick();     // H, H, L, H
+        timer.gate_level = true;
+        timer.tick(); // H, H, L, H
         // even after IRQ cleared must continue to decrement
         // until the next negative edge of the gate is recognized
         assert_eq!(timer.counter, 0xFFFF);
-        timer.gate_level = true;  timer.tick();     // H, L, H, H
+        timer.gate_level = true;
+        timer.tick(); // H, L, H, H
         assert_eq!(timer.counter, 0xFFFE);
-        timer.gate_level = true;  timer.tick();     // L, H, H, H
+        timer.gate_level = true;
+        timer.tick(); // L, H, H, H
         assert_eq!(timer.counter, 0xFFFD);
-        timer.gate_level = true;  timer.tick();     // H, H, H, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // H, H, H, H (falling edge detected)
         // falling edge should init counter to start measurement
         assert_eq!(timer.counter, 3);
         assert_eq!(timer.compare_status, CompareStatus::Started);
@@ -1658,29 +1853,46 @@ mod tests {
     fn compare_frequency_lt_when_ge() {
         let mut timer = Timer::new();
         timer.irq_enabled = true;
-        timer.set_control_register(CTRL_IRQ_ENABLE | CTRL_INTERNAL_CLOCK | CTRL_MODE_COMPARE | CTRL_MODE_FREQUENCY | CTRL_MODE_LESS);
+        timer.set_control_register(
+            CTRL_IRQ_ENABLE
+                | CTRL_INTERNAL_CLOCK
+                | CTRL_MODE_COMPARE
+                | CTRL_MODE_FREQUENCY
+                | CTRL_MODE_LESS,
+        );
         timer.latch = 3;
-        timer.gate_level = true;  timer.tick();     // ?, ?, ?, H
-        timer.gate_level = false; timer.tick();     // ?, ?, H, L
-        timer.gate_level = true;  timer.tick();     // ?, H, L, H
-        timer.gate_level = true;  timer.tick();     // H, L, H, H
-        timer.gate_level = true;  timer.tick();     // L, H, H, H
+        timer.gate_level = true;
+        timer.tick(); // ?, ?, ?, H
+        timer.gate_level = false;
+        timer.tick(); // ?, ?, H, L
+        timer.gate_level = true;
+        timer.tick(); // ?, H, L, H
+        timer.gate_level = true;
+        timer.tick(); // H, L, H, H
+        timer.gate_level = true;
+        timer.tick(); // L, H, H, H
         assert_eq!(timer.compare_status, CompareStatus::Idle);
-        timer.gate_level = true;  timer.tick();     // H, H, H, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // H, H, H, H (falling edge detected)
         // falling edge should init counter to start measurement
         assert_eq!(timer.compare_status, CompareStatus::Started);
         assert_eq!(timer.counter, 3);
-        timer.gate_level = false; timer.tick();     // H, H, H, L
+        timer.gate_level = false;
+        timer.tick(); // H, H, H, L
         assert_eq!(timer.counter, 2);
-        timer.gate_level = true;  timer.tick();     // H, H, L, H
+        timer.gate_level = true;
+        timer.tick(); // H, H, L, H
         assert_eq!(timer.counter, 1);
-        timer.gate_level = true;  timer.tick();     // H, L, H, H
+        timer.gate_level = true;
+        timer.tick(); // H, L, H, H
         assert_eq!(timer.counter, 0);
-        timer.gate_level = true;  timer.tick();     // L, H, H, H
+        timer.gate_level = true;
+        timer.tick(); // L, H, H, H
         assert_eq!(timer.compare_status, CompareStatus::Idle);
         assert_eq!(timer.counter, 0xFFFF);
         assert!(!timer.irq_active());
-        timer.gate_level = true;  timer.tick();     // H, H, H, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // H, H, H, H (falling edge detected)
         // falling edge should init counter to start measurement
         assert_eq!(timer.counter, 3);
         assert_eq!(timer.compare_status, CompareStatus::Started);
@@ -1690,36 +1902,55 @@ mod tests {
     fn compare_frequency_gt_when_gt() {
         let mut timer = Timer::new();
         timer.irq_enabled = true;
-        timer.set_control_register(CTRL_IRQ_ENABLE | CTRL_INTERNAL_CLOCK | CTRL_MODE_COMPARE | CTRL_MODE_FREQUENCY | CTRL_MODE_GREATER);
+        timer.set_control_register(
+            CTRL_IRQ_ENABLE
+                | CTRL_INTERNAL_CLOCK
+                | CTRL_MODE_COMPARE
+                | CTRL_MODE_FREQUENCY
+                | CTRL_MODE_GREATER,
+        );
         timer.latch = 3;
-        timer.gate_level = true;  timer.tick();     // ?, ?, ?, H
-        timer.gate_level = false; timer.tick();     // ?, ?, H, L
-        timer.gate_level = true;  timer.tick();     // ?, H, L, H
-        timer.gate_level = true;  timer.tick();     // H, L, H, H
-        timer.gate_level = true;  timer.tick();     // L, H, H, H
+        timer.gate_level = true;
+        timer.tick(); // ?, ?, ?, H
+        timer.gate_level = false;
+        timer.tick(); // ?, ?, H, L
+        timer.gate_level = true;
+        timer.tick(); // ?, H, L, H
+        timer.gate_level = true;
+        timer.tick(); // H, L, H, H
+        timer.gate_level = true;
+        timer.tick(); // L, H, H, H
         assert_eq!(timer.compare_status, CompareStatus::Idle);
-        timer.gate_level = true;  timer.tick();     // H, H, H, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // H, H, H, H (falling edge detected)
         // falling edge should init counter to start measurement
         assert_eq!(timer.compare_status, CompareStatus::Started);
         assert_eq!(timer.counter, 3);
-        timer.gate_level = false; timer.tick();     // H, H, H, L
+        timer.gate_level = false;
+        timer.tick(); // H, H, H, L
         assert_eq!(timer.counter, 2);
-        timer.gate_level = true;  timer.tick();     // H, H, L, H
+        timer.gate_level = true;
+        timer.tick(); // H, H, L, H
         assert_eq!(timer.counter, 1);
-        timer.gate_level = false; timer.tick();     // H, L, H, L
+        timer.gate_level = false;
+        timer.tick(); // H, L, H, L
         assert_eq!(timer.counter, 0);
-        timer.gate_level = true;  timer.tick();     // L, H, L, H
+        timer.gate_level = true;
+        timer.tick(); // L, H, L, H
         assert_eq!(timer.counter, 0xFFFF);
         assert_eq!(timer.compare_status, CompareStatus::Idle);
         assert!(timer.irq_active());
-        timer.gate_level = true;  timer.tick();     // H, L, H, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // H, L, H, H (falling edge detected)
         // even after IRQ cleared must continue to decrement
         // until the next negative edge of the gate is recognized
         assert_eq!(timer.counter, 0xFFFE);
         timer.clear_irq();
-        timer.gate_level = true;  timer.tick();     // L, H, H, H
+        timer.gate_level = true;
+        timer.tick(); // L, H, H, H
         assert_eq!(timer.counter, 0xFFFD);
-        timer.gate_level = true;  timer.tick();     // H, H, H, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // H, H, H, H (falling edge detected)
         // falling edge should init timer for measurement
         assert_eq!(timer.counter, 3);
         assert_eq!(timer.compare_status, CompareStatus::Started);
@@ -1729,23 +1960,38 @@ mod tests {
     fn compare_frequency_gt_when_le() {
         let mut timer = Timer::new();
         timer.irq_enabled = true;
-        timer.set_control_register(CTRL_IRQ_ENABLE | CTRL_INTERNAL_CLOCK | CTRL_MODE_COMPARE | CTRL_MODE_FREQUENCY | CTRL_MODE_GREATER);
+        timer.set_control_register(
+            CTRL_IRQ_ENABLE
+                | CTRL_INTERNAL_CLOCK
+                | CTRL_MODE_COMPARE
+                | CTRL_MODE_FREQUENCY
+                | CTRL_MODE_GREATER,
+        );
         timer.latch = 3;
-        timer.gate_level = true;  timer.tick();     // ?, ?, ?, H
-        timer.gate_level = false; timer.tick();     // ?, ?, H, L
-        timer.gate_level = true;  timer.tick();     // ?, H, L, H
-        timer.gate_level = true;  timer.tick();     // H, L, H, H
-        timer.gate_level = false;  timer.tick();    // L, H, H, L
+        timer.gate_level = true;
+        timer.tick(); // ?, ?, ?, H
+        timer.gate_level = false;
+        timer.tick(); // ?, ?, H, L
+        timer.gate_level = true;
+        timer.tick(); // ?, H, L, H
+        timer.gate_level = true;
+        timer.tick(); // H, L, H, H
+        timer.gate_level = false;
+        timer.tick(); // L, H, H, L
         assert_eq!(timer.compare_status, CompareStatus::Idle);
-        timer.gate_level = true;  timer.tick();     // H, H, L, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // H, H, L, H (falling edge detected)
         // falling edge should init counter to start measurement
         assert_eq!(timer.compare_status, CompareStatus::Started);
         assert_eq!(timer.counter, 3);
-        timer.gate_level = false; timer.tick();     // H, L, H, L
+        timer.gate_level = false;
+        timer.tick(); // H, L, H, L
         assert_eq!(timer.counter, 2);
-        timer.gate_level = true;  timer.tick();     // L, H, L, H
+        timer.gate_level = true;
+        timer.tick(); // L, H, L, H
         assert_eq!(timer.counter, 1);
-        timer.gate_level = true;  timer.tick();     // H, L, H, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // H, L, H, H (falling edge detected)
         // falling edge before timeout should simply reset for another measurement
         assert_eq!(timer.counter, 3);
         assert_eq!(timer.compare_status, CompareStatus::Started);
@@ -1756,32 +2002,49 @@ mod tests {
     fn compare_pulse_width_lt_when_lt() {
         let mut timer = Timer::new();
         timer.irq_enabled = true;
-        timer.set_control_register(CTRL_IRQ_ENABLE | CTRL_INTERNAL_CLOCK | CTRL_MODE_COMPARE | CTRL_MODE_PULSE_WIDTH | CTRL_MODE_LESS);
+        timer.set_control_register(
+            CTRL_IRQ_ENABLE
+                | CTRL_INTERNAL_CLOCK
+                | CTRL_MODE_COMPARE
+                | CTRL_MODE_PULSE_WIDTH
+                | CTRL_MODE_LESS,
+        );
         timer.latch = 4;
-        timer.gate_level = true;  timer.tick();     // ?, ?, ?, H
-        timer.gate_level = false; timer.tick();     // ?, ?, H, L
-        timer.gate_level = false; timer.tick();     // ?, H, L, L
-        timer.gate_level = false; timer.tick();     // H, L, L, L
-        timer.gate_level = true;  timer.tick();     // L, L, L, H
+        timer.gate_level = true;
+        timer.tick(); // ?, ?, ?, H
+        timer.gate_level = false;
+        timer.tick(); // ?, ?, H, L
+        timer.gate_level = false;
+        timer.tick(); // ?, H, L, L
+        timer.gate_level = false;
+        timer.tick(); // H, L, L, L
+        timer.gate_level = true;
+        timer.tick(); // L, L, L, H
         assert_eq!(timer.compare_status, CompareStatus::Idle);
-        timer.gate_level = true;  timer.tick();     // L, L, H, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // L, L, H, H (falling edge detected)
         // falling edge should init counter for measurement
         assert_eq!(timer.compare_status, CompareStatus::Started);
         assert_eq!(timer.counter, 4);
-        timer.gate_level = false; timer.tick();     // L, H, H, L
+        timer.gate_level = false;
+        timer.tick(); // L, H, H, L
         assert_eq!(timer.counter, 3);
-        timer.gate_level = false; timer.tick();     // H, H, L, L
+        timer.gate_level = false;
+        timer.tick(); // H, H, L, L
         assert_eq!(timer.counter, 2);
-        timer.gate_level = false; timer.tick();     // H, L, L, L (rising edge detected)
+        timer.gate_level = false;
+        timer.tick(); // H, L, L, L (rising edge detected)
         // not timeout => compare satisfied, raise interrupt
         assert_eq!(timer.counter, 1);
         assert_eq!(timer.compare_status, CompareStatus::Stopped);
         assert!(timer.irq_active());
-        timer.gate_level = false; timer.tick();     // L, L, L, L
+        timer.gate_level = false;
+        timer.tick(); // L, L, L, L
         // timer should continue to decrement
         timer.clear_irq();
         assert_eq!(timer.counter, 0);
-        timer.gate_level = false; timer.tick();     // L, L, L, L (falling edge detected)
+        timer.gate_level = false;
+        timer.tick(); // L, L, L, L (falling edge detected)
         // falling edge should init counter for measurement
         assert_eq!(timer.counter, 4);
         assert_eq!(timer.compare_status, CompareStatus::Started);
@@ -1791,30 +2054,47 @@ mod tests {
     fn compare_pulse_width_lt_when_ge() {
         let mut timer = Timer::new();
         timer.irq_enabled = true;
-        timer.set_control_register(CTRL_IRQ_ENABLE | CTRL_INTERNAL_CLOCK | CTRL_MODE_COMPARE | CTRL_MODE_PULSE_WIDTH | CTRL_MODE_LESS);
+        timer.set_control_register(
+            CTRL_IRQ_ENABLE
+                | CTRL_INTERNAL_CLOCK
+                | CTRL_MODE_COMPARE
+                | CTRL_MODE_PULSE_WIDTH
+                | CTRL_MODE_LESS,
+        );
         timer.latch = 2;
-        timer.gate_level = true;  timer.tick();     // ?, ?, ?, H
-        timer.gate_level = false; timer.tick();     // ?, ?, H, L
-        timer.gate_level = false; timer.tick();     // ?, H, L, L
-        timer.gate_level = false; timer.tick();     // H, L, L, L
-        timer.gate_level = false;  timer.tick();    // L, L, L, L
+        timer.gate_level = true;
+        timer.tick(); // ?, ?, ?, H
+        timer.gate_level = false;
+        timer.tick(); // ?, ?, H, L
+        timer.gate_level = false;
+        timer.tick(); // ?, H, L, L
+        timer.gate_level = false;
+        timer.tick(); // H, L, L, L
+        timer.gate_level = false;
+        timer.tick(); // L, L, L, L
         assert_eq!(timer.compare_status, CompareStatus::Idle);
-        timer.gate_level = true;  timer.tick();     // L, L, L, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // L, L, L, H (falling edge detected)
         // falling edge should init counter for measurement
         assert_eq!(timer.compare_status, CompareStatus::Started);
         assert_eq!(timer.counter, 2);
-        timer.gate_level = false; timer.tick();     // L, L, H, L
+        timer.gate_level = false;
+        timer.tick(); // L, L, H, L
         assert_eq!(timer.counter, 1);
-        timer.gate_level = false; timer.tick();     // L, H, L, L
+        timer.gate_level = false;
+        timer.tick(); // L, H, L, L
         assert_eq!(timer.counter, 0);
-        timer.gate_level = false; timer.tick();     // H, L, L, L
+        timer.gate_level = false;
+        timer.tick(); // H, L, L, L
         assert_eq!(timer.compare_status, CompareStatus::Idle);
         assert!(!timer.irq_active());
         assert_eq!(timer.counter, 0xFFFF);
-        timer.gate_level = false; timer.tick();     // L, L, L, L (rising edge detected)
+        timer.gate_level = false;
+        timer.tick(); // L, L, L, L (rising edge detected)
         // rising edge doesn't init counter
         assert_eq!(timer.counter, 0xFFFE);
-        timer.gate_level = false; timer.tick();     // L, L, L, L (falling edge detected)
+        timer.gate_level = false;
+        timer.tick(); // L, L, L, L (falling edge detected)
         // falling edge should init counter for measurement
         assert_eq!(timer.counter, 2);
         assert_eq!(timer.compare_status, CompareStatus::Started);
@@ -1824,32 +2104,50 @@ mod tests {
     fn compare_pulse_width_gt_when_gt() {
         let mut timer = Timer::new();
         timer.irq_enabled = true;
-        timer.set_control_register(CTRL_IRQ_ENABLE | CTRL_INTERNAL_CLOCK | CTRL_MODE_COMPARE | CTRL_MODE_PULSE_WIDTH | CTRL_MODE_GREATER);
+        timer.set_control_register(
+            CTRL_IRQ_ENABLE
+                | CTRL_INTERNAL_CLOCK
+                | CTRL_MODE_COMPARE
+                | CTRL_MODE_PULSE_WIDTH
+                | CTRL_MODE_GREATER,
+        );
         timer.latch = 3;
-        timer.gate_level = true;  timer.tick();     // ?, ?, ?, H
-        timer.gate_level = false; timer.tick();     // ?, ?, H, L
-        timer.gate_level = false; timer.tick();     // ?, H, L, L
-        timer.gate_level = false; timer.tick();     // H, L, L, L
-        timer.gate_level = false; timer.tick();     // L, L, L, L
+        timer.gate_level = true;
+        timer.tick(); // ?, ?, ?, H
+        timer.gate_level = false;
+        timer.tick(); // ?, ?, H, L
+        timer.gate_level = false;
+        timer.tick(); // ?, H, L, L
+        timer.gate_level = false;
+        timer.tick(); // H, L, L, L
+        timer.gate_level = false;
+        timer.tick(); // L, L, L, L
         assert_eq!(timer.compare_status, CompareStatus::Idle);
-        timer.gate_level = false; timer.tick();     // L, L, L, L (falling edge detected)
+        timer.gate_level = false;
+        timer.tick(); // L, L, L, L (falling edge detected)
         // falling edge should init counter for measurement
         assert_eq!(timer.compare_status, CompareStatus::Started);
         assert_eq!(timer.counter, 3);
-        timer.gate_level = true;  timer.tick();     // L, L, L, H
+        timer.gate_level = true;
+        timer.tick(); // L, L, L, H
         assert_eq!(timer.counter, 2);
-        timer.gate_level = false; timer.tick();     // L, L, H, L
+        timer.gate_level = false;
+        timer.tick(); // L, L, H, L
         assert_eq!(timer.counter, 1);
-        timer.gate_level = true;  timer.tick();     // L, H, L, H
+        timer.gate_level = true;
+        timer.tick(); // L, H, L, H
         assert_eq!(timer.counter, 0);
-        timer.gate_level = true;  timer.tick();     // H, L, H, H (rising edge detected)
+        timer.gate_level = true;
+        timer.tick(); // H, L, H, H (rising edge detected)
         assert_eq!(timer.counter, 0xFFFF);
         assert_eq!(timer.compare_status, CompareStatus::Idle);
         assert!(timer.irq_active());
-        timer.gate_level = true;  timer.tick();     // L, H, H, H
+        timer.gate_level = true;
+        timer.tick(); // L, H, H, H
         assert_eq!(timer.counter, 0xFFFE);
         timer.clear_irq();
-        timer.gate_level = true;  timer.tick();     // H, H, H, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // H, H, H, H (falling edge detected)
         assert_eq!(timer.counter, 3);
         assert_eq!(timer.compare_status, CompareStatus::Started);
     }
@@ -1858,33 +2156,50 @@ mod tests {
     fn compare_pulse_width_gt_when_le() {
         let mut timer = Timer::new();
         timer.irq_enabled = true;
-        timer.set_control_register(CTRL_IRQ_ENABLE | CTRL_INTERNAL_CLOCK | CTRL_MODE_COMPARE | CTRL_MODE_PULSE_WIDTH | CTRL_MODE_GREATER);
+        timer.set_control_register(
+            CTRL_IRQ_ENABLE
+                | CTRL_INTERNAL_CLOCK
+                | CTRL_MODE_COMPARE
+                | CTRL_MODE_PULSE_WIDTH
+                | CTRL_MODE_GREATER,
+        );
         timer.latch = 3;
-        timer.gate_level = true;  timer.tick();     // ?, ?, ?, H
-        timer.gate_level = false; timer.tick();     // ?, ?, H, L
-        timer.gate_level = false; timer.tick();     // ?, H, L, L
-        timer.gate_level = false; timer.tick();     // H, L, L, L
-        timer.gate_level = true;  timer.tick();     // L, L, L, H
+        timer.gate_level = true;
+        timer.tick(); // ?, ?, ?, H
+        timer.gate_level = false;
+        timer.tick(); // ?, ?, H, L
+        timer.gate_level = false;
+        timer.tick(); // ?, H, L, L
+        timer.gate_level = false;
+        timer.tick(); // H, L, L, L
+        timer.gate_level = true;
+        timer.tick(); // L, L, L, H
         assert_eq!(timer.compare_status, CompareStatus::Idle);
-        timer.gate_level = true;  timer.tick();     // L, L, H, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // L, L, H, H (falling edge detected)
         // falling edge should init counter for measurement
         assert_eq!(timer.compare_status, CompareStatus::Started);
         assert_eq!(timer.counter, 3);
-        timer.gate_level = true;  timer.tick();     // L, H, H, H
+        timer.gate_level = true;
+        timer.tick(); // L, H, H, H
         assert_eq!(timer.counter, 2);
-        timer.gate_level = false; timer.tick();     // H, H, H, L
+        timer.gate_level = false;
+        timer.tick(); // H, H, H, L
         assert_eq!(timer.counter, 1);
-        timer.gate_level = true;  timer.tick();     // H, H, L, H (rising edge detected)
+        timer.gate_level = true;
+        timer.tick(); // H, H, L, H (rising edge detected)
         assert_eq!(timer.counter, 0);
         assert_eq!(timer.compare_status, CompareStatus::Idle);
         assert!(!timer.irq_active());
-        timer.gate_level = true;  timer.tick();     // H, L, H, H
+        timer.gate_level = true;
+        timer.tick(); // H, L, H, H
         assert_eq!(timer.counter, 0xFFFF);
-        timer.gate_level = true;  timer.tick();     // L, H, H, H
+        timer.gate_level = true;
+        timer.tick(); // L, H, H, H
         assert_eq!(timer.counter, 0xFFFE);
-        timer.gate_level = true;  timer.tick();     // H, H, H, H (falling edge detected)
+        timer.gate_level = true;
+        timer.tick(); // H, H, H, H (falling edge detected)
         assert_eq!(timer.counter, 3);
         assert_eq!(timer.compare_status, CompareStatus::Started);
     }
-
 }

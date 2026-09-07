@@ -210,7 +210,10 @@ impl CharDisplay {
         font: Font,
         palette: Vec<Rgb24>,
     ) -> Self {
-        debug_assert!(!palette.is_empty(), "palette must be non-empty (validated by the config module)");
+        debug_assert!(
+            !palette.is_empty(),
+            "palette must be non-empty (validated by the config module)"
+        );
         let cells = (columns as usize) * (rows as usize);
         let effective_clock_hz = clock_hz.unwrap_or(NOMINAL_CLOCK_HZ);
         let cycles_per_frame = (effective_clock_hz / frame_rate_hz.max(1) as u64).max(1);
@@ -222,8 +225,16 @@ impl CharDisplay {
             double_buffered,
             char_ram: vec![0; cells],
             color_ram: vec![0; cells],
-            scanout_char_ram: if double_buffered { vec![0; cells] } else { Vec::new() },
-            scanout_color_ram: if double_buffered { vec![0; cells] } else { Vec::new() },
+            scanout_char_ram: if double_buffered {
+                vec![0; cells]
+            } else {
+                Vec::new()
+            },
+            scanout_color_ram: if double_buffered {
+                vec![0; cells]
+            } else {
+                Vec::new()
+            },
             swap_on_vsync: false,
             swap_pending: false,
             status: 0,
@@ -283,8 +294,18 @@ impl CharDisplay {
     /// header over `transport`; unlike [`Self::attach_frame_sink`], nothing else is sent on
     /// individual register writes -- only the header now, then one bulk frame per vsync (see
     /// [`Self::on_vsync`]).
-    pub fn attach_external_transport(&mut self, mut transport: Box<dyn Transport>, relay: TransportRelay) {
-        let header = protocol::encode_header(self.columns, self.rows, self.frame_rate_hz, self.palette.len() as u16, &self.font);
+    pub fn attach_external_transport(
+        &mut self,
+        mut transport: Box<dyn Transport>,
+        relay: TransportRelay,
+    ) {
+        let header = protocol::encode_header(
+            self.columns,
+            self.rows,
+            self.frame_rate_hz,
+            self.palette.len() as u16,
+            &self.font,
+        );
         transport.send_bytes(&header);
         self.external_transport = Some(transport);
         self.keyboard_relay = Some(relay);
@@ -295,7 +316,10 @@ impl CharDisplay {
     /// by the caller (the config module) at the same range/`DeviceId`. Must be called before the
     /// device is boxed onto the bus.
     pub fn with_keyboard_range(mut self, range: AddressRange) -> Self {
-        self.keyboard = Some(KeyboardInput { range, input: InputBuffer::new() });
+        self.keyboard = Some(KeyboardInput {
+            range,
+            input: InputBuffer::new(),
+        });
         self
     }
 
@@ -312,7 +336,11 @@ impl CharDisplay {
     /// CLI path instead rides `external_transport`/`relay` via
     /// [`Self::attach_external_transport`], since both directions share one child process's
     /// stdio.
-    pub fn attach_keyboard_transport(&mut self, transport: Box<dyn Transport>, relay: TransportRelay) {
+    pub fn attach_keyboard_transport(
+        &mut self,
+        transport: Box<dyn Transport>,
+        relay: TransportRelay,
+    ) {
         self.keyboard_transport = Some(transport);
         self.keyboard_relay = Some(relay);
     }
@@ -361,7 +389,9 @@ impl CharDisplay {
             PaletteUpdateState::Idle => return,
             PaletteUpdateState::ExpectIndex => PaletteUpdateState::ExpectRed(value),
             PaletteUpdateState::ExpectRed(index) => PaletteUpdateState::ExpectGreen(index, value),
-            PaletteUpdateState::ExpectGreen(index, red) => PaletteUpdateState::ExpectBlue(index, red, value),
+            PaletteUpdateState::ExpectGreen(index, red) => {
+                PaletteUpdateState::ExpectBlue(index, red, value)
+            }
             PaletteUpdateState::ExpectBlue(index, red, green) => {
                 let slot = compositing::resolve_palette_index(index, self.palette.len());
                 self.palette[slot] = Rgb24::new(red, green, value);
@@ -403,8 +433,19 @@ impl CharDisplay {
         }
         if let Some(sink) = &self.frame_sink {
             let (char_ram, color_ram) = self.frame_source();
-            let pixels = compositing::composite(char_ram, color_ram, self.columns, self.rows, &self.palette, &self.font);
-            let _ = sink.try_send(DisplayFrame { pixels, columns: self.columns, rows: self.rows });
+            let pixels = compositing::composite(
+                char_ram,
+                color_ram,
+                self.columns,
+                self.rows,
+                &self.palette,
+                &self.font,
+            );
+            let _ = sink.try_send(DisplayFrame {
+                pixels,
+                columns: self.columns,
+                rows: self.rows,
+            });
         }
         let mut external_transport = self.external_transport.take();
         if let Some(transport) = external_transport.as_mut() {
@@ -419,7 +460,8 @@ impl CharDisplay {
 impl IoDevice for CharDisplay {
     fn read(&mut self, address: u16) -> u8 {
         if let Some(keyboard) = self.keyboard.as_mut()
-            && keyboard.range.contains(address) {
+            && keyboard.range.contains(address)
+        {
             return match address - keyboard.range.start {
                 0 => keyboard.input.read_data(),
                 1 => keyboard.input.read_latch(),
@@ -445,7 +487,8 @@ impl IoDevice for CharDisplay {
 
     fn write(&mut self, address: u16, value: u8) {
         if let Some(keyboard) = self.keyboard.as_mut()
-            && keyboard.range.contains(address) {
+            && keyboard.range.contains(address)
+        {
             // Data register (offset 0) is input-only, matching the deleted `Keyboard`'s own
             // no-op write semantics: this device has no outbound byte stream to send to.
             if address - keyboard.range.start == 1 {
@@ -468,7 +511,8 @@ impl IoDevice for CharDisplay {
 
     fn peek(&self, address: u16) -> u8 {
         if let Some(keyboard) = self.keyboard.as_ref()
-            && keyboard.range.contains(address) {
+            && keyboard.range.contains(address)
+        {
             return match address - keyboard.range.start {
                 0 => keyboard.input.peek_data(),
                 1 => keyboard.input.peek_latch(),
@@ -492,7 +536,10 @@ impl IoDevice for CharDisplay {
 
     fn claims(&self, address: u16) -> bool {
         self.address_range.contains(address)
-            || self.keyboard.as_ref().is_some_and(|keyboard| keyboard.range.contains(address))
+            || self
+                .keyboard
+                .as_ref()
+                .is_some_and(|keyboard| keyboard.range.contains(address))
     }
 
     fn tick(&mut self, cycles: u32) {
@@ -523,11 +570,19 @@ impl IoDevice for CharDisplay {
         if let Some(keyboard) = self.keyboard.as_mut() {
             keyboard.input.reset();
         }
-        log_msg!(self.log_sender, LogLevel::Info, LogCategory::Device, "{} reset", self.identity());
+        log_msg!(
+            self.log_sender,
+            LogLevel::Info,
+            LogCategory::Device,
+            "{} reset",
+            self.identity()
+        );
     }
 
     fn irq_active(&self) -> bool {
-        self.keyboard.as_ref().is_some_and(|keyboard| keyboard.input.irq_active())
+        self.keyboard
+            .as_ref()
+            .is_some_and(|keyboard| keyboard.input.irq_active())
     }
 
     fn name(&self) -> &str {
@@ -713,8 +768,15 @@ mod tests {
 
         assert_eq!(device.palette()[2], Rgb24::new(10, 20, 30));
         assert_ne!(device.peek(status_addr()) & STATUS_PALETTE_ACCEPTED, 0);
-        assert_eq!(device.read(status_addr()) & STATUS_PALETTE_ACCEPTED, STATUS_PALETTE_ACCEPTED);
-        assert_eq!(device.peek(status_addr()) & STATUS_PALETTE_ACCEPTED, 0, "read-to-clear");
+        assert_eq!(
+            device.read(status_addr()) & STATUS_PALETTE_ACCEPTED,
+            STATUS_PALETTE_ACCEPTED
+        );
+        assert_eq!(
+            device.peek(status_addr()) & STATUS_PALETTE_ACCEPTED,
+            0,
+            "read-to-clear"
+        );
     }
 
     #[test]
@@ -757,7 +819,11 @@ mod tests {
         device.write(status_addr(), 33);
 
         assert_eq!(device.palette()[3], Rgb24::new(11, 22, 33));
-        assert_eq!(device.palette()[0], Rgb24::new(0, 0, 0), "first slot untouched by discarded sequence");
+        assert_eq!(
+            device.palette()[0],
+            Rgb24::new(0, 0, 0),
+            "first slot untouched by discarded sequence"
+        );
     }
 
     #[test]
@@ -844,7 +910,10 @@ mod tests {
         device.reset();
         let received = rx.recv().unwrap();
         assert_eq!(received.category, LogCategory::Device);
-        assert_eq!(received.message, format!("{DEVICE_NAME}@0x{BASE_ADDRESS:04x} reset"));
+        assert_eq!(
+            received.message,
+            format!("{DEVICE_NAME}@0x{BASE_ADDRESS:04x} reset")
+        );
     }
 
     #[test]
@@ -875,7 +944,9 @@ mod tests {
         device.write(color_ram_addr(0), 1);
         device.tick(10_000); // one vsync at this device's cycles_per_frame (1_000_000 / 100)
 
-        let frame = rx.try_recv().expect("expected a composited frame after vsync");
+        let frame = rx
+            .try_recv()
+            .expect("expected a composited frame after vsync");
         assert_eq!(frame.columns, COLUMNS);
         assert_eq!(frame.rows, ROWS);
         assert_eq!(frame.pixels.len(), (COLUMNS * 8 * ROWS * 8 * 4) as usize);
@@ -895,15 +966,24 @@ mod tests {
         device.attach_frame_sink(tx);
         device.shutdown();
         device.tick(10_000);
-        assert!(rx.try_recv().is_err(), "channel should be closed once the sink is dropped");
+        assert!(
+            rx.try_recv().is_err(),
+            "channel should be closed once the sink is dropped"
+        );
     }
 
     /// `remote` is the peripheral's end of the pipe: everything the device sends over the
     /// external transport lands here, byte by byte, and can be collected with
     /// [`collect_bytes`]. Mirrors `LedMatrix`'s own `device_with_pipe` test helper.
-    fn device_with_external_transport(double_buffered: bool) -> (CharDisplay, crate::emulator::transport::InternalPipeTransport) {
+    fn device_with_external_transport(
+        double_buffered: bool,
+    ) -> (
+        CharDisplay,
+        crate::emulator::transport::InternalPipeTransport,
+    ) {
         let reporter = crate::emulator::transport::TransportReporter::pending(None);
-        let ((local, relay), remote) = crate::emulator::transport::InternalPipeTransport::pair(reporter).unwrap();
+        let ((local, relay), remote) =
+            crate::emulator::transport::InternalPipeTransport::pair(reporter).unwrap();
         let mut device = device(double_buffered);
         device.attach_external_transport(Box::new(local), TransportRelay::Byte(relay));
         (device, remote)
@@ -973,7 +1053,10 @@ mod tests {
         device.tick(10_000); // must not tear down the transport merely because this arrived
 
         let frame = collect_bytes(&mut remote);
-        assert!(!frame.is_empty(), "expected the transport to remain alive and still send a frame");
+        assert!(
+            !frame.is_empty(),
+            "expected the transport to remain alive and still send a frame"
+        );
     }
 
     // -- Keyboard sub-range: behavior re-homed from the deleted `Keyboard` device's own test
@@ -998,13 +1081,28 @@ mod tests {
     }
 
     /// See `Console`'s test module for the rationale behind this hand-fed relay harness.
-    fn spawn_byte_relay(capacity: usize) -> (crossbeam_channel::Sender<u8>, crate::emulator::transport::ChannelRelay<u8>) {
+    fn spawn_byte_relay(
+        capacity: usize,
+    ) -> (
+        crossbeam_channel::Sender<u8>,
+        crate::emulator::transport::ChannelRelay<u8>,
+    ) {
         let (tx, rx) = crossbeam_channel::unbounded();
-        (tx, crate::emulator::transport::ChannelRelay::spawn(rx, capacity))
+        (
+            tx,
+            crate::emulator::transport::ChannelRelay::spawn(rx, capacity),
+        )
     }
 
-    fn device_with_keyboard_pipe(relay_capacity: usize) -> (CharDisplay, crate::emulator::transport::InternalPipeTransport, crossbeam_channel::Sender<u8>) {
-        let (local, remote) = crate::emulator::transport::InternalPipeTransport::pair_direct().unwrap();
+    fn device_with_keyboard_pipe(
+        relay_capacity: usize,
+    ) -> (
+        CharDisplay,
+        crate::emulator::transport::InternalPipeTransport,
+        crossbeam_channel::Sender<u8>,
+    ) {
+        let (local, remote) =
+            crate::emulator::transport::InternalPipeTransport::pair_direct().unwrap();
         let (tx, relay) = spawn_byte_relay(relay_capacity);
         let mut device = device_with_keyboard(true);
         device.attach_keyboard_transport(Box::new(local), TransportRelay::Byte(relay));
@@ -1031,7 +1129,11 @@ mod tests {
         device.write(keyboard_data_addr(), 0x42);
         std::thread::sleep(std::time::Duration::from_millis(1));
         assert_eq!(remote.try_recv(), None, "expected no outbound byte");
-        assert_eq!(device.peek(keyboard_data_addr()), 0, "expected no state change");
+        assert_eq!(
+            device.peek(keyboard_data_addr()),
+            0,
+            "expected no state change"
+        );
     }
 
     #[test]
@@ -1046,7 +1148,11 @@ mod tests {
         let mut device = device_with_keyboard(true);
         device.keyboard.as_mut().unwrap().input.push(0x42);
         assert_eq!(device.peek(keyboard_data_addr()), 0x42);
-        assert_eq!(device.peek(keyboard_data_addr()), 0x42, "peek must not consume the buffered byte");
+        assert_eq!(
+            device.peek(keyboard_data_addr()),
+            0x42,
+            "peek must not consume the buffered byte"
+        );
     }
 
     #[test]
@@ -1082,7 +1188,11 @@ mod tests {
         let mut device = device_with_keyboard(true);
         device.keyboard.as_mut().unwrap().input.push(0x42);
         device.reset();
-        assert_eq!(device.peek(keyboard_data_addr()), 0, "reset must clear buffered keyboard input");
+        assert_eq!(
+            device.peek(keyboard_data_addr()),
+            0,
+            "reset must clear buffered keyboard input"
+        );
     }
 
     #[test]

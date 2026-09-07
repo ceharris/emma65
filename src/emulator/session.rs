@@ -14,4 +14,3 @@ pub struct EmulatorSession {
     /// configured device.
     pub id_allocator: DeviceIdAllocator,
 }
-

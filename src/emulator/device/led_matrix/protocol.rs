@@ -49,7 +49,11 @@ pub fn encode_header(matrix_count: u8, columns: u8, frame_rate_hz: u32) -> Vec<u
 /// Builds one block message (spec §5.1): tag, matrix index, then that matrix's raw
 /// palette-index pixel bytes -- sent once per swap of that matrix.
 pub fn encode_block(matrix_index: u8, pixels: &[u8]) -> Vec<u8> {
-    debug_assert_eq!(pixels.len(), PIXELS_PER_MATRIX, "pixels must be exactly one matrix's worth");
+    debug_assert_eq!(
+        pixels.len(),
+        PIXELS_PER_MATRIX,
+        "pixels must be exactly one matrix's worth"
+    );
     let mut buf = Vec::with_capacity(1 + 1 + pixels.len());
     buf.push(MSG_BLOCK);
     buf.push(matrix_index);

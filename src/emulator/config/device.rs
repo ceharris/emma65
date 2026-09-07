@@ -23,7 +23,6 @@ pub struct DeviceSpec {
 }
 
 impl DeviceSpec {
-
     /// Address at which the device will be mapped on the bus.
     pub fn address(&self) -> u16 {
         self.address
@@ -38,7 +37,6 @@ impl DeviceSpec {
     pub fn attributes(&self) -> &HashMap<String, Value> {
         &self.attributes
     }
-
 }
 
 impl FromStr for DeviceSpec {
@@ -63,18 +61,12 @@ pub enum DeviceModuleError {
 impl Display for DeviceModuleError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            DeviceModuleError::BusConfig(e) => 
-                write!(f, "bus configuration error: {e}"),
-            DeviceModuleError::Transport(e) =>
-                write!(f, "transport error: {e}"),
-            DeviceModuleError::Config(e) =>
-                write!(f, "configuration error: {e}"),
-            DeviceModuleError::Load(e) =>
-                write!(f, "load error: {e}"),
-            DeviceModuleError::Io(e ) =>
-                write!(f, "I/O error: {e}"),
-            DeviceModuleError::SymbolTable(e ) =>
-                write!(f, "Symbol table error: {e}"),
+            DeviceModuleError::BusConfig(e) => write!(f, "bus configuration error: {e}"),
+            DeviceModuleError::Transport(e) => write!(f, "transport error: {e}"),
+            DeviceModuleError::Config(e) => write!(f, "configuration error: {e}"),
+            DeviceModuleError::Load(e) => write!(f, "load error: {e}"),
+            DeviceModuleError::Io(e) => write!(f, "I/O error: {e}"),
+            DeviceModuleError::SymbolTable(e) => write!(f, "Symbol table error: {e}"),
         }
     }
 }
@@ -82,18 +74,21 @@ impl Display for DeviceModuleError {
 /// A pluggable device module.
 pub trait DeviceModule: Clone {
     /// Gets the name of this device module.
-    fn name(&self) -> &'static  str;
+    fn name(&self) -> &'static str;
     /// Instantiates the device represented by this module.
     /// # Arguments
     /// * bus_config - bus configuration builder
     /// * address - address at which the device will be mapped on the bus
     /// * attributes - device configuration attributes
     /// * context - application-level configuration attributes
-    fn instantiate(&self, bus_config: BusConfig, address: u16,
-                   attributes: &HashMap<String, Value>, 
-                   context: &InstantiationContext,
-                   id_allocator: Arc<Mutex<DeviceIdAllocator>>)
-                   -> impl Future<Output = Result<BusConfig, DeviceModuleError>> + Send;
+    fn instantiate(
+        &self,
+        bus_config: BusConfig,
+        address: u16,
+        attributes: &HashMap<String, Value>,
+        context: &InstantiationContext,
+        id_allocator: Arc<Mutex<DeviceIdAllocator>>,
+    ) -> impl Future<Output = Result<BusConfig, DeviceModuleError>> + Send;
 }
 
 fn parse_prefixed_u32(s: &str) -> Result<u32, std::num::ParseIntError> {
@@ -130,14 +125,14 @@ fn parse_device_mapping(s: &str) -> Result<(String, u16), String> {
         let device_type = parts[0].to_string();
         let address = parts[1];
         if device_type.is_empty() {
-            return Err("Device type is required on the left-hand side of '@'".to_string())
+            return Err("Device type is required on the left-hand side of '@'".to_string());
         }
         if address.is_empty() {
-            return Err("Address is required on the right-hand side of '@'".to_string())
+            return Err("Address is required on the right-hand side of '@'".to_string());
         }
         match parse_prefixed_u32(address) {
             Ok(address) => Ok((device_type, address as u16)),
-            Err(error) => Err(error.to_string())
+            Err(error) => Err(error.to_string()),
         }
     } else {
         Err("Device type and address are required (e.g. console@0xfff8)".to_string())
@@ -150,12 +145,14 @@ fn parse_attributes(s: &str) -> Result<HashMap<String, figment::value::Value>, S
         if pair.is_empty() {
             continue;
         }
-        let mut parts = pair.splitn(2,'=');
+        let mut parts = pair.splitn(2, '=');
         let key = parts.next().ok_or("missing attribute name")?.to_string();
         if key.is_empty() {
             return Err("Attribute name is required on the left-hand side of '='".to_string());
         }
-        let val_str = parts.next().ok_or(format!("Missing attribute value for '{}'", key))?;
+        let val_str = parts
+            .next()
+            .ok_or(format!("Missing attribute value for '{}'", key))?;
         if val_str.is_empty() {
             return Err("Attribute value is required on the right-hand side of '='".to_string());
         }
@@ -180,12 +177,11 @@ fn parse_attributes(s: &str) -> Result<HashMap<String, figment::value::Value>, S
 }
 
 fn parse_spec(s: &str) -> Result<DeviceSpec, String> {
-    let parts: Vec<&str> = s.splitn(2,',').collect();
+    let parts: Vec<&str> = s.splitn(2, ',').collect();
     let (type_name, address) = parse_device_mapping(parts[0])?;
     let attributes = if parts.len() == 2 {
         parse_attributes(parts[1])?
-    }
-    else {
+    } else {
         HashMap::new()
     };
     Ok(DeviceSpec {
@@ -194,7 +190,6 @@ fn parse_spec(s: &str) -> Result<DeviceSpec, String> {
         attributes,
     })
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -241,7 +236,7 @@ mod tests {
                 assert_eq!(device_type, "console");
                 assert_eq!(address, 0xfff8);
             }
-            _ => panic!("expected valid device mapping")
+            _ => panic!("expected valid device mapping"),
         }
     }
 
@@ -269,7 +264,7 @@ mod tests {
             Ok(map) => {
                 assert_eq!(map.get("name").unwrap().as_str().unwrap(), "value");
             }
-            _ => panic!("expected mapped attribute")
+            _ => panic!("expected mapped attribute"),
         }
     }
 
@@ -279,7 +274,7 @@ mod tests {
             Ok(map) => {
                 assert!(map.get("name").unwrap().to_bool().unwrap());
             }
-            _ => panic!("expected mapped attribute")
+            _ => panic!("expected mapped attribute"),
         }
     }
 
@@ -287,9 +282,12 @@ mod tests {
     fn parse_one_attribute_with_u32_value() {
         match parse_attributes("name=1843200") {
             Ok(map) => {
-                assert_eq!(map.get("name").unwrap().to_num().unwrap().to_u32().unwrap(), 1_843_200);
+                assert_eq!(
+                    map.get("name").unwrap().to_num().unwrap().to_u32().unwrap(),
+                    1_843_200
+                );
             }
-            _ => panic!("expected mapped attribute")
+            _ => panic!("expected mapped attribute"),
         }
     }
 
@@ -297,9 +295,12 @@ mod tests {
     fn parse_one_attribute_with_prefixed_u16_value() {
         match parse_attributes("name=0x7fff") {
             Ok(map) => {
-                assert_eq!(map.get("name").unwrap().to_num().unwrap().to_u32().unwrap(), 0x7fff);
+                assert_eq!(
+                    map.get("name").unwrap().to_num().unwrap().to_u32().unwrap(),
+                    0x7fff
+                );
             }
-            _ => panic!("expected mapped attribute")
+            _ => panic!("expected mapped attribute"),
         }
     }
 
@@ -307,9 +308,12 @@ mod tests {
     fn parse_one_attribute_with_suffixed_u16_value() {
         match parse_attributes("name=48K") {
             Ok(map) => {
-                assert_eq!(map.get("name").unwrap().to_num().unwrap().to_u32().unwrap(), 48 * 1024);
+                assert_eq!(
+                    map.get("name").unwrap().to_num().unwrap().to_u32().unwrap(),
+                    48 * 1024
+                );
             }
-            _ => panic!("expected mapped attribute")
+            _ => panic!("expected mapped attribute"),
         }
     }
 
@@ -320,7 +324,7 @@ mod tests {
                 assert_eq!(map.get("name1").unwrap().as_str().unwrap(), "value1");
                 assert_eq!(map.get("name2").unwrap().as_str().unwrap(), "value2");
             }
-            _ => panic!("expected mapped attributes")
+            _ => panic!("expected mapped attributes"),
         }
     }
 
@@ -344,7 +348,7 @@ mod tests {
                 assert_eq!(device_spec.address, 0xfff8);
                 assert!(device_spec.attributes.is_empty());
             }
-            _ => panic!("expected device spec")
+            _ => panic!("expected device spec"),
         }
     }
 
@@ -354,11 +358,17 @@ mod tests {
             Ok(device_spec) => {
                 assert_eq!(device_spec.module_name, "console");
                 assert_eq!(device_spec.address, 0xfff8);
-                assert_eq!(device_spec.attributes.get("transport").unwrap().as_str().unwrap(),
-                           "pty:.emma/dev/ttyS0".to_string());
+                assert_eq!(
+                    device_spec
+                        .attributes
+                        .get("transport")
+                        .unwrap()
+                        .as_str()
+                        .unwrap(),
+                    "pty:.emma/dev/ttyS0".to_string()
+                );
             }
-            _ => panic!("expected device spec")
+            _ => panic!("expected device spec"),
         }
     }
-
 }

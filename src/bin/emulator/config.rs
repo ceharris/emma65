@@ -1,5 +1,8 @@
 use clap::Parser;
-use figment::{Figment, providers::{Env, Format, Serialized, Toml}};
+use figment::{
+    Figment,
+    providers::{Env, Format, Serialized, Toml},
+};
 use serde::{Deserialize, Serialize};
 
 // CLI args.
@@ -71,7 +74,6 @@ pub struct LoadedConfig {
 }
 
 impl AppConfig {
-
     pub fn load() -> Result<LoadedConfig, Box<figment::Error>> {
         let cli = CliArgs::parse();
         let mut figment = Figment::new();
@@ -83,9 +85,11 @@ impl AppConfig {
             .merge(Serialized::globals(&cli.app))
             .extract()
             .map_err(Box::new)?;
-        Ok(LoadedConfig { app, profile: cli.profile })
+        Ok(LoadedConfig {
+            app,
+            profile: cli.profile,
+        })
     }
-
 }
 
 /// If `--profile <id>` was given, materializes that bundled starter-profile
@@ -100,15 +104,24 @@ impl AppConfig {
 /// this takes a user-supplied `id` and returns a proper `Err` rather than
 /// panicking when it names no registered template.
 pub fn apply_named_profile(config: &mut AppConfig, id: &str) -> Result<tempfile::TempDir, String> {
-    let dir = tempfile::tempdir().map_err(|e| format!("failed to create tempdir for profile '{id}': {e}"))?;
+    let dir = tempfile::tempdir()
+        .map_err(|e| format!("failed to create tempdir for profile '{id}': {e}"))?;
     let toml_path = emma65::emulator::config::templates::materialize(id, dir.path())
         .map_err(|e| format!("failed to materialize profile '{id}': {e}"))?;
     let template: emma65::emulator::Config = Figment::new()
         .merge(Toml::file(&toml_path))
         .extract()
         .map_err(|e| format!("bundled profile '{id}' failed to parse: {e}"))?;
-    config.emulator.cpu_variant_spec = config.emulator.cpu_variant_spec.take().or(template.cpu_variant_spec);
-    config.emulator.clock_speed_hz = config.emulator.clock_speed_hz.take().or(template.clock_speed_hz);
+    config.emulator.cpu_variant_spec = config
+        .emulator
+        .cpu_variant_spec
+        .take()
+        .or(template.cpu_variant_spec);
+    config.emulator.clock_speed_hz = config
+        .emulator
+        .clock_speed_hz
+        .take()
+        .or(template.clock_speed_hz);
     config.emulator.devices = template.devices;
     Ok(dir)
 }
@@ -121,7 +134,12 @@ pub fn apply_named_profile(config: &mut AppConfig, id: &str) -> Result<tempfile:
 /// CLI/env/`--config`. Returns the tempdir handle (must be kept alive until
 /// `Config::build()` completes).
 pub fn apply_default_if_unconfigured(config: &mut AppConfig) -> Option<tempfile::TempDir> {
-    if config.emulator.devices.as_ref().is_none_or(|d| d.is_empty()) {
+    if config
+        .emulator
+        .devices
+        .as_ref()
+        .is_none_or(|d| d.is_empty())
+    {
         let dir = tempfile::tempdir().expect("failed to create tempdir for default config");
         let toml_path = emma65::emulator::config::templates::materialize_default(dir.path())
             .expect("failed to materialize default config");
@@ -129,8 +147,16 @@ pub fn apply_default_if_unconfigured(config: &mut AppConfig) -> Option<tempfile:
             .merge(Toml::file(&toml_path))
             .extract()
             .expect("bundled default config failed to parse");
-        config.emulator.cpu_variant_spec = config.emulator.cpu_variant_spec.take().or(default.cpu_variant_spec);
-        config.emulator.clock_speed_hz = config.emulator.clock_speed_hz.take().or(default.clock_speed_hz);
+        config.emulator.cpu_variant_spec = config
+            .emulator
+            .cpu_variant_spec
+            .take()
+            .or(default.cpu_variant_spec);
+        config.emulator.clock_speed_hz = config
+            .emulator
+            .clock_speed_hz
+            .take()
+            .or(default.clock_speed_hz);
         config.emulator.devices = default.devices;
         Some(dir)
     } else {
@@ -144,7 +170,11 @@ mod tests {
 
     fn empty_app_config() -> AppConfig {
         AppConfig {
-            emulator: emma65::emulator::Config { cpu_variant_spec: None, clock_speed_hz: None, devices: None },
+            emulator: emma65::emulator::Config {
+                cpu_variant_spec: None,
+                clock_speed_hz: None,
+                devices: None,
+            },
             trace_file: None,
             log_file: None,
             park_on_halt: false,
@@ -170,12 +200,19 @@ mod tests {
     fn apply_named_profile_unknown_id_returns_error_not_panic() {
         let mut config = empty_app_config();
         let err = apply_named_profile(&mut config, "nope").unwrap_err();
-        assert!(err.contains("nope"), "expected the bad id in the error message: {err}");
+        assert!(
+            err.contains("nope"),
+            "expected the bad id in the error message: {err}"
+        );
     }
 
     #[test]
     fn cli_args_reject_config_and_profile_together() {
-        let result = CliArgs::try_parse_from(["emma65", "--config", "/tmp/x.toml", "--profile", "default"]);
-        assert!(result.is_err(), "--config and --profile should be mutually exclusive");
+        let result =
+            CliArgs::try_parse_from(["emma65", "--config", "/tmp/x.toml", "--profile", "default"]);
+        assert!(
+            result.is_err(),
+            "--config and --profile should be mutually exclusive"
+        );
     }
 }

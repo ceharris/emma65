@@ -4,15 +4,25 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use super::ExpandedPathBuf;
-use crate::emulator::{PipeTransport, PtyTransport, TcpSocketTransport, Transport, TransportError, TransportRelay, TransportReporter, UnixSocketTransport};
+use crate::emulator::{
+    PipeTransport, PtyTransport, TcpSocketTransport, Transport, TransportError, TransportRelay,
+    TransportReporter, UnixSocketTransport,
+};
 
 /// A transport configuration spec.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TransportSpec {
-    Tcp { port: u16, address: IpAddr },
-    Unix { path: ExpandedPathBuf },
-    Pty { path: Option<ExpandedPathBuf> },
+    Tcp {
+        port: u16,
+        address: IpAddr,
+    },
+    Unix {
+        path: ExpandedPathBuf,
+    },
+    Pty {
+        path: Option<ExpandedPathBuf>,
+    },
     /// Spawn a child process and bridge the device's byte stream to its stdin/stdout.
     ///
     /// `command[0]` is the executable path; `command[1..]` are arguments.
@@ -22,7 +32,9 @@ pub enum TransportSpec {
     ///
     /// CLI shorthand: `pipe:/path/to/exe,arg1,arg2`
     /// TOML: `transport = { pipe = { command = ["/path/to/exe", "arg1"] } }`
-    Pipe { command: Vec<String> },
+    Pipe {
+        command: Vec<String>,
+    },
 }
 
 impl TransportSpec {
@@ -40,7 +52,8 @@ impl TransportSpec {
     where
         F: FnOnce(std::io::Error) + Send + 'static,
     {
-        self.to_transport_with_reporter_and_capacity(reporter, on_child_exit, None).await
+        self.to_transport_with_reporter_and_capacity(reporter, on_child_exit, None)
+            .await
     }
 
     /// Same as [`to_transport_with_reporter`](Self::to_transport_with_reporter), but lets
@@ -62,9 +75,18 @@ impl TransportSpec {
         match self {
             TransportSpec::Pipe { command } => {
                 let (transport, relay) = match capacity {
-                    Some(capacity) => PipeTransport::spawn_with_capacity(command, reporter, on_child_exit, capacity).await,
+                    Some(capacity) => {
+                        PipeTransport::spawn_with_capacity(
+                            command,
+                            reporter,
+                            on_child_exit,
+                            capacity,
+                        )
+                        .await
+                    }
                     None => PipeTransport::spawn(command, reporter, on_child_exit).await,
-                }.map_err(TransportError::Io)?;
+                }
+                .map_err(TransportError::Io)?;
                 Ok((Box::new(transport), TransportRelay::Byte(relay)))
             }
             other => other.to_transport(reporter).await,
@@ -76,9 +98,12 @@ impl TransportSpec {
     /// exit is silently ignored; use
     /// [`to_transport_with_reporter`](Self::to_transport_with_reporter) to surface exit
     /// events as emulator errors.
-    async fn to_transport(&self, reporter: TransportReporter) -> Result<(Box<dyn Transport>, TransportRelay), TransportError> {
+    async fn to_transport(
+        &self,
+        reporter: TransportReporter,
+    ) -> Result<(Box<dyn Transport>, TransportRelay), TransportError> {
         match self {
-            TransportSpec::Tcp { port, address} => {
+            TransportSpec::Tcp { port, address } => {
                 let addr = SocketAddr::new(*address, *port);
                 let (transport, relay) = TcpSocketTransport::listen(addr, reporter).await?;
                 Ok((Box::new(transport), TransportRelay::Tagged(relay)))
@@ -87,7 +112,7 @@ impl TransportSpec {
                 let (transport, relay) = UnixSocketTransport::listen(path, reporter).await?;
                 Ok((Box::new(transport), TransportRelay::Tagged(relay)))
             }
-            TransportSpec::Pty { path} => {
+            TransportSpec::Pty { path } => {
                 let (transport, relay) = if let Some(path) = path {
                     PtyTransport::open(Some(path), reporter)
                 } else {
@@ -96,13 +121,13 @@ impl TransportSpec {
                 Ok((Box::new(transport), TransportRelay::Byte(relay)))
             }
             TransportSpec::Pipe { command } => {
-                let (transport, relay) = PipeTransport::spawn(command, reporter, |_| {}).await
+                let (transport, relay) = PipeTransport::spawn(command, reporter, |_| {})
+                    .await
                     .map_err(TransportError::Io)?;
                 Ok((Box::new(transport), TransportRelay::Byte(relay)))
             }
         }
     }
-
 }
 
 impl FromStr for TransportSpec {
@@ -111,42 +136,61 @@ impl FromStr for TransportSpec {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.splitn(2, ':').collect();
         match parts[0] {
-            "tcp" if parts.len() == 2 => if let Ok(port) = parts[1].parse::<u16>() {
-                Ok(TransportSpec::Tcp { port, address: TransportSpec::DEFAULT_BIND_IP_ADDR })
-            } else if let Ok(socket_addr) = parts[1].parse::<SocketAddr>() {
-                Ok(TransportSpec::Tcp { port: socket_addr.port(), address: socket_addr.ip() })
-            } else {
-                Err(format!("Invalid IP address or port '{}' in transport spec", parts[1]))
-            },
-            "tcp" => Err("TCP transport spec format is 'tcp:PORT' or 'tcp:IP-ADDR:PORT'".to_string()),
+            "tcp" if parts.len() == 2 => {
+                if let Ok(port) = parts[1].parse::<u16>() {
+                    Ok(TransportSpec::Tcp {
+                        port,
+                        address: TransportSpec::DEFAULT_BIND_IP_ADDR,
+                    })
+                } else if let Ok(socket_addr) = parts[1].parse::<SocketAddr>() {
+                    Ok(TransportSpec::Tcp {
+                        port: socket_addr.port(),
+                        address: socket_addr.ip(),
+                    })
+                } else {
+                    Err(format!(
+                        "Invalid IP address or port '{}' in transport spec",
+                        parts[1]
+                    ))
+                }
+            }
+            "tcp" => {
+                Err("TCP transport spec format is 'tcp:PORT' or 'tcp:IP-ADDR:PORT'".to_string())
+            }
             "unix" if parts.len() == 2 => {
                 if parts[1].trim() != "" {
-                    Ok(TransportSpec::Unix { path: ExpandedPathBuf::new(parts[1]) })
+                    Ok(TransportSpec::Unix {
+                        path: ExpandedPathBuf::new(parts[1]),
+                    })
                 } else {
                     Err("Path name is required".to_string())
                 }
-            },
+            }
             "unix" => Err("Unix-domain transport spec format is 'unix:PATHNAME'".to_string()),
             "pty" if parts.len() == 2 => {
                 if parts[1].trim() != "" {
-                    Ok(TransportSpec::Pty { path: Some(ExpandedPathBuf::new(parts[1])) })
+                    Ok(TransportSpec::Pty {
+                        path: Some(ExpandedPathBuf::new(parts[1])),
+                    })
                 } else {
                     Err("Path name is required".to_string())
                 }
-            },
+            }
             "pty" if parts.len() == 1 => Ok(TransportSpec::Pty { path: None }),
             "pty" => Err("PTY transport spec format is 'pty[:SYMLINK-NAME]'".to_string()),
             "pipe" if parts.len() == 2 => {
                 let args_str = parts[1].trim();
                 if args_str.is_empty() {
-                    return Err("Pipe transport spec format is 'pipe:EXECUTABLE[,ARG,...]'".to_string());
+                    return Err(
+                        "Pipe transport spec format is 'pipe:EXECUTABLE[,ARG,...]'".to_string()
+                    );
                 }
                 let command: Vec<String> = args_str.split(',').map(str::to_owned).collect();
                 Ok(TransportSpec::Pipe { command })
             }
             "pipe" => Err("Pipe transport spec format is 'pipe:EXECUTABLE[,ARG,...]'".to_string()),
             "" => Err("Transport spec expected".to_string()),
-            _ => Err(format!("Invalid transport type or arguments: '{}'", s))
+            _ => Err(format!("Invalid transport type or arguments: '{}'", s)),
         }
     }
 }
@@ -172,7 +216,6 @@ impl TryFrom<TransportSpecFormat> for TransportSpec {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,11 +238,18 @@ mod tests {
         let reporter = TransportReporter::pending(Some(sender));
         reporter.bind("test-device-42");
 
-        let spec = TransportSpec::Pipe { command: vec!["cat".to_string()] };
-        let (mut transport, relay) = spec.to_transport_with_reporter(reporter, |_| {}).await.unwrap();
+        let spec = TransportSpec::Pipe {
+            command: vec!["cat".to_string()],
+        };
+        let (mut transport, relay) = spec
+            .to_transport_with_reporter(reporter, |_| {})
+            .await
+            .unwrap();
 
         match receiver.try_recv() {
-            Ok(DeviceEvent::TransportConnected { device, .. }) => assert_eq!(device, "test-device-42"),
+            Ok(DeviceEvent::TransportConnected { device, .. }) => {
+                assert_eq!(device, "test-device-42")
+            }
             other => panic!("expected TransportConnected, got {other:?}"),
         }
 
@@ -216,14 +266,21 @@ mod tests {
         reporter.bind("test-device-7");
 
         let path = tmp_socket_path("forwards_caller_reporter");
-        let spec = TransportSpec::Unix { path: ExpandedPathBuf::new(path.to_str().unwrap()) };
-        let (mut transport, relay) = spec.to_transport_with_reporter(reporter, |_| {}).await.unwrap();
+        let spec = TransportSpec::Unix {
+            path: ExpandedPathBuf::new(path.to_str().unwrap()),
+        };
+        let (mut transport, relay) = spec
+            .to_transport_with_reporter(reporter, |_| {})
+            .await
+            .unwrap();
 
         let _client = UnixStream::connect(&path).await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 
         match receiver.try_recv() {
-            Ok(DeviceEvent::TransportConnected { device, .. }) => assert_eq!(device, "test-device-7"),
+            Ok(DeviceEvent::TransportConnected { device, .. }) => {
+                assert_eq!(device, "test-device-7")
+            }
             other => panic!("expected TransportConnected, got {other:?}"),
         }
 
@@ -269,8 +326,8 @@ mod tests {
             TransportSpec::Tcp { port, address } => {
                 assert_eq!(port, 10001);
                 assert_eq!(address, TransportSpec::DEFAULT_BIND_IP_ADDR);
-            },
-            _ => panic!("expected TCP transport")
+            }
+            _ => panic!("expected TCP transport"),
         }
     }
 
@@ -281,8 +338,8 @@ mod tests {
             TransportSpec::Tcp { port, address } => {
                 assert_eq!(port, 10001);
                 assert_eq!(address, IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)));
-            },
-            _ => panic!("expected TCP transport")
+            }
+            _ => panic!("expected TCP transport"),
         }
     }
 
@@ -290,11 +347,11 @@ mod tests {
     fn from_str_with_tcp_ipv6_address_and_port() {
         let spec = TransportSpec::from_str("tcp:[::1]:10001").unwrap();
         match spec {
-            TransportSpec::Tcp { port, address }=> {
+            TransportSpec::Tcp { port, address } => {
                 assert_eq!(port, 10001);
                 assert_eq!(address, IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)));
-            },
-            _ => panic!("expected TCP transport")
+            }
+            _ => panic!("expected TCP transport"),
         }
     }
 
@@ -320,10 +377,10 @@ mod tests {
     fn from_str_with_unix_and_pathname() {
         let spec = TransportSpec::from_str("unix:tmp/my.socket").unwrap();
         match spec {
-            TransportSpec::Unix { path }  => {
+            TransportSpec::Unix { path } => {
                 assert_eq!(&*path, std::path::Path::new("tmp/my.socket"));
             }
-            _ => panic!("expected Unix transport")
+            _ => panic!("expected Unix transport"),
         }
     }
 
@@ -343,10 +400,10 @@ mod tests {
     fn from_str_with_pty_and_pathname() {
         let spec = TransportSpec::from_str("pty:tmp/my.pty").unwrap();
         match spec {
-            TransportSpec::Pty { path: Some(path) }  => {
+            TransportSpec::Pty { path: Some(path) } => {
                 assert_eq!(&*path, std::path::Path::new("tmp/my.pty"));
             }
-            _ => panic!("expected PTY transport  with pathname")
+            _ => panic!("expected PTY transport  with pathname"),
         }
     }
 
@@ -354,11 +411,10 @@ mod tests {
     fn from_str_with_pty_no_pathname() {
         let spec = TransportSpec::from_str("pty").unwrap();
         match spec {
-            TransportSpec::Pty { path: None }  => {}
-            _ => panic!("expected PTY transport")
+            TransportSpec::Pty { path: None } => {}
+            _ => panic!("expected PTY transport"),
         }
     }
-
 
     #[test]
     #[should_panic(expected = "required")]
@@ -373,7 +429,7 @@ mod tests {
             TransportSpec::Pipe { command } => {
                 assert_eq!(command, vec!["/usr/bin/cat".to_string()]);
             }
-            _ => panic!("expected Pipe transport")
+            _ => panic!("expected Pipe transport"),
         }
     }
 
@@ -382,13 +438,16 @@ mod tests {
         let spec = TransportSpec::from_str("pipe:/usr/bin/foo,--bar,baz").unwrap();
         match spec {
             TransportSpec::Pipe { command } => {
-                assert_eq!(command, vec![
-                    "/usr/bin/foo".to_string(),
-                    "--bar".to_string(),
-                    "baz".to_string(),
-                ]);
+                assert_eq!(
+                    command,
+                    vec![
+                        "/usr/bin/foo".to_string(),
+                        "--bar".to_string(),
+                        "baz".to_string(),
+                    ]
+                );
             }
-            _ => panic!("expected Pipe transport")
+            _ => panic!("expected Pipe transport"),
         }
     }
 
@@ -403,5 +462,4 @@ mod tests {
     fn from_str_with_pipe_and_empty_command() {
         TransportSpec::from_str("pipe:").unwrap();
     }
-
 }

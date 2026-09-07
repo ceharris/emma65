@@ -35,7 +35,9 @@ use std::time::Duration;
 
 use clap::Parser;
 use emma65::emulator::device::led_matrix::PIXELS_PER_MATRIX;
-use emma65::emulator::device::led_matrix::compositing::{Rgb565, composite_matrix, default_palette};
+use emma65::emulator::device::led_matrix::compositing::{
+    Rgb565, composite_matrix, default_palette,
+};
 use sdl2::event::Event;
 use sdl2::gfx::primitives::DrawRenderer;
 use sdl2::pixels::Color;
@@ -97,7 +99,10 @@ struct Arrangement {
 /// count is `matrix_count / columns`, which always divides evenly since the device's config
 /// module validates that invariant before ever sending a header.
 fn arrangement_from_header(header: &Header) -> Arrangement {
-    Arrangement { columns: header.columns as u32, rows: header.matrix_count as u32 / header.columns as u32 }
+    Arrangement {
+        columns: header.columns as u32,
+        rows: header.matrix_count as u32 / header.columns as u32,
+    }
 }
 
 /// Reads into `buf` until it is full, `Ok(false)` on a clean EOF with nothing read yet, or an
@@ -108,7 +113,12 @@ fn read_exact_or_eof<R: Read>(reader: &mut R, buf: &mut [u8]) -> io::Result<bool
     while filled < buf.len() {
         match reader.read(&mut buf[filled..]) {
             Ok(0) if filled == 0 => return Ok(false),
-            Ok(0) => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "stream closed mid-message")),
+            Ok(0) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "stream closed mid-message",
+                ));
+            }
             Ok(n) => filled += n,
             Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
             Err(e) => return Err(e),
@@ -122,7 +132,10 @@ fn read_exact_or_eof<R: Read>(reader: &mut R, buf: &mut [u8]) -> io::Result<bool
 fn read_header<R: Read>(reader: &mut R) -> io::Result<Header> {
     let mut buf = vec![0u8; protocol::HEADER_LEN];
     if !read_exact_or_eof(reader, &mut buf)? {
-        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "stream closed before sending a header"));
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "stream closed before sending a header",
+        ));
     }
     protocol::decode_header(&buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
@@ -144,7 +157,9 @@ fn spawn_message_reader() -> mpsc::Receiver<Message> {
                 Ok(true) => {
                     let tag = tag_buf[0];
                     let Some(len) = protocol::body_len(tag) else {
-                        eprintln!("emma65-led-matrix: unrecognized message tag {tag}, stream desynced");
+                        eprintln!(
+                            "emma65-led-matrix: unrecognized message tag {tag}, stream desynced"
+                        );
                         break;
                     };
                     let mut body = vec![0u8; len];
@@ -190,7 +205,10 @@ fn apply_message(
     message: Message,
 ) {
     match message {
-        Message::Block { matrix_index, pixels } => {
+        Message::Block {
+            matrix_index,
+            pixels,
+        } => {
             if let Some(slot) = matrices.get_mut(matrix_index as usize) {
                 slot.copy_from_slice(&pixels);
             }
@@ -230,7 +248,12 @@ fn render(
         let base_y = row * matrix_size_px;
 
         canvas.set_draw_color(PCB_BACKGROUND_COLOR);
-        canvas.fill_rect(Rect::new(base_x as i32, base_y as i32, matrix_size_px, matrix_size_px))?;
+        canvas.fill_rect(Rect::new(
+            base_x as i32,
+            base_y as i32,
+            matrix_size_px,
+            matrix_size_px,
+        ))?;
 
         let power_on = power_mask & (1u8 << index as u32) != 0;
         let rgba = composite_matrix(pixels, palette, power_on, brightness);
@@ -238,7 +261,11 @@ fn render(
             for c in 0..MATRIX_SIZE {
                 let offset = ((r * MATRIX_SIZE + c) * 4) as usize;
                 let (red, green, blue) = (rgba[offset], rgba[offset + 1], rgba[offset + 2]);
-                let color = if red == 0 && green == 0 && blue == 0 { UNLIT_LED_COLOR } else { Color::RGB(red, green, blue) };
+                let color = if red == 0 && green == 0 && blue == 0 {
+                    UNLIT_LED_COLOR
+                } else {
+                    Color::RGB(red, green, blue)
+                };
                 let cx = (base_x + c * pitch + pitch / 2) as i16;
                 let cy = (base_y + r * pitch + pitch / 2) as i16;
                 canvas.filled_circle(cx, cy, radius, gfx_color(color))?;
@@ -274,10 +301,15 @@ fn main() {
     let rx = spawn_message_reader();
 
     let sdl_context = sdl2::init().expect("SDL2 init failed");
-    let video = sdl_context.video().expect("SDL2 video subsystem init failed");
+    let video = sdl_context
+        .video()
+        .expect("SDL2 video subsystem init failed");
     let window = video
         .window(
-            &format!("emma65 LED matrix - {}x{}", arrangement.columns, arrangement.rows),
+            &format!(
+                "emma65 LED matrix - {}x{}",
+                arrangement.columns, arrangement.rows
+            ),
             pixel_width,
             pixel_height,
         )
@@ -286,10 +318,17 @@ fn main() {
         .build()
         .expect("failed to create SDL2 window");
 
-    let mut canvas = window.into_canvas().build().expect("failed to create SDL2 canvas");
-    canvas.set_logical_size(pixel_width, pixel_height).expect("failed to set logical render size");
+    let mut canvas = window
+        .into_canvas()
+        .build()
+        .expect("failed to create SDL2 canvas");
+    canvas
+        .set_logical_size(pixel_width, pixel_height)
+        .expect("failed to set logical render size");
 
-    let mut event_pump = sdl_context.event_pump().expect("failed to obtain SDL2 event pump");
+    let mut event_pump = sdl_context
+        .event_pump()
+        .expect("failed to obtain SDL2 event pump");
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -300,17 +339,37 @@ fn main() {
 
         match rx.recv_timeout(Duration::from_millis(33)) {
             Ok(message) => {
-                apply_message(&mut matrices, &mut palette, &mut power_mask, &mut brightness, message);
+                apply_message(
+                    &mut matrices,
+                    &mut palette,
+                    &mut power_mask,
+                    &mut brightness,
+                    message,
+                );
                 while let Ok(message) = rx.try_recv() {
-                    apply_message(&mut matrices, &mut palette, &mut power_mask, &mut brightness, message);
+                    apply_message(
+                        &mut matrices,
+                        &mut palette,
+                        &mut power_mask,
+                        &mut brightness,
+                        message,
+                    );
                 }
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => break 'running,
         }
 
-        render(&mut canvas, &matrices, &palette, power_mask, brightness, arrangement, args.pitch)
-            .expect("render failed");
+        render(
+            &mut canvas,
+            &matrices,
+            &palette,
+            power_mask,
+            brightness,
+            arrangement,
+            args.pitch,
+        )
+        .expect("render failed");
     }
 }
 
@@ -331,7 +390,12 @@ mod tests {
         let pitch = surface.pitch() as usize;
         let bytes = surface.without_lock().expect("surface must not be locked");
         let offset = y as usize * pitch + x as usize * 4;
-        (bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3])
+        (
+            bytes[offset],
+            bytes[offset + 1],
+            bytes[offset + 2],
+            bytes[offset + 3],
+        )
     }
 
     /// Regression test for the SDL2_gfx color byte-order mismatch `gfx_color` works around:
@@ -348,7 +412,9 @@ mod tests {
         canvas.set_draw_color(Color::RGBA(10, 10, 10, 255));
         canvas.clear();
 
-        canvas.filled_circle(2, 2, 1, gfx_color(Color::RGB(0, 255, 0))).unwrap();
+        canvas
+            .filled_circle(2, 2, 1, gfx_color(Color::RGB(0, 255, 0)))
+            .unwrap();
 
         assert_eq!(pixel_at(&canvas, 2, 2), (0, 255, 0, 255));
     }
@@ -360,7 +426,13 @@ mod tests {
         let mut power_mask = 0xFFu8;
         let mut brightness = 0xFFu8;
 
-        apply_message(&mut matrices, &mut palette, &mut power_mask, &mut brightness, Message::Power { mask: 0b0110 });
+        apply_message(
+            &mut matrices,
+            &mut palette,
+            &mut power_mask,
+            &mut brightness,
+            Message::Power { mask: 0b0110 },
+        );
 
         assert_eq!(power_mask, 0b0110);
     }
@@ -372,7 +444,13 @@ mod tests {
         let mut power_mask = 0xFFu8;
         let mut brightness = 0xFFu8;
 
-        apply_message(&mut matrices, &mut palette, &mut power_mask, &mut brightness, Message::Brightness { level: 0x7F });
+        apply_message(
+            &mut matrices,
+            &mut palette,
+            &mut power_mask,
+            &mut brightness,
+            Message::Brightness { level: 0x7F },
+        );
 
         assert_eq!(brightness, 0x7F);
     }

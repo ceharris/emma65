@@ -44,7 +44,8 @@ pub struct ProfileDirState(pub Mutex<PathBuf>);
 /// Returns `~/.emma/debugger`, the root under which both `profiles/` and
 /// `config/` live.
 fn debugger_home_dir() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").map_err(|_| "HOME environment variable is not set".to_string())?;
+    let home =
+        std::env::var("HOME").map_err(|_| "HOME environment variable is not set".to_string())?;
     Ok(Path::new(&home).join(".emma/debugger"))
 }
 
@@ -80,7 +81,9 @@ pub fn copy_missing_files_from_default(dir: &Path) -> Result<(), String> {
     if !default_dir.exists() || default_dir == dir {
         return Ok(());
     }
-    for entry in fs::read_dir(&default_dir).map_err(|e| format!("Failed to read {}: {e}", default_dir.display()))? {
+    for entry in fs::read_dir(&default_dir)
+        .map_err(|e| format!("Failed to read {}: {e}", default_dir.display()))?
+    {
         let entry = entry.map_err(|e| format!("Failed to read {}: {e}", default_dir.display()))?;
         let path = entry.path();
         if !path.is_file() {
@@ -90,8 +93,13 @@ pub fn copy_missing_files_from_default(dir: &Path) -> Result<(), String> {
         if dest.exists() {
             continue;
         }
-        fs::copy(&path, &dest)
-            .map_err(|e| format!("Failed to copy {} to {}: {e}", path.display(), dest.display()))?;
+        fs::copy(&path, &dest).map_err(|e| {
+            format!(
+                "Failed to copy {} to {}: {e}",
+                path.display(),
+                dest.display()
+            )
+        })?;
     }
     Ok(())
 }
@@ -103,7 +111,8 @@ pub fn copy_missing_files_from_default(dir: &Path) -> Result<(), String> {
 pub fn ensure_profile_dir(name: &str) -> Result<PathBuf, String> {
     let dir = profile_dir(name)?;
     if !dir.exists() {
-        fs::create_dir_all(&dir).map_err(|e| format!("Failed to create profile directory {}: {e}", dir.display()))?;
+        fs::create_dir_all(&dir)
+            .map_err(|e| format!("Failed to create profile directory {}: {e}", dir.display()))?;
         if name == "default" {
             emma65::emulator::config::templates::materialize_default(&dir)
                 .map_err(|e| format!("Failed to seed default profile: {e}"))?;
@@ -122,14 +131,21 @@ pub fn ensure_profile_dir(name: &str) -> Result<PathBuf, String> {
 /// activation, including the previous run's, so it reflects whatever profile
 /// was open when the debugger last quit. Falls back to `default` if there's
 /// no recent history or the recorded directory no longer exists on disk.
-pub fn resolve_startup_profile(cli_profile: Option<&str>, recent: &[PathBuf]) -> Result<(PathBuf, String), String> {
+pub fn resolve_startup_profile(
+    cli_profile: Option<&str>,
+    recent: &[PathBuf],
+) -> Result<(PathBuf, String), String> {
     if let Some(name) = cli_profile {
         let dir = ensure_profile_dir(name)?;
         return Ok((dir, name.to_string()));
     }
     if let Some(dir) = recent.first().filter(|p| p.is_dir()) {
         copy_missing_files_from_default(dir)?;
-        let name = dir.file_name().and_then(|n| n.to_str()).unwrap_or("default").to_string();
+        let name = dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("default")
+            .to_string();
         return Ok((dir.clone(), name));
     }
     let dir = ensure_profile_dir("default")?;
@@ -146,7 +162,9 @@ pub fn resolve_startup_profile(cli_profile: Option<&str>, recent: &[PathBuf]) ->
 /// visible from startup, so there's no focus event to hook the workaround to
 /// instead, and the toggle must happen right here.
 pub fn set_window_title(window: &WebviewWindow, base: &str, profile: &str) -> Result<(), String> {
-    window.set_title(&format!("{base} — {profile}")).map_err(|e| e.to_string())?;
+    window
+        .set_title(&format!("{base} — {profile}"))
+        .map_err(|e| e.to_string())?;
     #[cfg(target_os = "linux")]
     {
         let _ = window.set_resizable(false);
@@ -196,7 +214,11 @@ pub struct TemplateInfo {
 pub fn list_templates() -> Vec<TemplateInfo> {
     emma65::emulator::config::templates::TEMPLATES
         .iter()
-        .map(|t| TemplateInfo { id: t.id.to_string(), name: t.name.to_string(), description: t.description.to_string() })
+        .map(|t| TemplateInfo {
+            id: t.id.to_string(),
+            name: t.name.to_string(),
+            description: t.description.to_string(),
+        })
         .collect()
 }
 
@@ -208,7 +230,8 @@ pub fn list_templates() -> Vec<TemplateInfo> {
 /// keeps seeding not-yet-existing named profiles from `default`'s files.
 fn create_profile_dir_from_template(name: &str, template_id: &str) -> Result<PathBuf, String> {
     let dir = profile_dir(name)?;
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create profile directory {}: {e}", dir.display()))?;
+    fs::create_dir_all(&dir)
+        .map_err(|e| format!("Failed to create profile directory {}: {e}", dir.display()))?;
     emma65::emulator::config::templates::materialize(template_id, &dir)
         .map_err(|e| format!("Failed to seed profile from template '{template_id}': {e}"))?;
     Ok(dir)
@@ -253,9 +276,13 @@ pub async fn create_profile(app: AppHandle, name: String, template: String) -> R
 async fn pick_profile_directory(app: &AppHandle) -> Option<PathBuf> {
     let default_dir = debugger_root_dir().ok()?;
     let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog().file().set_title("Open Profile").set_directory(default_dir).pick_folder(move |picked| {
-        let _ = tx.send(picked);
-    });
+    app.dialog()
+        .file()
+        .set_title("Open Profile")
+        .set_directory(default_dir)
+        .pick_folder(move |picked| {
+            let _ = tx.send(picked);
+        });
     rx.await.ok().flatten()?.into_path().ok()
 }
 
@@ -300,7 +327,10 @@ mod tests {
     use crate::test_support::HOME_ENV_LOCK;
 
     fn temp_home(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("emma65-profile-test-{name}-{:?}", std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!(
+            "emma65-profile-test-{name}-{:?}",
+            std::thread::current().id()
+        ));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -343,7 +373,10 @@ mod tests {
 
         copy_missing_files_from_default(&target).unwrap();
 
-        assert_eq!(fs::read_to_string(target.join("ui.toml")).unwrap(), "existing-contents");
+        assert_eq!(
+            fs::read_to_string(target.join("ui.toml")).unwrap(),
+            "existing-contents"
+        );
         let _ = fs::remove_dir_all(&home);
     }
 
@@ -360,7 +393,10 @@ mod tests {
         let dir = ensure_profile_dir("custom").unwrap();
 
         assert!(dir.exists());
-        assert_eq!(fs::read_to_string(dir.join("emulator.toml")).unwrap(), "config");
+        assert_eq!(
+            fs::read_to_string(dir.join("emulator.toml")).unwrap(),
+            "config"
+        );
         let _ = fs::remove_dir_all(&home);
     }
 
@@ -437,7 +473,10 @@ mod tests {
         fs::write(last_used.join("emulator.toml"), "config").unwrap();
         // SAFETY: HOME_ENV_LOCK excludes every other test using it, across modules.
         unsafe { std::env::set_var("HOME", &home) };
-        let recent = vec![last_used.clone(), home.join(".emma/debugger/profiles/older")];
+        let recent = vec![
+            last_used.clone(),
+            home.join(".emma/debugger/profiles/older"),
+        ];
 
         let (dir, name) = resolve_startup_profile(None, &recent).unwrap();
 
@@ -481,7 +520,11 @@ mod tests {
         let templates = list_templates();
         let ids: Vec<_> = templates.iter().map(|t| t.id.as_str()).collect();
         assert!(ids.contains(&"taliforth"));
-        assert!(templates.iter().all(|t| !t.name.is_empty() && !t.description.is_empty()));
+        assert!(
+            templates
+                .iter()
+                .all(|t| !t.name.is_empty() && !t.description.is_empty())
+        );
     }
 
     #[test]
@@ -508,7 +551,10 @@ mod tests {
 
         let err = create_profile_dir_from_template("custom", "nope").unwrap_err();
 
-        assert!(err.contains("nope"), "expected the bad template id in the error: {err}");
+        assert!(
+            err.contains("nope"),
+            "expected the bad template id in the error: {err}"
+        );
         let _ = fs::remove_dir_all(&home);
     }
 

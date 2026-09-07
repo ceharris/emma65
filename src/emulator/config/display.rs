@@ -1,9 +1,14 @@
 use super::palette;
-use super::{DeviceModule, DeviceModuleError, DisplayGeometry, ExpandedPathBuf, InstantiationContext, TransportSpec, TransportSpecFormat};
+use super::{
+    DeviceModule, DeviceModuleError, DisplayGeometry, ExpandedPathBuf, InstantiationContext,
+    TransportSpec, TransportSpecFormat,
+};
 use crate::emulator::bus::DeviceIdAllocator;
 use crate::emulator::device::display::compositing::default_palette;
 use crate::emulator::device::display::font::{FONT_BYTES, Font};
-use crate::emulator::device::display::{CharDisplay, DEFAULT_COLUMNS, DEFAULT_FRAME_RATE_HZ, DEFAULT_ROWS};
+use crate::emulator::device::display::{
+    CharDisplay, DEFAULT_COLUMNS, DEFAULT_FRAME_RATE_HZ, DEFAULT_ROWS,
+};
 use crate::emulator::transport::TransportRelay;
 use crate::emulator::{AddressRange, BusConfig, IoDevice};
 use figment::providers::Serialized;
@@ -40,16 +45,18 @@ struct CharDisplayAttributes {
 }
 
 impl DeviceModule for CharDisplayModule {
-
     fn name(&self) -> &'static str {
         DEVICE_TYPE
     }
 
-    async fn instantiate(&self, bus_config: BusConfig, address: u16,
-                         attributes: &HashMap<String, Value>, context: &InstantiationContext,
-                         id_allocator: Arc<Mutex<DeviceIdAllocator>>)
-            -> Result<BusConfig, DeviceModuleError> {
-
+    async fn instantiate(
+        &self,
+        bus_config: BusConfig,
+        address: u16,
+        attributes: &HashMap<String, Value>,
+        context: &InstantiationContext,
+        id_allocator: Arc<Mutex<DeviceIdAllocator>>,
+    ) -> Result<BusConfig, DeviceModuleError> {
         let attrs = Dict::from_iter(attributes.clone());
         let config: CharDisplayAttributes = figment::Figment::new()
             .merge(Serialized::defaults(attrs))
@@ -60,12 +67,15 @@ impl DeviceModule for CharDisplayModule {
         let rows = config.rows.unwrap_or(DEFAULT_ROWS);
         if columns == 0 || rows == 0 {
             return Err(DeviceModuleError::Config(
-                "display: columns and rows must both be positive".to_string()));
+                "display: columns and rows must both be positive".to_string(),
+            ));
         }
 
         let palette = match &config.palette {
             Some(path) => {
-                let text = tokio::fs::read_to_string(path).await.map_err(DeviceModuleError::Io)?;
+                let text = tokio::fs::read_to_string(path)
+                    .await
+                    .map_err(DeviceModuleError::Io)?;
                 palette::parse(&text).map_err(|e| DeviceModuleError::Config(e.to_string()))?
             }
             None => default_palette(),
@@ -82,7 +92,8 @@ impl DeviceModule for CharDisplayModule {
         let double_buffered = config.double_buffered.unwrap_or(true);
         let frame_rate_hz = config.frame_rate_hz.unwrap_or(DEFAULT_FRAME_RATE_HZ);
 
-        let transport_spec = config.transport
+        let transport_spec = config
+            .transport
             .map(TransportSpec::try_from)
             .transpose()
             .map_err(DeviceModuleError::Config)?;
@@ -96,7 +107,8 @@ impl DeviceModule for CharDisplayModule {
             return Err(DeviceModuleError::Config(
                 "display requires a pipe transport; \
                  tcp/unix/pty transports don't support the atomic bulk-send this protocol needs"
-                    .to_string()));
+                    .to_string(),
+            ));
         }
 
         let bus_size = 2 * (columns * rows) + 2;
@@ -107,7 +119,9 @@ impl DeviceModule for CharDisplayModule {
         // `Bus::device_interrupt_states`/`InterruptController::poll_devices`, so a device with no
         // keyboard range keeps the cheaper, non-IRQ allocation.
         let device_id = if config.keyboard_address.is_some() {
-            id_allocator.lock().unwrap()
+            id_allocator
+                .lock()
+                .unwrap()
                 .for_irq(config.irq.unwrap_or(DEFAULT_KEYBOARD_IRQ))
                 .map_err(DeviceModuleError::BusConfig)?
         } else {
@@ -130,7 +144,8 @@ impl DeviceModule for CharDisplayModule {
             device.set_log_sender(sender.clone());
         }
 
-        let keyboard_range = config.keyboard_address
+        let keyboard_range = config
+            .keyboard_address
             .map(|addr| AddressRange::new(addr, addr + 1));
         if let Some(range) = keyboard_range {
             device = device.with_keyboard_range(range);
@@ -151,7 +166,8 @@ impl DeviceModule for CharDisplayModule {
                 .to_transport_with_reporter_and_capacity(
                     context.transport_reporter(device.identity()),
                     context.pipe_exit_reporter(device.identity()),
-                    Some(capacity))
+                    Some(capacity),
+                )
                 .await
                 .map_err(DeviceModuleError::Transport)?;
             device.attach_external_transport(transport, relay);
@@ -161,7 +177,9 @@ impl DeviceModule for CharDisplayModule {
         // keyboard configured must not consume and discard the debugger's only keyboard slot,
         // starving a later device that does configure one.
         if keyboard_range.is_some()
-            && let Some((transport, relay, reporter)) = context.keyboard_transport.as_ref()
+            && let Some((transport, relay, reporter)) = context
+                .keyboard_transport
+                .as_ref()
                 .and_then(|slot| slot.lock().ok()?.take())
         {
             // The reporter was constructed via `TransportReporter::pending` before this device
@@ -190,16 +208,17 @@ impl DeviceModule for CharDisplayModule {
             device.attach_frame_sink(sender);
         }
 
-        let bus_config = bus_config.device(address_range, device_id, Box::new(device))
+        let bus_config = bus_config
+            .device(address_range, device_id, Box::new(device))
             .map_err(DeviceModuleError::BusConfig)?;
 
         match keyboard_range {
-            Some(range) => bus_config.extend_device(range, device_id)
+            Some(range) => bus_config
+                .extend_device(range, device_id)
                 .map_err(DeviceModuleError::BusConfig),
             None => Ok(bus_config),
         }
     }
-
 }
 
 #[cfg(test)]
@@ -213,8 +232,15 @@ mod tests {
     #[tokio::test]
     async fn instantiate_without_transport_attribute_succeeds() {
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
-        let result = CharDisplayModule.instantiate(
-            BusConfig::new(), 0x8000, &HashMap::new(), &context(), id_allocator).await;
+        let result = CharDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0x8000,
+                &HashMap::new(),
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         assert!(result.is_ok());
     }
@@ -222,15 +248,27 @@ mod tests {
     #[tokio::test]
     async fn rejects_non_pipe_transport_spec() {
         let mut attributes = HashMap::new();
-        attributes.insert("transport".to_string(), Value::from("unix:/tmp/emma65_test_display_char.sock"));
+        attributes.insert(
+            "transport".to_string(),
+            Value::from("unix:/tmp/emma65_test_display_char.sock"),
+        );
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let result = CharDisplayModule.instantiate(
-            BusConfig::new(), 0x8000, &attributes, &context(), id_allocator).await;
+        let result = CharDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0x8000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         match result {
             Err(DeviceModuleError::Config(message)) => assert!(message.contains("pipe transport")),
-            Err(other) => panic!("expected DeviceModuleError::Config, got a different error variant: {other}"),
+            Err(other) => {
+                panic!("expected DeviceModuleError::Config, got a different error variant: {other}")
+            }
             Ok(_) => panic!("expected DeviceModuleError::Config, got Ok"),
         }
     }
@@ -241,8 +279,15 @@ mod tests {
         attributes.insert("transport".to_string(), Value::from("pipe:/usr/bin/cat"));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let result = CharDisplayModule.instantiate(
-            BusConfig::new(), 0x8000, &attributes, &context(), id_allocator).await;
+        let result = CharDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0x8000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await;
 
         // End-to-end smoke test with a real spawned child: confirms the computed ring capacity
         // is accepted by `PipeTransport::spawn_with_capacity` and `attach_external_transport`'s
@@ -261,12 +306,19 @@ mod tests {
     fn injected_keyboard_slot() -> (super::super::TransportSlot, InternalPipeTransport) {
         let reporter = TransportReporter::pending(None);
         let ((local, relay), remote) = InternalPipeTransport::pair(reporter.clone()).unwrap();
-        let slot = Arc::new(Mutex::new(Some((Box::new(local) as Box<dyn Transport>, relay, reporter))));
+        let slot = Arc::new(Mutex::new(Some((
+            Box::new(local) as Box<dyn Transport>,
+            relay,
+            reporter,
+        ))));
         (slot, remote)
     }
 
     fn context_with_keyboard_slot(slot: super::super::TransportSlot) -> InstantiationContext {
-        InstantiationContext { keyboard_transport: Some(slot), ..context() }
+        InstantiationContext {
+            keyboard_transport: Some(slot),
+            ..context()
+        }
     }
 
     #[tokio::test]
@@ -275,8 +327,16 @@ mod tests {
         attributes.insert("keyboard-address".to_string(), Value::from(0x9000u16));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let bus_config = CharDisplayModule.instantiate(
-            BusConfig::new(), 0x8000, &attributes, &context(), id_allocator).await.unwrap();
+        let bus_config = CharDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0x8000,
+                &attributes,
+                &context(),
+                id_allocator,
+            )
+            .await
+            .unwrap();
         let mut bus = bus_config.build();
 
         let _ = bus.write(0x9001, 0x42); // keyboard latch register
@@ -291,11 +351,22 @@ mod tests {
         let context = context_with_keyboard_slot(Arc::clone(&slot));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let _bus_config = CharDisplayModule.instantiate(
-            BusConfig::new(), 0x8000, &HashMap::new(), &context, id_allocator).await.unwrap();
+        let _bus_config = CharDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0x8000,
+                &HashMap::new(),
+                &context,
+                id_allocator,
+            )
+            .await
+            .unwrap();
 
-        assert!(slot.lock().unwrap().is_some(), "an unconfigured keyboard sub-range must not \
-            starve a later device that configures one");
+        assert!(
+            slot.lock().unwrap().is_some(),
+            "an unconfigured keyboard sub-range must not \
+            starve a later device that configures one"
+        );
     }
 
     #[tokio::test]
@@ -307,8 +378,16 @@ mod tests {
         let context = context_with_keyboard_slot(slot);
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let bus_config = CharDisplayModule.instantiate(
-            BusConfig::new(), 0x8000, &attributes, &context, id_allocator).await.unwrap();
+        let bus_config = CharDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0x8000,
+                &attributes,
+                &context,
+                id_allocator,
+            )
+            .await
+            .unwrap();
         let mut bus = bus_config.build();
 
         remote.send(0x03);
@@ -327,8 +406,16 @@ mod tests {
         attributes.insert("irq".to_string(), Value::from(9u32));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let _bus_config = CharDisplayModule.instantiate(
-            BusConfig::new(), 0x8000, &attributes, &context(), id_allocator.clone()).await.unwrap();
+        let _bus_config = CharDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0x8000,
+                &attributes,
+                &context(),
+                id_allocator.clone(),
+            )
+            .await
+            .unwrap();
 
         // IRQ 9 is now taken -- allocating it again should fail.
         assert!(id_allocator.lock().unwrap().for_irq(9).is_err());
@@ -338,8 +425,16 @@ mod tests {
     async fn no_keyboard_address_is_not_irq_capable() {
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
-        let _bus_config = CharDisplayModule.instantiate(
-            BusConfig::new(), 0x8000, &HashMap::new(), &context(), id_allocator.clone()).await.unwrap();
+        let _bus_config = CharDisplayModule
+            .instantiate(
+                BusConfig::new(),
+                0x8000,
+                &HashMap::new(),
+                &context(),
+                id_allocator.clone(),
+            )
+            .await
+            .unwrap();
 
         // The default IRQ line (7, `DEFAULT_KEYBOARD_IRQ`) must remain unclaimed since this
         // device has no keyboard range and so was allocated a plain, non-IRQ device ID.

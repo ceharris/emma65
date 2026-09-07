@@ -1,5 +1,5 @@
 //! Pure ALU functions consumed by the CPU instruction dispatcher.
-//! 
+//!
 //! Every function takes explicit inputs (operands + relevant flag bits) and returns
 //! a result value plus the updated N/Z/C/V flags. No CPU state is mutated here.
 
@@ -40,7 +40,10 @@ pub fn adc_binary(a: u8, operand: u8, status: StatusRegister) -> AluResult {
         StatusRegister::V,
         (!(a ^ operand) & (a ^ result) & 0x80) != 0,
     );
-    AluResult { value: result, status: s }
+    AluResult {
+        value: result,
+        status: s,
+    }
 }
 
 /// ADC in BCD (decimal) mode.
@@ -48,7 +51,12 @@ pub fn adc_bcd(a: u8, operand: u8, status: StatusRegister) -> AluResult {
     let carry_in = status.contains(StatusRegister::C) as u8;
 
     let mut lo = (a & 0x0F) + (operand & 0x0F) + carry_in;
-    let lo_carry = if lo > 9 { lo += 6; 1u8 } else { 0u8 };
+    let lo_carry = if lo > 9 {
+        lo += 6;
+        1u8
+    } else {
+        0u8
+    };
 
     let mut hi = (a >> 4) + (operand >> 4) + lo_carry;
     // V is based on binary-style two's-complement overflow of the high nibble
@@ -57,13 +65,18 @@ pub fn adc_bcd(a: u8, operand: u8, status: StatusRegister) -> AluResult {
     let overflow = (!(a ^ operand) & (a ^ bin_result) & 0x80) != 0;
 
     let carry_out = hi > 9;
-    if carry_out { hi += 6; }
+    if carry_out {
+        hi += 6;
+    }
 
     let result = ((hi & 0x0F) << 4) | (lo & 0x0F);
     let mut s = set_nz(status, result);
     s.set(StatusRegister::C, carry_out);
     s.set(StatusRegister::V, overflow);
-    AluResult { value: result, status: s }
+    AluResult {
+        value: result,
+        status: s,
+    }
 }
 
 /// SBC in binary mode.
@@ -95,7 +108,10 @@ pub fn sbc_bcd(a: u8, operand: u8, status: StatusRegister) -> AluResult {
     let mut s = set_nz(status, result);
     s.set(StatusRegister::C, !full_borrow);
     s.set(StatusRegister::V, overflow);
-    AluResult { value: result, status: s }
+    AluResult {
+        value: result,
+        status: s,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -105,19 +121,28 @@ pub fn sbc_bcd(a: u8, operand: u8, status: StatusRegister) -> AluResult {
 /// AND — bitwise AND; updates N and Z.
 pub fn and(a: u8, operand: u8, status: StatusRegister) -> AluResult {
     let result = a & operand;
-    AluResult { value: result, status: set_nz(status, result) }
+    AluResult {
+        value: result,
+        status: set_nz(status, result),
+    }
 }
 
 /// ORA — bitwise OR; updates N and Z.
 pub fn ora(a: u8, operand: u8, status: StatusRegister) -> AluResult {
     let result = a | operand;
-    AluResult { value: result, status: set_nz(status, result) }
+    AluResult {
+        value: result,
+        status: set_nz(status, result),
+    }
 }
 
 /// EOR — bitwise exclusive OR; updates N and Z.
 pub fn eor(a: u8, operand: u8, status: StatusRegister) -> AluResult {
     let result = a ^ operand;
-    AluResult { value: result, status: set_nz(status, result) }
+    AluResult {
+        value: result,
+        status: set_nz(status, result),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -129,7 +154,10 @@ pub fn asl(value: u8, status: StatusRegister) -> AluResult {
     let result = value << 1;
     let mut s = set_nz(status, result);
     s.set(StatusRegister::C, value & 0x80 != 0);
-    AluResult { value: result, status: s }
+    AluResult {
+        value: result,
+        status: s,
+    }
 }
 
 /// LSR — logical shift right; updates N (always cleared), Z, C.
@@ -137,7 +165,10 @@ pub fn lsr(value: u8, status: StatusRegister) -> AluResult {
     let result = value >> 1;
     let mut s = set_nz(status, result);
     s.set(StatusRegister::C, value & 0x01 != 0);
-    AluResult { value: result, status: s }
+    AluResult {
+        value: result,
+        status: s,
+    }
 }
 
 /// ROL — rotate left through carry; updates N, Z, C.
@@ -146,7 +177,10 @@ pub fn rol(value: u8, status: StatusRegister) -> AluResult {
     let result = (value << 1) | carry_in;
     let mut s = set_nz(status, result);
     s.set(StatusRegister::C, value & 0x80 != 0);
-    AluResult { value: result, status: s }
+    AluResult {
+        value: result,
+        status: s,
+    }
 }
 
 /// ROR — rotate right through carry; updates N, Z, C.
@@ -155,7 +189,10 @@ pub fn ror(value: u8, status: StatusRegister) -> AluResult {
     let result = (value >> 1) | (carry_in << 7);
     let mut s = set_nz(status, result);
     s.set(StatusRegister::C, value & 0x01 != 0);
-    AluResult { value: result, status: s }
+    AluResult {
+        value: result,
+        status: s,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -165,13 +202,19 @@ pub fn ror(value: u8, status: StatusRegister) -> AluResult {
 /// INC — increment; updates N and Z.
 pub fn inc(value: u8, status: StatusRegister) -> AluResult {
     let result = value.wrapping_add(1);
-    AluResult { value: result, status: set_nz(status, result) }
+    AluResult {
+        value: result,
+        status: set_nz(status, result),
+    }
 }
 
 /// DEC — decrement; updates N and Z.
 pub fn dec(value: u8, status: StatusRegister) -> AluResult {
     let result = value.wrapping_sub(1);
-    AluResult { value: result, status: set_nz(status, result) }
+    AluResult {
+        value: result,
+        status: set_nz(status, result),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -214,14 +257,20 @@ pub fn bit_imm(a: u8, imm: u8, status: StatusRegister) -> StatusRegister {
 pub fn tsb(a: u8, mem: u8, status: StatusRegister) -> AluResult {
     let mut s = status;
     s.set(StatusRegister::Z, (a & mem) == 0);
-    AluResult { value: mem | a, status: s }
+    AluResult {
+        value: mem | a,
+        status: s,
+    }
 }
 
 /// TRB — test and reset bits; sets Z from (A & mem), returns mem & !A.
 pub fn trb(a: u8, mem: u8, status: StatusRegister) -> AluResult {
     let mut s = status;
     s.set(StatusRegister::Z, (a & mem) == 0);
-    AluResult { value: mem & !a, status: s }
+    AluResult {
+        value: mem & !a,
+        status: s,
+    }
 }
 
 // ---------------------------------------------------------------------------
