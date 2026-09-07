@@ -6,6 +6,7 @@
 //! files change.
 pub(super) mod asset;
 mod ehbasic;
+mod lcd;
 mod rain;
 mod msbasic;
 mod snake;
@@ -64,6 +65,12 @@ pub static TEMPLATES: &[Template] = &[
         name: "Digital Rain",
         description: "Digital Rain demo using memory-mapped display and LFSR",
         materialize_fn: rain::materialize_config,
+    },
+    Template {
+        id: "lcd",
+        name: "LCD Display",
+        description: "HD44780 compatible display demo",
+        materialize_fn: lcd::materialize_config,
     },
     Template {
         id: "snake",

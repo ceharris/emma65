@@ -1,0 +1,25 @@
+cpu-variant = "WDC65C02"
+clock-speed-hz = 1843200
+
+[[devices]]
+type = "ram"
+address = 0x0000
+size = 2048
+
+[[devices]]
+type = "rom"
+address = 0xf000
+size = 4096
+image = "{{ROM_IMAGE}}"
+labels = "{{LABELS}}"
+
+[[devices]]
+type = "via/6522"
+address = 0xFF80
+
+[[devices]]
+type = "display/lcd"
+address = 0xfff2
+geometry = "16-character-5x10"
+polarity = "positive"
+backlight = "yellow"
