@@ -25,9 +25,9 @@ address = 0xF000
 transport = "pipe:/path/to/target/release/emma65-display"
 ```
 
-```
-emma65 --device display@0xF000,transport=pipe:/path/to/target/release/emma65-display
-```
+(or the CLI equivalent — see
+[Device configuration examples](running-the-emulator.md#device-configuration-examples)
+in Running the Emulator for the general `--device` syntax).
 
 The window opens as soon as the emulator attaches the transport (immediately
 on startup for a TOML/CLI-configured device), sized to the device's

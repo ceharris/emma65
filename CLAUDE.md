@@ -112,18 +112,24 @@ builds the `BusConfig`, constructs `Cpu`, and returns `EmulatorSession`.
 - Size: bytes or `K`/`k` suffix
 - Transport: `tcp:PORT`, `tcp:IP:PORT`, `unix:PATH`, `pty`, `pty:SYMLINK`
 
-**`emulator::config::default` module (`src/emulator/config/default/`)** — bundles the default
-device layout as a checked-in template (`emulator-template.toml`) plus the TaliForth ROM
-(`program.bin`) and its VICE labels (`program.lbl`), embedded via `include_bytes!`/`include_str!`.
-`materialize_default_config(dest)` writes all three (rendered, with `image=`/`labels=` paths
-filled in) into `dest`, returning the path to the written `emulator.toml`. This is the single
-source of truth for the default layout: 32K RAM at `0x0000`, the TaliForth ROM at `0x8000`, a VIA
-and a PTM on Unix-socket transports, an ACIA on `~/.emma/dev/ttyS0`, a second ACIA on
-`~/.emma/dev/ttyS1`, an LFSR, and a console — WDC65C02 at 1.8432 MHz. The `emma65` binary
-materializes it into a tempdir when no devices are configured (`apply_default_if_unconfigured` in
-`src/bin/emulator/config.rs`, loaded through the normal `Toml::file()` path); the debugger
-materializes it into `~/.emma/debugger/profiles/default/` the first time that profile directory
-is created (see `profile::ensure_profile_dir` below).
+**`emulator::config::templates` module (`src/emulator/config/templates/`)** — a registry of
+bundled "starter profile" templates, each its own subdirectory (`taliforth/`, `msbasic/`,
+`ehbasic/`, `rain/`, `lcd/`, `snake/`) holding a checked-in device-layout template
+(`emulator-template.toml`), a ROM image (`program.bin`), and its VICE labels (`program.lbl`),
+embedded via `include_bytes!`/`include_str!`. `TEMPLATES` lists all of them (id, display name,
+description); `materialize(id, dest)` renders one (filling in its `{{ROM_IMAGE}}`/`{{LABELS}}`
+placeholders) into `dest`, returning the path to the written `emulator.toml`.
+`materialize_default(dest)` is shorthand for the `"taliforth"` template, the registry's
+`DEFAULT_TEMPLATE` — the single source of truth for the emulator's zero-config layout: 32K
+zero-filled RAM at `0x0000`, the TaliForth ROM at `0x8000`, a VIA on a Unix-socket transport, an
+R6551 ACIA on `~/.emma/dev/ttyS0` and an MC6850 ACIA on `~/.emma/dev/ttyS1` (both PTYs), an LFSR,
+and a console with `Ctrl+C` as its break key — WDC65C02 at 1.8432 MHz. The `emma65` binary
+materializes the default into a tempdir when no devices are configured
+(`apply_default_if_unconfigured` in `src/bin/emulator/config.rs`, loaded through the normal
+`Toml::file()` path), or any named template via `--profile <id>` (`apply_named_profile`, same
+file); the debugger materializes the default into `~/.emma/debugger/profiles/default/` the first
+time that profile directory is created, and offers the full template list in its New Profile
+dialog (see `profile::ensure_profile_dir`/`list_templates` below).
 
 ---
 

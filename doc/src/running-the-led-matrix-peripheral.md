@@ -26,9 +26,9 @@ register-address = 0x9400
 transport = "pipe:/path/to/target/release/emma65-led-matrix"
 ```
 
-```
-emma65 --device display/matrix@0x9000,arrangement=1x4,register-address=0x9400,transport=pipe:/path/to/target/release/emma65-led-matrix
-```
+(or the CLI equivalent — see
+[Device configuration examples](running-the-emulator.md#device-configuration-examples)
+in Running the Emulator for the general `--device` syntax).
 
 The window opens as soon as the emulator attaches the transport, showing the
 configured matrices side by side as round LEDs on a PCB-colored background,

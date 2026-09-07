@@ -76,7 +76,9 @@ different real single-board-computer design. Each claims the entire 64 KB
 address space when configured, so no separate `ram`/`rom` entries are needed
 alongside them, and their `address` device-spec field is unused — the
 addresses that matter are the ones given to their control register(s)
-instead. All three share these attributes:
+instead. `address` is still a required part of the device spec (TOML and
+CLI alike), so give it any value — `0x0000` in the examples below. All three
+share these attributes:
 
 - `image` (required, path) — a ROM image loaded at `offset` (default `0`)
   within the module's ROM region.
@@ -131,6 +133,7 @@ register rather than writing it outright:
 ```toml
 [[devices]]
 type = "mem/finch"
+address = 0x0000
 bank-registers = 0xFC00
 control-register = 0xFFD8
 image = "rom.bin"
@@ -167,6 +170,7 @@ system reset.
 ```toml
 [[devices]]
 type = "mem/phoebe"
+address = 0x0000
 control-register = 0xFFF7
 image = "rom.bin"
 ```
@@ -212,6 +216,7 @@ address space without leaving its current mode. Control register bit layout
 ```toml
 [[devices]]
 type = "mem/vireo"
+address = 0x0000
 control-register = 0xFFF4
 image = "rom.bin"
 ```

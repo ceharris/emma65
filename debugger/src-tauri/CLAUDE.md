@@ -21,8 +21,11 @@ React/TypeScript frontend (`debugger/frontend/`) via `#[tauri::command]`s. UI pr
 - **`recent`** — recently-used profile list (`~/.emma/debugger/config/recent.toml`), recorded on every
   profile activation and shown in the File > Open Recent submenu
 - **`profile`** — `--profile` CLI flag, profile directory resolution, `ensure_profile_dir` (seeds a
-  new `default` profile from the bundled `emulator::config::default` template; seeds any other new
-  profile by copying files from `default`), New/Open Profile commands, window-title sync
+  new `default` profile from the bundled `emulator::config::templates` default (taliforth)
+  template; seeds any other new profile by copying files from `default`), `list_templates`/
+  `create_profile_dir_from_template` (New Profile's template picker, seeding from any bundled
+  starter template rather than always cloning `default`), New/Open Profile commands, window-title
+  sync
 
 Devices requiring a byte-stream peer (VIA, MC6840, ACIAs) still use their configured
 `Transport` independent of the debugger UI; only the console is special-cased to route

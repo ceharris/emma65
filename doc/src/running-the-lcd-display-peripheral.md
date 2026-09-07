@@ -27,9 +27,9 @@ geometry = "16x2"
 transport = "pipe:/path/to/target/release/emma65-lcd-display"
 ```
 
-```
-emma65 --device display/lcd@0xD000,geometry=16x2,transport=pipe:/path/to/target/release/emma65-lcd-display
-```
+(or the CLI equivalent — see
+[Device configuration examples](running-the-emulator.md#device-configuration-examples)
+in Running the Emulator for the general `--device` syntax).
 
 The window opens as soon as the emulator attaches the transport, showing a
 blank dot-matrix grid in the device's configured background color before
