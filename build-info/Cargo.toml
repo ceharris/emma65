@@ -1,0 +1,13 @@
+[package]
+name = "emma65-build-info"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+name = "emma65_build_info"
+path = "src/lib.rs"
+
+[dependencies]
+chrono = "0.4"

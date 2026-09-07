@@ -13,8 +13,16 @@ use tauri_plugin_dialog::DialogExt;
 
 /// CLI arguments accepted by the `emma65-debugger` binary.
 #[derive(Parser)]
-#[clap(name = "emma65-debugger")]
+#[clap(
+    name = "emma65-debugger",
+    version = env!("BUILD_VERSION"),
+    disable_version_flag = true
+)]
 pub struct CliArgs {
+    /// Print version information and exit
+    #[clap(short = 'v', long = "version", action = clap::ArgAction::Version)]
+    pub version: Option<bool>,
+
     /// Name of the configuration profile to use. When omitted, the debugger
     /// restores whichever profile was last active (issue #445), falling back
     /// to `default` if there's no recorded profile or it no longer exists.

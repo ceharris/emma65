@@ -77,8 +77,16 @@ fn gfx_color(color: Color) -> u32 {
 }
 
 #[derive(Parser)]
-#[command(about = "SDL2 external peripheral for emma65's memory-mapped LED matrix display")]
+#[command(
+    about = "SDL2 external peripheral for emma65's memory-mapped LED matrix display",
+    version = env!("BUILD_VERSION"),
+    disable_version_flag = true
+)]
 struct Args {
+    /// Print version information and exit
+    #[arg(short = 'v', long = "version", action = clap::ArgAction::Version)]
+    version: Option<bool>,
+
     /// Initial on-screen LED center-to-center spacing, in pixels. The window remains resizable
     /// afterward; SDL2 letterboxes/scales its fixed logical size to fit.
     #[arg(long, default_value_t = 12)]

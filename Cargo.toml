@@ -1,6 +1,7 @@
 [workspace]
 members = [
     ".",
+    "build-info",
     "debugger/src-tauri",
     "display",
     "led-matrix",
@@ -46,5 +47,8 @@ jiff = "0.2"
 
 [dependencies.tempfile]
 version = "3.27"
+
+[build-dependencies]
+emma65-build-info = { path = "build-info" }
 
 [dev-dependencies]

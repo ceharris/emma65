@@ -28,10 +28,15 @@ Tauri invokes `npm run build` there automatically as part of `cargo tauri build`
 
 ## Architecture
 
-`emma65` is a Cargo workspace (Rust 2024 edition) with five members:
+`emma65` is a Cargo workspace (Rust 2024 edition) with six members:
 
 - **`.`** (crate `emma65`) — the emulator library plus two binaries: `emma65` (the emulator)
   and `emma65-tracer` (decodes binary trace files)
+- **`build-info`** (crate `emma65-build-info`) — a `build.rs`-only helper, shared as a
+  build-dependency by every other member's `build.rs`, that captures each crate's git commit
+  hash, build timestamp, and (for a tagged release commit) version number into `BUILD_VERSION`/
+  `BUILD_INFO_LINE` env vars consumed via `env!` — see `build-info/src/lib.rs`'s doc comment and
+  issue #623
 - **`debugger/src-tauri`** (crate `emma65-debugger`) — a Tauri 2 desktop app that hosts the
   emulator and exposes a full-featured debugger UI
 - **`display`** (crate `emma65-display`) — an SDL2 peripheral binary that renders the
