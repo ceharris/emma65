@@ -1,13 +1,16 @@
 name: Release
 
-# Triggered by pushing a per-artifact release tag (<crate>-vX.Y.Z). Each of the
-# five workspace crates has its own tag namespace and is released
-# independently — see .claude/skills/release/ for the human-gated process
-# that produces these tags (version bump PR, merge, then tag push).
+# Triggered by pushing the `emma65-vX.Y.Z` tag. A release packages every
+# workspace binary — the emulator CLI (emma65, emma65-tracer), the SDL2
+# peripheral binaries (emma65-display, emma65-led-matrix, emma65-lcd-display),
+# and the Tauri debugger GUI (emma65-debugger) — into one combined `emma65`
+# .deb and .rpm. See .claude/skills/release/ for the human-gated process that
+# produces this tag.
 #
-# GitHub tag-filter globs don't support alternation, so the five known crate
-# names are enumerated explicitly. Adding a sixth artifact later is a
-# one-line addition here.
+# The other four workspace crates keep their own independent version and
+# CHANGELOG for bookkeeping via the same skill, but bumping one of them no
+# longer triggers its own build/publish here — its current state is simply
+# folded into the next `emma65-v*` combined package build.
 #
 # The `push: tags:` trigger above looks sufficient but in practice never fires for this
 # repo's process: GitHub Actions dedupes check-suites by (repo, head_sha, app), and every
@@ -15,17 +18,13 @@ name: Release
 # version-bump PR — so it already has a completed Actions check-suite by the time it's
 # tagged, and the tag push creates no new one. `workflow_dispatch` is the real trigger in
 # practice: dispatch with `--ref main` (so the run picks up this trigger definition) and
-# `-f tag=<crate>-vX.Y.Z` naming the already-pushed tag; every job's checkout below pins to
-# that tag explicitly, so the build still comes from the tagged commit regardless of which
-# ref the workflow definition itself was read from.
+# `-f tag=emma65-vX.Y.Z` naming the already-pushed tag; the build job's checkout below pins
+# to that tag explicitly, so the build still comes from the tagged commit regardless of
+# which ref the workflow definition itself was read from.
 on:
   push:
     tags:
       - 'emma65-v[0-9]+.[0-9]+.[0-9]+'
-      - 'emma65-display-v[0-9]+.[0-9]+.[0-9]+'
-      - 'emma65-led-matrix-v[0-9]+.[0-9]+.[0-9]+'
-      - 'emma65-lcd-display-v[0-9]+.[0-9]+.[0-9]+'
-      - 'emma65-debugger-v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
     inputs:
       tag:
@@ -42,9 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.parse.outputs.tag }}
-      crate: ${{ steps.parse.outputs.crate }}
       version: ${{ steps.parse.outputs.version }}
-      kind: ${{ steps.parse.outputs.kind }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -58,77 +55,52 @@ jobs:
           else
             tag="${GITHUB_REF_NAME}"
           fi
-          version="${tag##*-v}"
-          crate="${tag%-v${version}}"
-          kind="cli"
-          if [ "$crate" = "emma65-debugger" ]; then
-            kind="debugger"
-          fi
+          version="${tag#emma65-v}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "crate=$crate" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "kind=$kind" >> "$GITHUB_OUTPUT"
 
       - name: Verify committed version matches tag
         run: |
-          tag="${{ steps.parse.outputs.tag }}"
           version="${{ steps.parse.outputs.version }}"
-          crate="${{ steps.parse.outputs.crate }}"
-
-          case "$crate" in
-            emma65) cargo_toml="Cargo.toml" ;;
-            emma65-display) cargo_toml="display/Cargo.toml" ;;
-            emma65-led-matrix) cargo_toml="led-matrix/Cargo.toml" ;;
-            emma65-lcd-display) cargo_toml="lcd-display/Cargo.toml" ;;
-            emma65-debugger) cargo_toml="debugger/src-tauri/Cargo.toml" ;;
-            *)
-              echo "::error::unrecognized crate '$crate' parsed from tag '$tag'"
-              exit 1
-              ;;
-          esac
-
-          check_field() {
-            file="$1"
-            actual="$2"
-            if [ "$actual" != "$version" ]; then
-              echo "::error::$file has version '$actual', tag says '$version'"
-              exit 1
-            fi
-          }
-
-          cargo_version=$(grep -m1 '^version *= *"' "$cargo_toml" | sed -E 's/^version *= *"([^"]+)".*/\1/')
-          check_field "$cargo_toml" "$cargo_version"
-
-          if [ "$crate" = "emma65-debugger" ]; then
-            tauri_version=$(grep -m1 '"version"' debugger/src-tauri/tauri.conf.json | sed -E 's/.*"version" *: *"([^"]+)".*/\1/')
-            check_field "debugger/src-tauri/tauri.conf.json" "$tauri_version"
-
-            pkg_version=$(grep -m1 '"version"' debugger/frontend/package.json | sed -E 's/.*"version" *: *"([^"]+)".*/\1/')
-            check_field "debugger/frontend/package.json" "$pkg_version"
+          cargo_version=$(grep -m1 '^version *= *"' Cargo.toml | sed -E 's/^version *= *"([^"]+)".*/\1/')
+          if [ "$cargo_version" != "$version" ]; then
+            echo "::error::Cargo.toml has version '$cargo_version', tag says '$version'"
+            exit 1
           fi
 
       - name: Extract release notes
         run: |
           version="${{ steps.parse.outputs.version }}"
-          crate="${{ steps.parse.outputs.crate }}"
-
-          case "$crate" in
-            emma65) changelog="CHANGELOG.md" ;;
-            emma65-display) changelog="display/CHANGELOG.md" ;;
-            emma65-led-matrix) changelog="led-matrix/CHANGELOG.md" ;;
-            emma65-lcd-display) changelog="lcd-display/CHANGELOG.md" ;;
-            emma65-debugger) changelog="debugger/src-tauri/CHANGELOG.md" ;;
-          esac
 
           awk -v ver="$version" '
             /^## \[/ { if (found) exit; if ($0 ~ "\\[" ver "\\]") { found=1; next } }
             found { print }
-          ' "$changelog" > release-notes.md
+          ' CHANGELOG.md > release-notes.md
 
           if [ ! -s release-notes.md ]; then
-            echo "::error::no changelog entry found for $version in $changelog"
+            echo "::error::no changelog entry found for $version in CHANGELOG.md"
             exit 1
           fi
+
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "This release bundles:"
+            echo ""
+            echo "- emma65 $version"
+            for entry in \
+              "emma65-display:display" \
+              "emma65-led-matrix:led-matrix" \
+              "emma65-lcd-display:lcd-display" \
+              "emma65-debugger:debugger/src-tauri"
+            do
+              crate="${entry%%:*}"
+              dir="${entry#*:}"
+              component_version=$(grep -m1 '^version *= *"' "$dir/Cargo.toml" | sed -E 's/^version *= *"([^"]+)".*/\1/')
+              echo "- [$crate $component_version]($dir/CHANGELOG.md)"
+            done
+          } >> release-notes.md
 
       - name: Upload release notes
         uses: actions/upload-artifact@v7
@@ -136,57 +108,9 @@ jobs:
           name: release-notes
           path: release-notes.md
 
-  build-cli:
-    name: Build CLI artifact
+  build-package:
+    name: Build combined package
     needs: resolve
-    if: needs.resolve.outputs.kind == 'cli'
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/${{ github.repository }}-ci:latest
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.resolve.outputs.tag }}
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-
-      - name: Build
-        run: cargo build --release -p ${{ needs.resolve.outputs.crate }}
-
-      - name: Package tarball
-        run: |
-          bin="${{ needs.resolve.outputs.crate }}"
-          ver="${{ needs.resolve.outputs.version }}"
-          staging="dist/${bin}-${ver}-linux-x86_64"
-          mkdir -p "$staging"
-          if [ "$bin" = "emma65" ]; then
-            cp target/release/emma65 target/release/emma65-tracer "$staging"/
-          else
-            cp "target/release/${bin}" "$staging"/
-          fi
-          cp LICENSE "$staging"/
-          tar -C dist -czf "dist/${bin}-${ver}-linux-x86_64.tar.gz" "$(basename "$staging")"
-
-      - name: Upload release asset
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-asset
-          path: dist/*.tar.gz
-
-  build-debugger:
-    name: Build debugger bundles
-    needs: resolve
-    if: needs.resolve.outputs.kind == 'debugger'
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/${{ github.repository }}-ci:latest
@@ -218,34 +142,52 @@ jobs:
         working-directory: debugger/frontend
         run: npm ci
 
-      - name: Cache tauri-cli
-        id: cache-tauri-cli
-        uses: actions/cache@v4
+      - name: Cache packaging tools
+        id: cache-packaging-tools
+        uses: actions/cache@v6
         with:
-          path: ~/.cargo/bin/cargo-tauri
-          key: tauri-cli-2-${{ runner.os }}
+          path: |
+            ~/.cargo/bin/cargo-tauri
+            ~/.cargo/bin/cargo-deb
+            ~/.cargo/bin/cargo-generate-rpm
+          key: packaging-tools-1-${{ runner.os }}
 
-      - name: Install tauri-cli
-        if: steps.cache-tauri-cli.outputs.cache-hit != 'true'
-        run: cargo install tauri-cli --version "^2" --locked
+      - name: Install packaging tools
+        if: steps.cache-packaging-tools.outputs.cache-hit != 'true'
+        run: |
+          cargo install tauri-cli --version "^2" --locked
+          cargo install cargo-deb --locked
+          cargo install cargo-generate-rpm --locked
 
-      - name: Build bundles
+      - name: Build CLI and peripheral binaries
+        run: cargo build --release -p emma65 -p emma65-display -p emma65-led-matrix -p emma65-lcd-display
+
+      - name: Build debugger binary
         working-directory: debugger/src-tauri
-        run: cargo tauri build
+        run: cargo tauri build --no-bundle
+
+      - name: Package .deb
+        run: cargo deb -p emma65 --no-build
+
+      # cargo-generate-rpm's `-p`/`--package` expects a path to the crate's
+      # directory, not a package name (unlike cargo-deb's `-p`) — since the
+      # root `emma65` package's directory is the workspace root itself, the
+      # plain default (run from the checkout root, no flag) is what selects
+      # it correctly.
+      - name: Package .rpm
+        run: cargo generate-rpm
 
       - name: Upload release asset
         uses: actions/upload-artifact@v7
         with:
           name: release-asset
           path: |
-            target/release/bundle/deb/*.deb
-            target/release/bundle/rpm/*.rpm
-            target/release/bundle/appimage/*.AppImage
+            target/debian/*.deb
+            target/generate-rpm/*.rpm
 
   publish:
     name: Publish GitHub Release
-    needs: [resolve, build-cli, build-debugger]
-    if: always() && needs.resolve.result == 'success'
+    needs: [resolve, build-package]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -269,6 +211,6 @@ jobs:
           mapfile -t assets < <(find dist -type f)
           gh release create "${{ needs.resolve.outputs.tag }}" \
             --repo "${{ github.repository }}" \
-            --title "${{ needs.resolve.outputs.crate }} ${{ needs.resolve.outputs.version }}" \
+            --title "emma65 ${{ needs.resolve.outputs.version }}" \
             --notes-file release-notes.md \
             "${assets[@]}"

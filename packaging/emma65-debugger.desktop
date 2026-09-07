@@ -1,0 +1,9 @@
+[Desktop Entry]
+Categories=Development;Debugger;
+Exec=emma65-debugger
+StartupWMClass=emma65-debugger
+Icon=emma65-debugger
+Name=emma65-debugger
+Comment=Debugger GUI for the emma65 6502-family computer emulator
+Terminal=false
+Type=Application
