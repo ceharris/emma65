@@ -131,7 +131,7 @@ jobs:
           fi
 
       - name: Upload release notes
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-notes
           path: release-notes.md
@@ -178,7 +178,7 @@ jobs:
           tar -C dist -czf "dist/${bin}-${ver}-linux-x86_64.tar.gz" "$(basename "$staging")"
 
       - name: Upload release asset
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-asset
           path: dist/*.tar.gz
@@ -234,7 +234,7 @@ jobs:
         run: cargo tauri build
 
       - name: Upload release asset
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-asset
           path: |
@@ -251,13 +251,13 @@ jobs:
       contents: write
     steps:
       - name: Download release notes
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-notes
           path: .
 
       - name: Download release assets
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-asset
           path: dist
