@@ -1,3 +1,4 @@
+use super::device::parse_suffixed_u32;
 use super::{DeviceModule, DeviceModuleError, ExpandedPathBuf, InstantiationContext, loader};
 use crate::emulator::bus::{DeviceIdAllocator, symbol};
 use crate::emulator::{AddressRange, BusConfig};
@@ -24,11 +25,53 @@ pub struct RomModule;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MemoryAttributes {
+    #[serde(deserialize_with = "deserialize_size")]
     size: u32,
     offset: Option<isize>,
     fill: Option<u8>,
     image: Option<ExpandedPathBuf>,
     labels: Option<ExpandedPathBuf>,
+}
+
+/// Accepts `size` either as a plain integer (as it would already be after parsing a `--device`
+/// CLI argument) or as a string such as `"32K"` (the shorthand form TOML configuration carries
+/// through as a string, since figment doesn't parse suffixed strings into numbers on its own).
+fn deserialize_size<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct SizeVisitor;
+
+    impl serde::de::Visitor<'_> for SizeVisitor {
+        type Value = u32;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("an integer byte count, or a string such as \"32K\"")
+        }
+
+        fn visit_u64<E>(self, v: u64) -> Result<u32, E>
+        where
+            E: serde::de::Error,
+        {
+            u32::try_from(v).map_err(|_| E::custom(format!("size {v} is out of range")))
+        }
+
+        fn visit_i64<E>(self, v: i64) -> Result<u32, E>
+        where
+            E: serde::de::Error,
+        {
+            u32::try_from(v).map_err(|_| E::custom(format!("size {v} is out of range")))
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<u32, E>
+        where
+            E: serde::de::Error,
+        {
+            parse_suffixed_u32(v).map_err(|_| E::custom(format!("invalid size: \"{v}\"")))
+        }
+    }
+
+    deserializer.deserialize_any(SizeVisitor)
 }
 
 impl MemoryAttributes {
@@ -127,5 +170,58 @@ impl DeviceModule for RomModule {
         bus_config
             .rom(range, data)
             .map_err(DeviceModuleError::BusConfig)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn size_accepts_plain_integer() {
+        let mut attributes = HashMap::new();
+        attributes.insert("size".to_string(), Value::from(32768));
+
+        let config = MemoryAttributes::from_attributes(&attributes).unwrap();
+
+        assert_eq!(config.size, 32768);
+    }
+
+    #[test]
+    fn size_accepts_kilobyte_shorthand_string() {
+        let mut attributes = HashMap::new();
+        attributes.insert("size".to_string(), Value::from("32K"));
+
+        let config = MemoryAttributes::from_attributes(&attributes).unwrap();
+
+        assert_eq!(config.size, 32 * 1024);
+    }
+
+    #[test]
+    fn size_accepts_lowercase_kilobyte_shorthand_string() {
+        let mut attributes = HashMap::new();
+        attributes.insert("size".to_string(), Value::from("4k"));
+
+        let config = MemoryAttributes::from_attributes(&attributes).unwrap();
+
+        assert_eq!(config.size, 4 * 1024);
+    }
+
+    #[test]
+    fn size_accepts_plain_decimal_string() {
+        let mut attributes = HashMap::new();
+        attributes.insert("size".to_string(), Value::from("16384"));
+
+        let config = MemoryAttributes::from_attributes(&attributes).unwrap();
+
+        assert_eq!(config.size, 16384);
+    }
+
+    #[test]
+    fn size_rejects_invalid_string() {
+        let mut attributes = HashMap::new();
+        attributes.insert("size".to_string(), Value::from("not-a-size"));
+
+        assert!(MemoryAttributes::from_attributes(&attributes).is_err());
     }
 }
