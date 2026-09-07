@@ -24,7 +24,12 @@ yourself if you configure enough IRQ-capable devices that two collide (the
 emulator refuses to start and tells you so). Whatever the slot number, a
 6502 program still identifies *which* device is interrupting the same way
 it would on real hardware: by polling each device's own status register,
-since the 6502 has only one hardware IRQ line.
+since the 6502 has only one hardware IRQ line. That's the case for the
+default bus configuration, which routes every IRQ-capable device to the
+6502's single shared line — but a
+[Priority Interrupt Controller](#priority-interrupt-controller-picfinch)
+(`pic/finch`) can be configured instead to rank IRQ sources and dispatch
+each to its own vector, emulating a vectored interrupt controller.
 
 ## Console (`console`)
 
@@ -534,6 +539,68 @@ mode = "step"
 - `taps` (optional, default `0xB400`) — the Galois tap mask; the default
   gives a maximal-length, 65535-state sequence.
 - `mode` (optional, `"continuous"` or `"step"`, default `"continuous"`).
+
+## Priority Interrupt Controller (`pic/finch`)
+
+An optional vectored interrupt controller. Where the default bus
+configuration dispatches every IRQ-capable device to the 6502's single
+`0xFFFE`/`0xFFFF` vector — leaving a handler to poll each device's status
+register to find out which one interrupted — configuring a `pic/finch`
+device instead ranks up to 8 IRQ priority slots and routes the CPU straight
+to a per-slot vector, no polling required.
+
+It occupies a single byte of address space: its Interrupt Enable Register
+(IER). It does *not* claim the 16-byte vector table itself, which is
+expected to be backed by ROM:
+
+| Address           | Contents                                                            |
+|-------------------|----------------------------------------------------------------------|
+| `0xFFE0`–`0xFFE1` | Vector for slot 0 (highest priority)                                  |
+| `0xFFE2`–`0xFFE3` | Vector for slot 1                                                     |
+| ...               | ...                                                                    |
+| `0xFFEC`–`0xFFED` | Vector for slot 6                                                     |
+| `0xFFEE`–`0xFFEF` | Vector for slot 7 (fold slot: every IRQ identifier from 7 up shares this vector, wired-OR) |
+
+Lower IRQ identifiers are higher priority and get their own slot (0..6);
+every identifier from 7 up to the emulator's maximum of 63 shares the
+lowest-priority fold slot. The RESET and NMI vectors are untouched — only
+the IRQ/BRK vector is affected, and only when a `pic/finch` is configured.
+
+The IER's low 7 bits individually enable or disable slots 0..6 for vector
+routing; a disabled slot's source is not recognized as pending at all, so it
+can't wake the CPU or be routed anywhere until re-enabled. Sources 7..63 are
+always recognized and always routed to the fold slot — matching real PIC
+hardware, where an unprioritized/wired-OR tier has no per-source mask — and
+can only be inhibited by setting the CPU's I flag.
+
+Reading the IER returns the enable state of slots 0..6 in bits 0..6; bit 7
+always reads as 1. Writing the IER treats bit 7 as a set/clear indicator and
+bits 0..6 as a selection mask: bits set in the written value select which of
+slots 0..6 to modify, and bit 7 determines whether the selected slots are
+enabled (`1`) or disabled (`0`); unselected bits are left unchanged. This is
+the same encoding used by the VIA's IER.
+
+Because the 6502's `0xFFFE` IRQ/BRK vector low byte is never fetched when a
+`pic/finch` is installed (the CPU fetches the PIC-resolved vector instead),
+the IER is typically mapped at `0xFFFF`, the otherwise-unused high byte of
+that vector.
+
+Only one `pic/finch` can be configured at a time — it's the only device type
+that replaces the emulator's vectored dispatch, and configuring a second one
+fails at startup.
+
+### Configuration
+
+```toml
+[[devices]]
+type = "pic/finch"
+address = 0xFFFF
+```
+
+`pic/finch` accepts no device-specific attributes; it always occupies
+exactly one byte at `address`. It is itself not IRQ-capable and has no
+`irq` attribute — it consumes IRQ identifiers assigned to other devices
+rather than asserting one of its own.
 
 ## Transport Options
 
