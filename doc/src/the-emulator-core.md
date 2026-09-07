@@ -209,9 +209,9 @@ rest of what it needs to behave like real hardware:
 ### Execution Tracing
 
 The CPU can record every register snapshot and bus read/write to a compact
-binary trace format (magic `E65T`) as it executes, via a pluggable
-`TraceCallback` — writing is offloaded to a background thread so recording
-does not slow down execution. Two tools consume these traces:
+[binary trace format](appendix-trace-format.md) as it executes, via a
+pluggable `TraceCallback` — writing is offloaded to a background thread so
+recording does not slow down execution. Two tools consume these traces:
 
 - The `emma65` binary writes a trace directly to a file with `--trace-file`
 - The debugger's Trace window records and displays a scrolling, live view of

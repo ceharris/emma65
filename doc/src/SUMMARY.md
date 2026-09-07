@@ -5,6 +5,7 @@
 - [Install](install.md)
 - [The Debugger](the-debugger.md)
 - [The Emulator Core](the-emulator-core.md)
+- [Memory Devices](memory-devices.md)
 - [I/O Devices](io-devices.md)
 - [Running the Emulator](running-the-emulator.md)
 - [Running the Tracer](running-the-tracer.md)
