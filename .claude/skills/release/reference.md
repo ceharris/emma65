@@ -5,13 +5,29 @@ this — load it when you actually need a path or a classification call.
 
 ## Artifact table
 
-| Crate | Directory | `Cargo.toml` path(s) | Changelog | Tag prefix |
-|---|---|---|---|---|
-| `emma65` | repo root | `Cargo.toml` | `CHANGELOG.md` | `emma65-v` |
-| `emma65-display` | `display/` | `display/Cargo.toml` | `display/CHANGELOG.md` | `emma65-display-v` |
-| `emma65-led-matrix` | `led-matrix/` | `led-matrix/Cargo.toml` | `led-matrix/CHANGELOG.md` | `emma65-led-matrix-v` |
-| `emma65-lcd-display` | `lcd-display/` | `lcd-display/Cargo.toml` | `lcd-display/CHANGELOG.md` | `emma65-lcd-display-v` |
-| `emma65-debugger` | `debugger/src-tauri/` | `debugger/src-tauri/Cargo.toml`, `debugger/src-tauri/tauri.conf.json` (`.version`), `debugger/frontend/package.json` (`.version`) — all three must match | `debugger/src-tauri/CHANGELOG.md` | `emma65-debugger-v` |
+Only `emma65`'s tag triggers a GitHub Actions build (`.github/workflows/release.yml`'s `on: push:
+tags:` pattern is `emma65-v[0-9]+.[0-9]+.[0-9]+` only). The other four crates' tags are
+bookkeeping-only per step 11 of `SKILL.md` — they never dispatch a build; their current state at
+whatever commit is on `main` gets packaged into the next `emma65-v*` combined release.
+
+| Crate | Directory | `Cargo.toml` path(s) | Changelog | Tag prefix | Triggers build |
+|---|---|---|---|---|---|
+| `emma65` | repo root | `Cargo.toml` | `CHANGELOG.md` | `emma65-v` | **Yes** — combined `.deb`/`.rpm` |
+| `emma65-display` | `display/` | `display/Cargo.toml` | `display/CHANGELOG.md` | `emma65-display-v` | No |
+| `emma65-led-matrix` | `led-matrix/` | `led-matrix/Cargo.toml` | `led-matrix/CHANGELOG.md` | `emma65-led-matrix-v` | No |
+| `emma65-lcd-display` | `lcd-display/` | `lcd-display/Cargo.toml` | `lcd-display/CHANGELOG.md` | `emma65-lcd-display-v` | No |
+| `emma65-debugger` | `debugger/src-tauri/` | `debugger/src-tauri/Cargo.toml`, `debugger/src-tauri/tauri.conf.json` (`.version`), `debugger/frontend/package.json` (`.version`) — all three must match | `debugger/src-tauri/CHANGELOG.md` | `emma65-debugger-v` | No |
+
+## Release artifacts
+
+An `emma65-v*` release publishes exactly two assets, both built from
+`[package.metadata.deb]`/`[package.metadata.generate-rpm]` in the root `Cargo.toml` (package name
+`emma65` for both): one combined `.deb` and one combined `.rpm`, each containing every workspace
+binary — `emma65`, `emma65-tracer`, `emma65-display`, `emma65-led-matrix`, `emma65-lcd-display`,
+`emma65-debugger` — plus the debugger's desktop entry and icons (`packaging/emma65-debugger.desktop`,
+`debugger/src-tauri/icons/`). Runtime library dependencies (SDL2, SDL2_gfx, webkit2gtk, gtk3) are
+auto-detected from the packaged binaries (`depends = "$auto"` / `auto-req = "auto"`), not
+hand-listed — there's nothing to update here when a dependency changes.
 
 ## Tag and branch naming
 

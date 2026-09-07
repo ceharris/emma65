@@ -14,6 +14,9 @@ name = "emma65"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+description = "A 6502-family computer emulator, with an emulator CLI, SDL2 peripheral displays, and a Tauri debugger GUI"
+authors = ["Carl Harris"]
+repository = "https://github.com/ceharris/emma65"
 
 [[bin]]
 name = "emma65"
@@ -52,3 +55,47 @@ version = "3.27"
 emma65-build-info = { path = "build-info" }
 
 [dev-dependencies]
+
+# Combined apt/dnf packaging for every workspace binary (the emulator CLI,
+# the SDL2 peripheral binaries, and the Tauri debugger GUI) into one `emma65`
+# package. Built via `cargo deb`/`cargo generate-rpm` from release.yml, not
+# by plain `cargo build`. `depends`/`auto-req` detect the SDL2 and
+# webkit2gtk/gtk3 runtime libraries straight off the binaries being
+# packaged, rather than hand-listing distro package names that can drift.
+[package.metadata.deb]
+name = "emma65"
+depends = "$auto"
+section = "utils"
+priority = "optional"
+extended-description = """\
+A 6502-family computer emulator: the emma65 emulator CLI and emma65-tracer, \
+SDL2-backed peripheral displays (emma65-display, emma65-led-matrix, \
+emma65-lcd-display), and the emma65-debugger GUI, all in one package."""
+assets = [
+    ["target/release/emma65", "usr/bin/", "755"],
+    ["target/release/emma65-tracer", "usr/bin/", "755"],
+    ["target/release/emma65-display", "usr/bin/", "755"],
+    ["target/release/emma65-led-matrix", "usr/bin/", "755"],
+    ["target/release/emma65-lcd-display", "usr/bin/", "755"],
+    ["target/release/emma65-debugger", "usr/bin/", "755"],
+    ["packaging/emma65-debugger.desktop", "usr/share/applications/", "644"],
+    ["debugger/src-tauri/icons/32x32.png", "usr/share/icons/hicolor/32x32/apps/emma65-debugger.png", "644"],
+    ["debugger/src-tauri/icons/128x128.png", "usr/share/icons/hicolor/128x128/apps/emma65-debugger.png", "644"],
+    ["LICENSE", "usr/share/doc/emma65/", "644"],
+]
+
+[package.metadata.generate-rpm]
+name = "emma65"
+auto-req = "auto"
+assets = [
+    { source = "target/release/emma65", dest = "/usr/bin/emma65", mode = "755" },
+    { source = "target/release/emma65-tracer", dest = "/usr/bin/emma65-tracer", mode = "755" },
+    { source = "target/release/emma65-display", dest = "/usr/bin/emma65-display", mode = "755" },
+    { source = "target/release/emma65-led-matrix", dest = "/usr/bin/emma65-led-matrix", mode = "755" },
+    { source = "target/release/emma65-lcd-display", dest = "/usr/bin/emma65-lcd-display", mode = "755" },
+    { source = "target/release/emma65-debugger", dest = "/usr/bin/emma65-debugger", mode = "755" },
+    { source = "packaging/emma65-debugger.desktop", dest = "/usr/share/applications/emma65-debugger.desktop", mode = "644" },
+    { source = "debugger/src-tauri/icons/32x32.png", dest = "/usr/share/icons/hicolor/32x32/apps/emma65-debugger.png", mode = "644" },
+    { source = "debugger/src-tauri/icons/128x128.png", dest = "/usr/share/icons/hicolor/128x128/apps/emma65-debugger.png", mode = "644" },
+    { source = "LICENSE", dest = "/usr/share/doc/emma65/LICENSE", mode = "644" },
+]

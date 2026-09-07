@@ -1,15 +1,22 @@
 ---
 name: release
-description: Cut a release for one of emma65's five independently-versioned crates (emma65, emma65-display, emma65-led-matrix, emma65-lcd-display, emma65-debugger) — classify the semver bump, update version files, write the changelog entry, open a PR, and after the user confirms it's merged, tag and push to trigger the GitHub Actions release build. Use when the user asks to cut/prepare/start a release, bump a crate's version, or says things like "release emma65-lcd-display 0.2.0" or "publish a new debugger build".
+description: Cut a release for one of emma65's five independently-versioned crates (emma65, emma65-display, emma65-led-matrix, emma65-lcd-display, emma65-debugger) — classify the semver bump, update version files, write the changelog entry, open a PR, and after the user confirms it's merged, tag and push. Use when the user asks to cut/prepare/start a release, bump a crate's version, or says things like "release emma65-lcd-display 0.2.0" or "publish a new debugger build". Only tagging `emma65` itself triggers a GitHub Actions build — see step 11.
 ---
 
 # Release
 
 Cuts a release for one artifact in the `emma65` workspace. This skill handles only the
 human-judgment half of a release — classifying the version bump, editing files, and opening a PR
-for review. It never builds or publishes anything itself. Pushing the release tag it produces at
-the end is what triggers `.github/workflows/release.yml`, which does the actual building and
-publishing.
+for review. It never builds or publishes anything itself.
+
+Each of the five crates keeps its own independent version and `CHANGELOG.md` for bookkeeping, but
+only `emma65` — the root/umbrella crate — has a real GitHub Actions build behind its tag. Pushing
+an `emma65-vX.Y.Z` tag and dispatching `.github/workflows/release.yml` builds **every** workspace
+binary (the emulator CLI, the three SDL2 peripheral binaries, and the Tauri debugger GUI) into one
+combined `emma65` `.deb` and `.rpm`, published as a single GitHub Release. Tagging one of the
+other four crates (step 11) is tag-and-push only — it records that crate's version/changelog for
+history, but does not trigger a build; that crate's current state simply gets folded into
+whichever `emma65-v*` release comes next.
 
 Detailed lookup tables (artifact → paths, the full semver policy, changelog/tag format specs)
 live in `reference.md` — load it when you reach a step that needs it, not up front.
@@ -105,24 +112,35 @@ confirm it has been merged into `main`. Do not poll for merge status.
 
 **10. Confirm before tagging.** Once the user confirms the merge, `git fetch origin` and locate
 the merge commit on `main`. Before doing anything else, explicitly ask the user to confirm —
-state the exact tag name and the commit SHA it will point to. This is the one irreversible,
-public-facing step in the whole process: dispatching the release build (next step) publishes a
-public GitHub Release.
+state the exact tag name and the commit SHA it will point to. For `emma65`, this is the one
+irreversible, public-facing step in the whole process: dispatching the release build (next step)
+publishes a public GitHub Release. For the other four crates it's lower-stakes (tag-and-push only,
+no build), but still confirm before pushing a public tag.
 
-**11. Tag, push, and dispatch the build**, only after that confirmation:
+**11. Tag and push**, only after that confirmation:
 
 ```bash
 git tag -a <crate>-vX.Y.Z <merge-sha> -m "<crate> X.Y.Z"
 git push origin <crate>-vX.Y.Z
-gh workflow run release.yml --ref main -f tag=<crate>-vX.Y.Z
+```
+
+If `<crate>` is **not** `emma65`, stop here — tell the user the tag is pushed for bookkeeping and
+that this change will ship in whichever `emma65-v*` release comes next; do not dispatch a build.
+
+If `<crate>` **is** `emma65`, dispatch the combined build:
+
+```bash
+gh workflow run release.yml --ref main -f tag=emma65-vX.Y.Z
 ```
 
 The tag always points at a commit that was already pushed to `main` (merging the version-bump PR
 in step 8), and GitHub Actions dedupes check-suites by commit SHA — so the tag push by itself
 never fires `release.yml`'s `on: push: tags:` trigger, even though the tag exists on GitHub and
 matches the trigger's glob pattern. The `gh workflow run` dispatch is what actually starts the
-build: it reads the workflow definition from `--ref main`, but pins every job's checkout to the
-tag itself, so the build is still produced from the tagged commit, not from whatever `main`'s tip
+build: it reads the workflow definition from `--ref main`, but pins the build job's checkout to
+the tag itself, so the build is still produced from the tagged commit — including whatever the
+*other* four crates' `Cargo.toml` versions currently are at that commit, since the combined
+package always reflects current `main` state for every binary — not from whatever `main`'s tip
 happens to be at dispatch time.
 
 Report the push and dispatch, then poll `gh run list --workflow=release.yml --limit 1` (it can
