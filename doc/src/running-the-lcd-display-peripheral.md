@@ -39,7 +39,14 @@ letterboxes/scales to fit. Closing the window ends `emma65-lcd-display`; it
 also exits cleanly if the emulator process exits or is killed first, since
 that closes its stdin.
 
-The window resizes on the fly when `Function Set`'s `F` bit switches the
-active font between 5×8 and 5×10 dots, since that changes every subsequent
-frame's pixel height — no configuration is needed for this, it follows
-automatically from each frame message's own dimensions.
+Whether the window can ever show true 5×10 dots is fixed by the device's
+configured `geometry=` — only `8-character-5x10` and `16-character-5x10`
+have the physical common-line count a real 5×10 glyph needs (see
+[LCD Display](io-devices.md#lcd-display-displaylcd)). On those two
+geometries, `Function Set`'s `F` bit still switches the active font between
+5×8 and 5×10 dots at runtime, and the window resizes on the fly to match,
+since that changes every subsequent frame's pixel height — no configuration
+is needed for the resize itself, it follows automatically from each frame
+message's own dimensions. On every other geometry, a program setting `F=1`
+has no visible effect: the font, and so the window's size, stays fixed at
+5×8 for the life of the device.
