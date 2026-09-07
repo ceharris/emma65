@@ -22,6 +22,7 @@ pub struct RamModule;
 pub struct RomModule;
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MemoryAttributes {
     size: u32,
     offset: Option<isize>,

@@ -17,6 +17,7 @@ pub struct PhoebeModule;
 
 /// Configuration attributes for the Phoebe bank-switched memory module.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PhoebeAttributes {
     #[serde(rename = "control-register", alias = "ctrl")]
     control_register_address: u16,

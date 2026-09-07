@@ -11,7 +11,7 @@ use crate::emulator::{
 
 /// A transport configuration spec.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum TransportSpec {
     Tcp {
         port: u16,

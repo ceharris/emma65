@@ -21,6 +21,7 @@ const DEFAULT_IRQ: u32 = 1;
 pub struct Via6522Module;
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Via6522Attributes {
     protocol: Option<ProtocolMessageEncoding>,
     transport: Option<TransportSpecFormat>,
