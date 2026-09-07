@@ -1,0 +1,243 @@
+name: Release
+
+# Triggered by pushing a per-artifact release tag (<crate>-vX.Y.Z). Each of the
+# five workspace crates has its own tag namespace and is released
+# independently — see .claude/skills/release/ for the human-gated process
+# that produces these tags (version bump PR, merge, then tag push).
+#
+# GitHub tag-filter globs don't support alternation, so the five known crate
+# names are enumerated explicitly. Adding a sixth artifact later is a
+# one-line addition here.
+on:
+  push:
+    tags:
+      - 'emma65-v[0-9]+.[0-9]+.[0-9]+'
+      - 'emma65-display-v[0-9]+.[0-9]+.[0-9]+'
+      - 'emma65-led-matrix-v[0-9]+.[0-9]+.[0-9]+'
+      - 'emma65-lcd-display-v[0-9]+.[0-9]+.[0-9]+'
+      - 'emma65-debugger-v[0-9]+.[0-9]+.[0-9]+'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  resolve:
+    name: Resolve tag and verify version
+    runs-on: ubuntu-latest
+    outputs:
+      crate: ${{ steps.parse.outputs.crate }}
+      version: ${{ steps.parse.outputs.version }}
+      kind: ${{ steps.parse.outputs.kind }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Parse tag
+        id: parse
+        run: |
+          version="${GITHUB_REF_NAME##*-v}"
+          crate="${GITHUB_REF_NAME%-v${version}}"
+          kind="cli"
+          if [ "$crate" = "emma65-debugger" ]; then
+            kind="debugger"
+          fi
+          echo "crate=$crate" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+
+      - name: Verify committed version matches tag
+        run: |
+          version="${{ steps.parse.outputs.version }}"
+          crate="${{ steps.parse.outputs.crate }}"
+
+          case "$crate" in
+            emma65) cargo_toml="Cargo.toml" ;;
+            emma65-display) cargo_toml="display/Cargo.toml" ;;
+            emma65-led-matrix) cargo_toml="led-matrix/Cargo.toml" ;;
+            emma65-lcd-display) cargo_toml="lcd-display/Cargo.toml" ;;
+            emma65-debugger) cargo_toml="debugger/src-tauri/Cargo.toml" ;;
+            *)
+              echo "::error::unrecognized crate '$crate' parsed from tag '$GITHUB_REF_NAME'"
+              exit 1
+              ;;
+          esac
+
+          check_field() {
+            file="$1"
+            actual="$2"
+            if [ "$actual" != "$version" ]; then
+              echo "::error::$file has version '$actual', tag says '$version'"
+              exit 1
+            fi
+          }
+
+          cargo_version=$(grep -m1 '^version *= *"' "$cargo_toml" | sed -E 's/^version *= *"([^"]+)".*/\1/')
+          check_field "$cargo_toml" "$cargo_version"
+
+          if [ "$crate" = "emma65-debugger" ]; then
+            tauri_version=$(grep -m1 '"version"' debugger/src-tauri/tauri.conf.json | sed -E 's/.*"version" *: *"([^"]+)".*/\1/')
+            check_field "debugger/src-tauri/tauri.conf.json" "$tauri_version"
+
+            pkg_version=$(grep -m1 '"version"' debugger/frontend/package.json | sed -E 's/.*"version" *: *"([^"]+)".*/\1/')
+            check_field "debugger/frontend/package.json" "$pkg_version"
+          fi
+
+      - name: Extract release notes
+        run: |
+          version="${{ steps.parse.outputs.version }}"
+          crate="${{ steps.parse.outputs.crate }}"
+
+          case "$crate" in
+            emma65) changelog="CHANGELOG.md" ;;
+            emma65-display) changelog="display/CHANGELOG.md" ;;
+            emma65-led-matrix) changelog="led-matrix/CHANGELOG.md" ;;
+            emma65-lcd-display) changelog="lcd-display/CHANGELOG.md" ;;
+            emma65-debugger) changelog="debugger/src-tauri/CHANGELOG.md" ;;
+          esac
+
+          awk -v ver="$version" '
+            /^## \[/ { if (found) exit; if ($0 ~ "\\[" ver "\\]") { found=1; next } }
+            found { print }
+          ' "$changelog" > release-notes.md
+
+          if [ ! -s release-notes.md ]; then
+            echo "::error::no changelog entry found for $version in $changelog"
+            exit 1
+          fi
+
+      - name: Upload release notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  build-cli:
+    name: Build CLI artifact
+    needs: resolve
+    if: needs.resolve.outputs.kind == 'cli'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release -p ${{ needs.resolve.outputs.crate }}
+
+      - name: Package tarball
+        run: |
+          bin="${{ needs.resolve.outputs.crate }}"
+          ver="${{ needs.resolve.outputs.version }}"
+          staging="dist/${bin}-${ver}-linux-x86_64"
+          mkdir -p "$staging"
+          if [ "$bin" = "emma65" ]; then
+            cp target/release/emma65 target/release/emma65-tracer "$staging"/
+          else
+            cp "target/release/${bin}" "$staging"/
+          fi
+          cp LICENSE "$staging"/
+          tar -C dist -czf "dist/${bin}-${ver}-linux-x86_64.tar.gz" "$(basename "$staging")"
+
+      - name: Upload release asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset
+          path: dist/*.tar.gz
+
+  build-debugger:
+    name: Build debugger bundles
+    needs: resolve
+    if: needs.resolve.outputs.kind == 'debugger'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Node toolchain
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: debugger/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: debugger/frontend
+        run: npm ci
+
+      - name: Cache tauri-cli
+        id: cache-tauri-cli
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-tauri
+          key: tauri-cli-2-${{ runner.os }}
+
+      - name: Install tauri-cli
+        if: steps.cache-tauri-cli.outputs.cache-hit != 'true'
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Build bundles
+        working-directory: debugger/src-tauri
+        run: cargo tauri build
+
+      - name: Upload release asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-asset
+          path: |
+            debugger/src-tauri/target/release/bundle/deb/*.deb
+            debugger/src-tauri/target/release/bundle/rpm/*.rpm
+            debugger/src-tauri/target/release/bundle/appimage/*.AppImage
+
+  publish:
+    name: Publish GitHub Release
+    needs: [resolve, build-cli, build-debugger]
+    if: always() && needs.resolve.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release notes
+        uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: .
+
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: release-asset
+          path: dist
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${{ github.repository }}" \
+            --title "${{ needs.resolve.outputs.crate }} ${{ needs.resolve.outputs.version }}" \
+            --notes-file release-notes.md \
+            dist/*
