@@ -3,10 +3,10 @@
 [Introduction](introduction.md)
 
 - [Install](install.md)
-- [The Debugger](the-debugger.md)
 - [The Emulator Core](the-emulator-core.md)
 - [Memory Devices](memory-devices.md)
 - [I/O Devices](io-devices.md)
+- [The Debugger](the-debugger.md)
 - [Running the Emulator](running-the-emulator.md)
 - [Running the Tracer](running-the-tracer.md)
 - [Running the Display Peripheral](running-the-display-peripheral.md)
