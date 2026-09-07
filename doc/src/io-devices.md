@@ -618,18 +618,22 @@ TOML/CLI — the `emma65` binary and the debugger UI use it internally to wire
 a console device directly to the host process's own stdin/stdout (CLI) or
 terminal window (debugger) when no `transport` attribute is given.
 
-Every transport's actual I/O runs on its own thread or async task, decoupled
-from device `tick()` by a lock-free `rtrb` ring buffer (`ChannelRelay`): the
-transport side pushes into the ring as bytes arrive, and `tick()` drains
-whatever is currently available and returns immediately, whether that's
-nothing, one byte, or a burst. Neither side ever blocks the other. Because
-the CPU thread is practically unburdened by communication with external
-peripherals, it can easily sustain common effective clock speeds — and much
-higher ones with clock throttling disabled (`ClockSpeed::unlimited()`).
+Every transport handles its actual I/O in the background, independent of the
+emulated CPU's own pace. Bytes arriving from the outside world are buffered
+until the device is ready for them, and the device never waits on a slow or
+idle connection to keep running. That separation means a peripheral can sit
+disconnected, connect late, or send data in bursts without stalling
+emulation, and the CPU can run at full speed — including with clock
+throttling disabled entirely — without communication overhead holding it
+back.
 
-The VIA and MC6840 additionally support framing their transport traffic with
-a structured peer-communication protocol (`protocol = "ascii"` or `"binary"`)
-that exchanges full port/pin state on connection and incremental updates
-thereafter, so a real or emulated peripheral always has an accurate picture
-of the device's signals — see the [VIA Peer Protocol](appendix-via-protocol.md)
-and [PTM Peer Protocol](appendix-ptm-protocol.md) appendices.
+Several devices go further and frame their transport traffic with a wire
+protocol — a defined message format layered on top of the raw byte stream,
+so that whatever is on the other end (real or emulated hardware, a script,
+another emulator) can be built independently and still understand exactly
+what the device is telling it, and be understood in turn. Some of these
+protocols offer a choice of encoding — a human-readable form that's easy to
+inspect or drive by hand while developing a peripheral, and a compact binary
+form for efficiency — while others always use binary because they're built
+for high-throughput streaming. See the [Wire Protocols](appendix-wire-protocols.md)
+appendix for the full set and the byte-level details of each.
