@@ -10,7 +10,13 @@ describe("RadixButton", () => {
   });
 
   it("renders each radix's expected label", () => {
-    const labels: Record<DataRadix, string> = { hex: "HEX", udec: "DEC", sdec: "±DEC", oct: "OCT", bin: "BIN" };
+    const labels: Record<DataRadix, string> = {
+      hex: "HEX",
+      udec: "DEC",
+      sdec: "±DEC",
+      oct: "OCT",
+      bin: "BIN",
+    };
     for (const [radix, label] of Object.entries(labels) as [DataRadix, string][]) {
       const { unmount } = render(<RadixButton radix={radix} onCycle={vi.fn()} />);
       expect(screen.getByRole("button")).toHaveTextContent(label);

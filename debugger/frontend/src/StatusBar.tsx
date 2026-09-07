@@ -117,8 +117,12 @@ export default function StatusBar() {
         triggerStepFlash();
       }
     });
-    const unlistenRunStopped = listen("debugger-run-stopped", () => { fetchCpuBus(); });
-    const unlistenTick = listen("debugger-running-tick", () => { fetchCpuBus(); });
+    const unlistenRunStopped = listen("debugger-run-stopped", () => {
+      fetchCpuBus();
+    });
+    const unlistenTick = listen("debugger-running-tick", () => {
+      fetchCpuBus();
+    });
     return () => {
       unlistenHalted.then((f) => f());
       unlistenRunStopped.then((f) => f());
@@ -222,7 +226,11 @@ export default function StatusBar() {
         onClick={handleTriggerNmi}
         title="Trigger NMI"
       >
-        <span className={`indicator ${cpuBus?.nmi_pending ? "indicator-nmi-active" : "indicator-idle"}`}>●</span>
+        <span
+          className={`indicator ${cpuBus?.nmi_pending ? "indicator-nmi-active" : "indicator-idle"}`}
+        >
+          ●
+        </span>
         <span className="status-bar-label">NMI</span>
       </button>
       <button
@@ -230,7 +238,11 @@ export default function StatusBar() {
         onClick={handleToggleIrq}
         title={cpuBus?.is_running ? "Trigger IRQ (one-shot while running)" : "Assert/Release IRQ"}
       >
-        <span className={`indicator ${cpuBus?.irq_active ? "indicator-irq-active" : "indicator-idle"}`}>●</span>
+        <span
+          className={`indicator ${cpuBus?.irq_active ? "indicator-irq-active" : "indicator-idle"}`}
+        >
+          ●
+        </span>
         <span className="status-bar-label">IRQ</span>
       </button>
       <div className="status-bar-cell status-bar-run">

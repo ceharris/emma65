@@ -1,6 +1,6 @@
-import {useCallback, useEffect, useMemo, useRef} from "react";
-import {invoke} from "@tauri-apps/api/core";
-import {listen} from "@tauri-apps/api/event";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import {
   AddPanelPositionOptions,
   AnchoredBox,
@@ -15,11 +15,11 @@ import {
 } from "dockview-react";
 import "dockview-react/dist/styles/dockview.css";
 import "../styles/dock-layout.scss";
-import {useTheme} from "../ThemeContext";
-import {MainPanelId, PANEL_TITLES, panelComponents} from "./panelRegistry";
-import {RUN_CONTROLS_DOCKED_HEIGHT, RUN_CONTROLS_MIN_WIDTH} from "../RunControlsPanel";
-import {PanelHeaderActionProvider, usePanelHeaderActions} from "./panelHeaderActions";
-import {dispatchAssemblerMenuAction} from "./assemblerMenuActions";
+import { useTheme } from "../ThemeContext";
+import { MainPanelId, PANEL_TITLES, panelComponents } from "./panelRegistry";
+import { RUN_CONTROLS_DOCKED_HEIGHT, RUN_CONTROLS_MIN_WIDTH } from "../RunControlsPanel";
+import { PanelHeaderActionProvider, usePanelHeaderActions } from "./panelHeaderActions";
+import { dispatchAssemblerMenuAction } from "./assemblerMenuActions";
 
 // Debounces persisting the layout while the user is actively dragging/resizing
 // panels — onDidLayoutChange fires on every intermediate frame of a drag.
@@ -79,7 +79,9 @@ interface FloatingPanelPosition {
 type PanelPosition = DockedPanelPosition | FloatingPanelPosition;
 
 /** The `floating` shape `api.addPanel` accepts — either a fresh `x`/`y` guess or a remembered corner-anchored position, both paired with a size. */
-type FloatingBounds = { x: number; y: number; width: number; height: number } | { position: AnchorPosition; width: number; height: number };
+type FloatingBounds =
+  | { x: number; y: number; width: number; height: number }
+  | { position: AnchorPosition; width: number; height: number };
 
 /**
  * Default *docked* position (issue #402): the bottom of Disassembly's own
@@ -88,7 +90,10 @@ type FloatingBounds = { x: number; y: number; width: number; height: number } | 
  * `initialHeight` — without it a "below" split would default to a 50/50
  * split, giving this single-row toolbar half of Disassembly's column.
  */
-const RUN_CONTROLS_DEFAULT_POSITION: AddPanelPositionOptions = { referencePanel: "disassembly", direction: "below" };
+const RUN_CONTROLS_DEFAULT_POSITION: AddPanelPositionOptions = {
+  referencePanel: "disassembly",
+  direction: "below",
+};
 
 /**
  * Bounds used by the Run Controls tab's explicit "Float" action (issue
@@ -104,7 +109,12 @@ const RUN_CONTROLS_DEFAULT_POSITION: AddPanelPositionOptions = { referencePanel:
  * into — there's nowhere drag-and-drop could resolve to "no valid dock
  * target" and float instead.
  */
-const RUN_CONTROLS_FLOAT_BOUNDS: FloatingGroupOptions = { x: 460, y: 40, width: RUN_CONTROLS_MIN_WIDTH, height: 100 };
+const RUN_CONTROLS_FLOAT_BOUNDS: FloatingGroupOptions = {
+  x: 460,
+  y: 40,
+  width: RUN_CONTROLS_MIN_WIDTH,
+  height: 100,
+};
 
 /**
  * Records `id`'s current group/index into `positionRef` before closing it, so
@@ -141,7 +151,9 @@ function positionForReattach(
   fallback: AddPanelPositionOptions,
 ): AddPanelPositionOptions {
   const groupStillExists = remembered !== null && api.getGroup(remembered.group_id) !== undefined;
-  return groupStillExists ? { referenceGroup: remembered.group_id, index: remembered.index } : fallback;
+  return groupStillExists
+    ? { referenceGroup: remembered.group_id, index: remembered.index }
+    : fallback;
 }
 
 /**
@@ -157,7 +169,9 @@ function positionForReattach(
  * per-entry way to carry, so `resolveRevealPosition` special-cases it too,
  * via `RUN_CONTROLS_DEFAULT_POSITION`.
  */
-const DEFAULT_PANEL_POSITION: Partial<Record<MainPanelId, { referencePanel: MainPanelId; direction?: "right" | "below" }>> = {
+const DEFAULT_PANEL_POSITION: Partial<
+  Record<MainPanelId, { referencePanel: MainPanelId; direction?: "right" | "below" }>
+> = {
   disassembly: { referencePanel: "memory", direction: "right" },
   registers: { referencePanel: "disassembly", direction: "right" },
   display: { referencePanel: "memory" },
@@ -200,7 +214,10 @@ function findFloatingBounds(json: SerializedDockview, groupId: string): Anchored
  * is skipped entirely in the common all-docked case — this function runs on
  * every drag frame.
  */
-function recordPanelPositions(api: DockviewReadyEvent["api"], ref: React.MutableRefObject<Partial<Record<MainPanelId, PanelPosition>>>) {
+function recordPanelPositions(
+  api: DockviewReadyEvent["api"],
+  ref: React.MutableRefObject<Partial<Record<MainPanelId, PanelPosition>>>,
+) {
   const floatingIds: MainPanelId[] = [];
   for (const id of Object.keys(PANEL_TITLES) as MainPanelId[]) {
     const panel = api.getPanel(id);
@@ -374,7 +391,10 @@ function addDefaultLayout(
     add("memory", { initialWidth: 592 });
   }
   add("disassembly", { position: { referencePanel: "memory", direction: "right" } });
-  add("registers", { position: { referencePanel: "disassembly", direction: "right" }, initialWidth: 202 });
+  add("registers", {
+    position: { referencePanel: "disassembly", direction: "right" },
+    initialWidth: 202,
+  });
   add("watchpoints", { position: { referencePanel: "memory", direction: "below" } });
   add("stack", { position: { referencePanel: "registers", direction: "below" } });
   add("breakpoints", { position: { referencePanel: "stack", direction: "below" } });
@@ -430,7 +450,10 @@ function addDefaultLayout(
  * stores both as opaque JSON and never parses their internal shape (see
  * `layout.rs`).
  */
-function persistLayout(api: DockviewReadyEvent["api"], lastPositions: Partial<Record<MainPanelId, PanelPosition>>) {
+function persistLayout(
+  api: DockviewReadyEvent["api"],
+  lastPositions: Partial<Record<MainPanelId, PanelPosition>>,
+) {
   invoke("set_dock_layout", { layout: api.toJSON(), panelPositions: lastPositions }).catch((err) =>
     console.error("set_dock_layout failed:", err),
   );
@@ -542,9 +565,16 @@ function addMissingBottomPanels(
  * falling back to `RUN_CONTROLS_DEFAULT_POSITION` otherwise. Returns whether
  * it was added, so the caller knows whether to re-persist.
  */
-function addMissingRunControlsPanel(api: DockviewReadyEvent["api"], lastPositions: Partial<Record<MainPanelId, PanelPosition>>): boolean {
+function addMissingRunControlsPanel(
+  api: DockviewReadyEvent["api"],
+  lastPositions: Partial<Record<MainPanelId, PanelPosition>>,
+): boolean {
   if (api.getPanel("run-controls")) return false;
-  const { position, initialHeight, floating } = resolveRevealPosition(api, "run-controls", lastPositions);
+  const { position, initialHeight, floating } = resolveRevealPosition(
+    api,
+    "run-controls",
+    lastPositions,
+  );
   const base = {
     id: "run-controls" as const,
     component: "run-controls",
@@ -592,7 +622,10 @@ function addMissingRunControlsPanel(api: DockviewReadyEvent["api"], lastPosition
  * panels the restored arrangement doesn't (i.e. ones already closed as of
  * the last save).
  */
-async function restoreLayout(api: DockviewReadyEvent["api"], lastPositionsRef: React.MutableRefObject<Partial<Record<MainPanelId, PanelPosition>>>) {
+async function restoreLayout(
+  api: DockviewReadyEvent["api"],
+  lastPositionsRef: React.MutableRefObject<Partial<Record<MainPanelId, PanelPosition>>>,
+) {
   let restored = false;
   let terminalDetached = false;
   let displayDetached = false;
@@ -631,7 +664,13 @@ async function restoreLayout(api: DockviewReadyEvent["api"], lastPositionsRef: R
   if (lcdDisplayDetached) {
     api.getPanel("lcd-display")?.api.close();
   }
-  const addedBottomPanels = addMissingBottomPanels(api, terminalDetached, displayDetached, ledMatrixDetached, lcdDisplayDetached);
+  const addedBottomPanels = addMissingBottomPanels(
+    api,
+    terminalDetached,
+    displayDetached,
+    ledMatrixDetached,
+    lcdDisplayDetached,
+  );
   const addedRunControls = addMissingRunControlsPanel(api, lastPositionsRef.current);
   if (addedBottomPanels || addedRunControls) {
     persistLayout(api, lastPositionsRef.current);
@@ -728,7 +767,11 @@ function makeDockTabActions(
       const sizeAction = headerActions.terminal;
       return (
         <>
-          <button className="dock-tab-action" onClick={handleDetach} title="Detach Terminal to its own window">
+          <button
+            className="dock-tab-action"
+            onClick={handleDetach}
+            title="Detach Terminal to its own window"
+          >
             <i className="codicon codicon-multiple-windows" />
           </button>
           {sizeAction && (
@@ -736,7 +779,11 @@ function makeDockTabActions(
               className="dock-tab-action"
               onClick={sizeAction.onClick}
               disabled={sizeAction.disabled}
-              title={sizeAction.disabled ? (sizeAction.disabledTitle ?? sizeAction.title) : sizeAction.title}
+              title={
+                sizeAction.disabled
+                  ? (sizeAction.disabledTitle ?? sizeAction.title)
+                  : sizeAction.title
+              }
             >
               <i className="codicon codicon-menu" />
             </button>
@@ -751,7 +798,11 @@ function makeDockTabActions(
           .catch((err) => console.error("detach_display failed:", err));
       };
       return (
-        <button className="dock-tab-action" onClick={handleDetach} title="Detach Display to its own window">
+        <button
+          className="dock-tab-action"
+          onClick={handleDetach}
+          title="Detach Display to its own window"
+        >
           <i className="codicon codicon-multiple-windows" />
         </button>
       );
@@ -763,7 +814,11 @@ function makeDockTabActions(
           .catch((err) => console.error("detach_led_matrix failed:", err));
       };
       return (
-        <button className="dock-tab-action" onClick={handleDetach} title="Detach LED Matrix to its own window">
+        <button
+          className="dock-tab-action"
+          onClick={handleDetach}
+          title="Detach LED Matrix to its own window"
+        >
           <i className="codicon codicon-multiple-windows" />
         </button>
       );
@@ -775,13 +830,18 @@ function makeDockTabActions(
           .catch((err) => console.error("detach_lcd_display failed:", err));
       };
       return (
-        <button className="dock-tab-action" onClick={handleDetach} title="Detach LCD Display to its own window">
+        <button
+          className="dock-tab-action"
+          onClick={handleDetach}
+          title="Detach LCD Display to its own window"
+        >
           <i className="codicon codicon-multiple-windows" />
         </button>
       );
     }
     if (activePanel?.id === "run-controls" && activePanel.group.api.location.type !== "floating") {
-      const handleFloat = () => containerApi.addFloatingGroup(activePanel, RUN_CONTROLS_FLOAT_BOUNDS);
+      const handleFloat = () =>
+        containerApi.addFloatingGroup(activePanel, RUN_CONTROLS_FLOAT_BOUNDS);
       return (
         <button className="dock-tab-action" onClick={handleFloat} title="Float Run Controls">
           <i className="codicon codicon-multiple-windows" />
@@ -842,7 +902,13 @@ export default function DockLayout() {
   const lcdDisplayPositionRef = useRef<DockedPanelPosition | null>(null);
   const lastPanelPositionRef = useRef<Partial<Record<MainPanelId, PanelPosition>>>({});
   const DockTabActions = useMemo(
-    () => makeDockTabActions(terminalPositionRef, displayPositionRef, ledMatrixPositionRef, lcdDisplayPositionRef),
+    () =>
+      makeDockTabActions(
+        terminalPositionRef,
+        displayPositionRef,
+        ledMatrixPositionRef,
+        lcdDisplayPositionRef,
+      ),
     [],
   );
 
@@ -876,23 +942,42 @@ export default function DockLayout() {
         existing.api.setActive();
         return;
       }
-      const { position, initialHeight, floating } = resolveRevealPosition(api, id, lastPanelPositionRef.current);
+      const { position, initialHeight, floating } = resolveRevealPosition(
+        api,
+        id,
+        lastPanelPositionRef.current,
+      );
       // Run Controls needs its own size constraints regardless of which
       // branch below re-adds it — fixed height while docked (issue #424),
       // see RUN_CONTROLS_DOCKED_HEIGHT/RUN_CONTROLS_MIN_WIDTH.
       if (floating) {
-        const constraints = id === "run-controls"
-          ? { minimumHeight: RUN_CONTROLS_DOCKED_HEIGHT, minimumWidth: RUN_CONTROLS_MIN_WIDTH }
-          : undefined;
+        const constraints =
+          id === "run-controls"
+            ? { minimumHeight: RUN_CONTROLS_DOCKED_HEIGHT, minimumWidth: RUN_CONTROLS_MIN_WIDTH }
+            : undefined;
         api.addPanel({ id, component: id, title: PANEL_TITLES[id], floating, ...constraints });
       } else {
-        const constraints = id === "run-controls"
-          ? { minimumHeight: RUN_CONTROLS_DOCKED_HEIGHT, maximumHeight: RUN_CONTROLS_DOCKED_HEIGHT, minimumWidth: RUN_CONTROLS_MIN_WIDTH }
-          : undefined;
-        api.addPanel({ id, component: id, title: PANEL_TITLES[id], position, initialHeight, ...constraints });
+        const constraints =
+          id === "run-controls"
+            ? {
+                minimumHeight: RUN_CONTROLS_DOCKED_HEIGHT,
+                maximumHeight: RUN_CONTROLS_DOCKED_HEIGHT,
+                minimumWidth: RUN_CONTROLS_MIN_WIDTH,
+              }
+            : undefined;
+        api.addPanel({
+          id,
+          component: id,
+          title: PANEL_TITLES[id],
+          position,
+          initialHeight,
+          ...constraints,
+        });
       }
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   // Bridges `assembler-menu-action` to `AssemblerPanel.tsx` via
@@ -910,7 +995,9 @@ export default function DockLayout() {
     const unlistenPromise = listen<string>("assembler-menu-action", (event) => {
       dispatchAssemblerMenuAction(event.payload);
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   // Window > Restore Layout… (issue #398), confirmed via `RestoreLayoutDialog`
@@ -937,7 +1024,9 @@ export default function DockLayout() {
       addDefaultLayout(api, false, false, false, false);
       persistLayout(api, lastPanelPositionRef.current);
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   // Rust-driven detach/reattach (the Window > Terminal/Display/LED Matrix/LCD
@@ -950,28 +1039,36 @@ export default function DockLayout() {
     const unlistenPromise = listen("terminal-detach-requested", () => {
       closeDockedPanel(apiRef.current, "terminal", terminalPositionRef);
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   useEffect(() => {
     const unlistenPromise = listen("display-detach-requested", () => {
       closeDockedPanel(apiRef.current, "display", displayPositionRef);
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   useEffect(() => {
     const unlistenPromise = listen("led-matrix-detach-requested", () => {
       closeDockedPanel(apiRef.current, "led-matrix", ledMatrixPositionRef);
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   useEffect(() => {
     const unlistenPromise = listen("lcd-display-detach-requested", () => {
       closeDockedPanel(apiRef.current, "lcd-display", lcdDisplayPositionRef);
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   // Restores Terminal to the group/index it occupied before the detach that
@@ -983,10 +1080,19 @@ export default function DockLayout() {
     const unlistenPromise = listen("terminal-reattached", () => {
       const api = apiRef.current;
       if (!api || api.getPanel("terminal")) return;
-      const position = positionForReattach(api, terminalPositionRef.current, { referencePanel: "memory" });
-      api.addPanel({ id: "terminal", component: "terminal", title: PANEL_TITLES.terminal, position });
+      const position = positionForReattach(api, terminalPositionRef.current, {
+        referencePanel: "memory",
+      });
+      api.addPanel({
+        id: "terminal",
+        component: "terminal",
+        title: PANEL_TITLES.terminal,
+        position,
+      });
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   // Same as the Terminal reattach effect above, for Display — falls back to
@@ -997,10 +1103,16 @@ export default function DockLayout() {
     const unlistenPromise = listen("display-reattached", () => {
       const api = apiRef.current;
       if (!api || api.getPanel("display")) return;
-      const position = positionForReattach(api, displayPositionRef.current, DEFAULT_PANEL_POSITION.display!);
+      const position = positionForReattach(
+        api,
+        displayPositionRef.current,
+        DEFAULT_PANEL_POSITION.display!,
+      );
       api.addPanel({ id: "display", component: "display", title: PANEL_TITLES.display, position });
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   // Same as the Display reattach effect above, for LED Matrix (memory-mapped
@@ -1012,10 +1124,21 @@ export default function DockLayout() {
     const unlistenPromise = listen("led-matrix-reattached", () => {
       const api = apiRef.current;
       if (!api || api.getPanel("led-matrix")) return;
-      const position = positionForReattach(api, ledMatrixPositionRef.current, DEFAULT_PANEL_POSITION["led-matrix"]!);
-      api.addPanel({ id: "led-matrix", component: "led-matrix", title: PANEL_TITLES["led-matrix"], position });
+      const position = positionForReattach(
+        api,
+        ledMatrixPositionRef.current,
+        DEFAULT_PANEL_POSITION["led-matrix"]!,
+      );
+      api.addPanel({
+        id: "led-matrix",
+        component: "led-matrix",
+        title: PANEL_TITLES["led-matrix"],
+        position,
+      });
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   // Same as the LED Matrix reattach effect above, for LCD Display
@@ -1027,10 +1150,21 @@ export default function DockLayout() {
     const unlistenPromise = listen("lcd-display-reattached", () => {
       const api = apiRef.current;
       if (!api || api.getPanel("lcd-display")) return;
-      const position = positionForReattach(api, lcdDisplayPositionRef.current, DEFAULT_PANEL_POSITION["lcd-display"]!);
-      api.addPanel({ id: "lcd-display", component: "lcd-display", title: PANEL_TITLES["lcd-display"], position });
+      const position = positionForReattach(
+        api,
+        lcdDisplayPositionRef.current,
+        DEFAULT_PANEL_POSITION["lcd-display"]!,
+      );
+      api.addPanel({
+        id: "lcd-display",
+        component: "lcd-display",
+        title: PANEL_TITLES["lcd-display"],
+        position,
+      });
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   const onReady = useCallback((event: DockviewReadyEvent) => {

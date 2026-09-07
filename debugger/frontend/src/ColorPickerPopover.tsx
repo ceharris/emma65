@@ -32,7 +32,13 @@ interface ColorPickerPopoverProps {
  * Preferences dialog's Text tab (foreground/background/16-palette), reused
  * as-is by Work Unit 3 for the Cursor tab's cursor/accent colors.
  */
-export default function ColorPickerPopover({ label, value, defaultColor, onChange, compact = false }: ColorPickerPopoverProps) {
+export default function ColorPickerPopover({
+  label,
+  value,
+  defaultColor,
+  onChange,
+  compact = false,
+}: ColorPickerPopoverProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -42,7 +48,10 @@ export default function ColorPickerPopover({ label, value, defaultColor, onChang
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
     };
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.stopPropagation(); setOpen(false); }
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setOpen(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleKeyDown, true);
@@ -71,7 +80,11 @@ export default function ColorPickerPopover({ label, value, defaultColor, onChang
 
       {open && (
         <div className="color-picker-popover" onKeyDown={(e) => e.stopPropagation()}>
-          <button type="button" className="color-picker-default-option" onClick={() => choose(null)}>
+          <button
+            type="button"
+            className="color-picker-default-option"
+            onClick={() => choose(null)}
+          >
             Default
           </button>
           <div className="color-picker-presets">
@@ -88,7 +101,11 @@ export default function ColorPickerPopover({ label, value, defaultColor, onChang
           </div>
           <label className="color-picker-custom">
             Custom…
-            <input type="color" value={value ?? "#000000"} onChange={(e) => choose(e.target.value)} />
+            <input
+              type="color"
+              value={value ?? "#000000"}
+              onChange={(e) => choose(e.target.value)}
+            />
           </label>
         </div>
       )}

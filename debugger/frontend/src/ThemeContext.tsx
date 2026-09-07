@@ -29,18 +29,22 @@ export function resolveTheme(mode: ThemeMode, prefersDark: boolean): ResolvedThe
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>("auto");
   const [prefersDark, setPrefersDark] = useState(
-    () => window.matchMedia("(prefers-color-scheme: dark)").matches
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
   );
 
   useEffect(() => {
-    invoke<ThemeMode>("get_theme").then(setMode).catch((err) => console.error("get_theme failed:", err));
+    invoke<ThemeMode>("get_theme")
+      .then(setMode)
+      .catch((err) => console.error("get_theme failed:", err));
   }, []);
 
   useEffect(() => {
     const unlistenPromise = listen<ThemeMode>("theme-changed", (event) => {
       setMode(event.payload);
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   useEffect(() => {

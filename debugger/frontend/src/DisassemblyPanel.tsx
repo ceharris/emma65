@@ -1,8 +1,8 @@
-import {useCallback, useEffect, useRef, useState} from "react";
-import {listen} from "@tauri-apps/api/event";
-import {invoke} from "@tauri-apps/api/core";
-import {useExecutionContext} from "./ExecutionContext";
-import {useRunControlsContext} from "./RunControlsContext";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { useExecutionContext } from "./ExecutionContext";
+import { useRunControlsContext } from "./RunControlsContext";
 import "./styles/disassembly.scss";
 
 interface DisassembledRow {
@@ -38,17 +38,20 @@ const HEX_DIGITS = /^[0-9a-fA-F]+$/;
  */
 function parseAddressInput(raw: string): number | null {
   const s = raw.trim();
-  const body = s.startsWith("$") ? s.slice(1)
-    : /^0x/i.test(s) ? s.slice(2)
-    : s;
+  const body = s.startsWith("$") ? s.slice(1) : /^0x/i.test(s) ? s.slice(2) : s;
   if (!HEX_DIGITS.test(body)) return null;
   const n = parseInt(body, 16);
   return n >= 0 && n <= 0xffff ? n : null;
 }
 
 interface RegisterSnapshot {
-  a: number; x: number; y: number; s: number;
-  pc: number; p: number; changed_flags: number;
+  a: number;
+  x: number;
+  y: number;
+  s: number;
+  pc: number;
+  p: number;
+  changed_flags: number;
   cpu_stopped: boolean;
   cpu_waiting: boolean;
   breakpoint_hit: boolean;
@@ -84,26 +87,32 @@ export default function DisassemblyPanel() {
     setBreakpoints(new Map(list.map((b) => [b.addr, b.enabled])));
   }, []);
 
-  const handleToggleBreakpoint = useCallback(async (addr: number) => {
-    if (!isStopped) return;
-    try {
-      const updated = await invoke<BreakpointInfo[]>("toggle_breakpoint", { addr });
-      applyBreakpointList(updated);
-    } catch (e) {
-      console.error("toggle_breakpoint failed:", e);
-    }
-  }, [applyBreakpointList, isStopped]);
+  const handleToggleBreakpoint = useCallback(
+    async (addr: number) => {
+      if (!isStopped) return;
+      try {
+        const updated = await invoke<BreakpointInfo[]>("toggle_breakpoint", { addr });
+        applyBreakpointList(updated);
+      } catch (e) {
+        console.error("toggle_breakpoint failed:", e);
+      }
+    },
+    [applyBreakpointList, isStopped],
+  );
 
   /** Runs a breakpoint command (set/remove/disable/enable) and applies the returned list. */
-  const runBreakpointCommand = useCallback(async (command: string, addr: number) => {
-    if (!isStopped) return;
-    try {
-      const updated = await invoke<BreakpointInfo[]>(command, { addr });
-      applyBreakpointList(updated);
-    } catch (e) {
-      console.error(`${command} failed:`, e);
-    }
-  }, [applyBreakpointList, isStopped]);
+  const runBreakpointCommand = useCallback(
+    async (command: string, addr: number) => {
+      if (!isStopped) return;
+      try {
+        const updated = await invoke<BreakpointInfo[]>(command, { addr });
+        applyBreakpointList(updated);
+      } catch (e) {
+        console.error(`${command} failed:`, e);
+      }
+    },
+    [applyBreakpointList, isStopped],
+  );
 
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
@@ -188,29 +197,32 @@ export default function DisassemblyPanel() {
     }
   }, []);
 
-  const handleHalted = useCallback(async (newPc: number) => {
-    const current = rowsRef.current;
+  const handleHalted = useCallback(
+    async (newPc: number) => {
+      const current = rowsRef.current;
 
-    // Find where the new PC sits in the current row list.
-    const pcIndex = current.findIndex((r) => r.addr === newPc);
+      // Find where the new PC sits in the current row list.
+      const pcIndex = current.findIndex((r) => r.addr === newPc);
 
-    if (pcIndex === -1) {
-      // PC is not in the current row list (jump to a new location) — fetch fresh.
-      await fetchFrom(newPc);
+      if (pcIndex === -1) {
+        // PC is not in the current row list (jump to a new location) — fetch fresh.
+        await fetchFrom(newPc);
+        setCurrentPc(newPc);
+        return;
+      }
+
+      // PC is in the list. If it's approaching the bottom edge, extend the list.
+      if (pcIndex >= current.length - SCROLL_EDGE) {
+        const lastRow = current[current.length - 1];
+        // Start fetching from just after the last known row.
+        const nextAddr = lastRow.addr + lastRow.bytes.length;
+        extendFrom(nextAddr);
+      }
+
       setCurrentPc(newPc);
-      return;
-    }
-
-    // PC is in the list. If it's approaching the bottom edge, extend the list.
-    if (pcIndex >= current.length - SCROLL_EDGE) {
-      const lastRow = current[current.length - 1];
-      // Start fetching from just after the last known row.
-      const nextAddr = lastRow.addr + lastRow.bytes.length;
-      extendFrom(nextAddr);
-    }
-
-    setCurrentPc(newPc);
-  }, [fetchFrom, extendFrom]);
+    },
+    [fetchFrom, extendFrom],
+  );
 
   useEffect(() => {
     const unlistenHaltedPromise = listen<number>("debugger-halted", (event) => {
@@ -231,14 +243,19 @@ export default function DisassemblyPanel() {
     });
 
     // Keep the gutter in sync with edits made from the standalone Breakpoints panel.
-    const unlistenBreakpointsChangedPromise = listen<BreakpointInfo[]>("breakpoints-changed", (event) => {
-      applyBreakpointList(event.payload);
-    });
+    const unlistenBreakpointsChangedPromise = listen<BreakpointInfo[]>(
+      "breakpoints-changed",
+      (event) => {
+        applyBreakpointList(event.payload);
+      },
+    );
 
     // Proactively fetch on mount: the initial `debugger-halted` event can fire
     // before our listener is registered (listen() is async), leaving rows empty.
     invoke<RegisterSnapshot>("get_registers")
-      .then((snap) => { if (rowsRef.current.length === 0) handleHalted(snap.pc); })
+      .then((snap) => {
+        if (rowsRef.current.length === 0) handleHalted(snap.pc);
+      })
       .catch(() => {});
 
     invoke<BreakpointInfo[]>("get_breakpoints")
@@ -259,25 +276,30 @@ export default function DisassemblyPanel() {
     pcRowRef.current?.scrollIntoView({ block: "nearest" });
   }, [currentPc]);
 
-  const handleAddrInputKeyDown = useCallback(async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      if (!isStopped) return;
-      let addr: number | null = null;
-      try {
-        addr = await invoke<number | null>("resolve_symbol", { name: addrInputValue.trim() });
-      } catch {
-        // symbol resolution unavailable; fall through to hex parse
+  const handleAddrInputKeyDown = useCallback(
+    async (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        if (!isStopped) return;
+        let addr: number | null = null;
+        try {
+          addr = await invoke<number | null>("resolve_symbol", { name: addrInputValue.trim() });
+        } catch {
+          // symbol resolution unavailable; fall through to hex parse
+        }
+        if (addr === null) addr = parseAddressInput(addrInputValue);
+        if (addr !== null) fetchFrom(addr);
       }
-      if (addr === null) addr = parseAddressInput(addrInputValue);
-      if (addr !== null) fetchFrom(addr);
-    }
-  }, [addrInputValue, fetchFrom, isStopped]);
+    },
+    [addrInputValue, fetchFrom, isStopped],
+  );
 
-  const formatAddr = (addr: number) =>
-    addr.toString(16).toUpperCase().padStart(4, "0");
+  const formatAddr = (addr: number) => addr.toString(16).toUpperCase().padStart(4, "0");
 
   const formatBytes = (bytes: string[]) =>
-    bytes.map((b) => b.padStart(2, "0")).join(" ").padEnd(8, " ");
+    bytes
+      .map((b) => b.padStart(2, "0"))
+      .join(" ")
+      .padEnd(8, " ");
 
   return (
     <div className="disassembly-panel">
@@ -291,7 +313,11 @@ export default function DisassemblyPanel() {
             spellCheck={false}
             placeholder="0000"
             disabled={!isStopped}
-            title={isStopped ? "Enter hex address and press Enter" : "Stop the CPU to navigate the disassembly"}
+            title={
+              isStopped
+                ? "Enter hex address and press Enter"
+                : "Stop the CPU to navigate the disassembly"
+            }
           />
         </div>
       </div>
@@ -310,14 +336,13 @@ export default function DisassemblyPanel() {
               .filter(Boolean)
               .join(" ");
             const gutterTitle = isStopped
-              ? (bpEnabled !== undefined ? "Remove breakpoint" : "Set breakpoint")
+              ? bpEnabled !== undefined
+                ? "Remove breakpoint"
+                : "Set breakpoint"
               : "Stop the CPU to edit breakpoints";
             const gutterDot = bpEnabled === false ? "○" : "●";
 
-            const labelGutterClasses = [
-              "disasm-gutter",
-              isStopped ? "" : "locked",
-            ]
+            const labelGutterClasses = ["disasm-gutter", isStopped ? "" : "locked"]
               .filter(Boolean)
               .join(" ");
 
@@ -362,12 +387,8 @@ export default function DisassemblyPanel() {
                 <span className="disasm-addr">{formatAddr(row.addr)}</span>
                 <span className="disasm-bytes">{formatBytes(row.bytes)}</span>
                 <span className="disasm-mnemonic">{row.mnemonic}</span>
-                {row.operand && (
-                  <span className="disasm-operand">{row.operand}</span>
-                )}
-                {row.comment && (
-                  <span className="disasm-comment">{row.comment}</span>
-                )}
+                {row.operand && <span className="disasm-operand">{row.operand}</span>}
+                {row.comment && <span className="disasm-comment">{row.comment}</span>}
               </div>
             );
 
@@ -388,7 +409,10 @@ export default function DisassemblyPanel() {
               autoFocus
               placeholder="$XXXX"
               value={addressInputValue}
-              onChange={(e) => { setAddressInputValue(e.target.value); setAddressInputInvalid(false); }}
+              onChange={(e) => {
+                setAddressInputValue(e.target.value);
+                setAddressInputInvalid(false);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") commitAddressInput();
                 if (e.key === "Escape") closeContextMenu();
@@ -401,7 +425,14 @@ export default function DisassemblyPanel() {
                 <div
                   className={`context-menu-item${isStopped ? "" : " disabled"}`}
                   title={isStopped ? undefined : "Stop the CPU to edit breakpoints"}
-                  onClick={isStopped ? () => { runBreakpointCommand("set_breakpoint", contextMenu.addr); closeContextMenu(); } : undefined}
+                  onClick={
+                    isStopped
+                      ? () => {
+                          runBreakpointCommand("set_breakpoint", contextMenu.addr);
+                          closeContextMenu();
+                        }
+                      : undefined
+                  }
                 >
                   Set Breakpoint
                 </div>
@@ -410,7 +441,14 @@ export default function DisassemblyPanel() {
                 <div
                   className={`context-menu-item${isStopped ? "" : " disabled"}`}
                   title={isStopped ? undefined : "Stop the CPU to edit breakpoints"}
-                  onClick={isStopped ? () => { runBreakpointCommand("disable_breakpoint", contextMenu.addr); closeContextMenu(); } : undefined}
+                  onClick={
+                    isStopped
+                      ? () => {
+                          runBreakpointCommand("disable_breakpoint", contextMenu.addr);
+                          closeContextMenu();
+                        }
+                      : undefined
+                  }
                 >
                   Disable Breakpoint
                 </div>
@@ -419,7 +457,14 @@ export default function DisassemblyPanel() {
                 <div
                   className={`context-menu-item${isStopped ? "" : " disabled"}`}
                   title={isStopped ? undefined : "Stop the CPU to edit breakpoints"}
-                  onClick={isStopped ? () => { runBreakpointCommand("enable_breakpoint", contextMenu.addr); closeContextMenu(); } : undefined}
+                  onClick={
+                    isStopped
+                      ? () => {
+                          runBreakpointCommand("enable_breakpoint", contextMenu.addr);
+                          closeContextMenu();
+                        }
+                      : undefined
+                  }
                 >
                   Enable Breakpoint
                 </div>
@@ -428,7 +473,14 @@ export default function DisassemblyPanel() {
                 <div
                   className={`context-menu-item${isStopped ? "" : " disabled"}`}
                   title={isStopped ? undefined : "Stop the CPU to edit breakpoints"}
-                  onClick={isStopped ? () => { runBreakpointCommand("remove_breakpoint", contextMenu.addr); closeContextMenu(); } : undefined}
+                  onClick={
+                    isStopped
+                      ? () => {
+                          runBreakpointCommand("remove_breakpoint", contextMenu.addr);
+                          closeContextMenu();
+                        }
+                      : undefined
+                  }
                 >
                   Remove Breakpoint
                 </div>

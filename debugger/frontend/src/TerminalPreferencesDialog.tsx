@@ -129,7 +129,10 @@ export default function TerminalPreferencesDialog({
       setFontError(`"${fontFamily}" isn't installed, or isn't a monospace font`);
       return;
     }
-    const toSave: TerminalPreferences = { ...preferences, text: { ...preferences.text, font_family: fontFamily } };
+    const toSave: TerminalPreferences = {
+      ...preferences,
+      text: { ...preferences.text, font_family: fontFamily },
+    };
     setSubmitting(true);
     try {
       await invoke("set_terminal_preferences", { preferences: toSave });
@@ -156,8 +159,14 @@ export default function TerminalPreferencesDialog({
           // here, same concern `NewProfileDialog` handles per-input — a
           // single wrapper on the dialog covers every field at once.
           e.stopPropagation();
-          if (e.key === "Escape") { e.preventDefault(); onClose(); }
-          if (e.key === "Enter") { e.preventDefault(); commit(); }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onClose();
+          }
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          }
         }}
       >
         <div className="modal-title">Terminal Preferences</div>
@@ -324,7 +333,11 @@ export default function TerminalPreferencesDialog({
         )}
 
         <div className="modal-buttons">
-          <button className="modal-btn-action modal-btn-cancel" onClick={onClose} disabled={submitting}>
+          <button
+            className="modal-btn-action modal-btn-cancel"
+            onClick={onClose}
+            disabled={submitting}
+          >
             Cancel
           </button>
           <button className="modal-btn-action modal-btn-ok" onClick={commit} disabled={submitting}>

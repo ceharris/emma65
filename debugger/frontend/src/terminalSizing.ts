@@ -85,7 +85,9 @@ export interface CellMetrics {
 export function measureCell(term: Terminal): CellMetrics | null {
   const cell = (
     term as unknown as {
-      _core?: { _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } } };
+      _core?: {
+        _renderService?: { dimensions?: { css?: { cell?: { width: number; height: number } } } };
+      };
     }
   )._core?._renderService?.dimensions?.css?.cell;
   if (!cell || cell.width === 0 || cell.height === 0) return null;
@@ -182,7 +184,8 @@ export async function logicalSizeForCssPixels(
   cssHeight: number,
   scaleFactorOverride?: number | null,
 ): Promise<LogicalSize> {
-  const scaleFactor = scaleFactorOverride ?? (window.devicePixelRatio / (await getCurrentWindow().scaleFactor()));
+  const scaleFactor =
+    scaleFactorOverride ?? window.devicePixelRatio / (await getCurrentWindow().scaleFactor());
   // Rounds up, same reasoning as `pixelSizeForGrid`'s own `Math.ceil`: this
   // multiplication can reintroduce a fractional pixel that truncating away
   // (silently, wherever the OS-level resize call rounds a non-integer size)

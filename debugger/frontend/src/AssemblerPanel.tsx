@@ -1,16 +1,16 @@
-import {useCallback, useEffect, useRef, useState} from "react";
-import {EditorState, Extension, Text} from "@codemirror/state";
-import {EditorView, KeyBinding, keymap, lineNumbers} from "@codemirror/view";
-import {defaultKeymap, history, historyKeymap, indentLess, insertTab} from "@codemirror/commands";
-import {indentUnit} from "@codemirror/language";
-import {Diagnostic, forEachDiagnostic, lintGutter, setDiagnostics} from "@codemirror/lint";
-import {invoke} from "@tauri-apps/api/core";
-import {DockviewPanelApi} from "dockview-react";
-import {open as openFileDialog, save as saveFileDialog} from "@tauri-apps/plugin-dialog";
-import {readText, writeText} from "@tauri-apps/plugin-clipboard-manager";
-import {useEditMenuOverride} from "./EditMenuContext";
-import {useExecutionContext} from "./ExecutionContext";
-import {registerAssemblerPanel} from "./layout/assemblerMenuActions";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { EditorState, Extension, Text } from "@codemirror/state";
+import { EditorView, KeyBinding, keymap, lineNumbers } from "@codemirror/view";
+import { defaultKeymap, history, historyKeymap, indentLess, insertTab } from "@codemirror/commands";
+import { indentUnit } from "@codemirror/language";
+import { Diagnostic, forEachDiagnostic, lintGutter, setDiagnostics } from "@codemirror/lint";
+import { invoke } from "@tauri-apps/api/core";
+import { DockviewPanelApi } from "dockview-react";
+import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
+import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { useEditMenuOverride } from "./EditMenuContext";
+import { useExecutionContext } from "./ExecutionContext";
+import { registerAssemblerPanel } from "./layout/assemblerMenuActions";
 import "./styles/assembler.scss";
 import "./styles/modal.scss";
 
@@ -152,7 +152,13 @@ interface EditorDiagnostic extends Diagnostic {
  */
 function toCodeMirrorDiagnostic(doc: Text, d: AssembleDiagnostic): EditorDiagnostic {
   const lineObj = doc.line(Math.min(Math.max(d.line, 1), doc.lines));
-  return { from: lineObj.from, to: lineObj.to, severity: "error", message: d.message, reportLine: d.line };
+  return {
+    from: lineObj.from,
+    to: lineObj.to,
+    severity: "error",
+    message: d.message,
+    reportLine: d.line,
+  };
 }
 
 interface AssemblerPanelProps {
@@ -206,9 +212,11 @@ export default function AssemblerPanel({ dockPanelApi }: AssemblerPanelProps = {
    * to `assemble_and_load` rather than re-reading the (possibly since-edited)
    * live buffer, so what the dialog describes is exactly what gets written.
    */
-  const [pendingAssemble, setPendingAssemble] = useState<{ source: string; segments: SegmentSummary[]; symbolCount: number } | null>(
-    null,
-  );
+  const [pendingAssemble, setPendingAssemble] = useState<{
+    source: string;
+    segments: SegmentSummary[];
+    symbolCount: number;
+  } | null>(null);
 
   // Keeps the dock tab's title in sync with the currently open file, so the
   // path is visible at a glance without needing to hover/inspect anything —
@@ -218,7 +226,9 @@ export default function AssemblerPanel({ dockPanelApi }: AssemblerPanelProps = {
     if (!dockPanelApi) return;
     const name = currentPath ? basename(currentPath) : null;
     const dirtyMark = isDirty ? "*" : "";
-    dockPanelApi.setTitle(name ? `${BASE_TITLE} — ${name}${dirtyMark}` : `${BASE_TITLE}${dirtyMark}`);
+    dockPanelApi.setTitle(
+      name ? `${BASE_TITLE} — ${name}${dirtyMark}` : `${BASE_TITLE}${dirtyMark}`,
+    );
   }, [dockPanelApi, currentPath, isDirty]);
 
   // On-demand only, never live-as-you-type — assembling has a real eventual
@@ -237,7 +247,9 @@ export default function AssemblerPanel({ dockPanelApi }: AssemblerPanelProps = {
       const result = await invoke<AssembleReport>("assemble_preview", { source });
       if (!result.success) {
         setReport(result);
-        const diagnostics = result.diagnostics.map((d) => toCodeMirrorDiagnostic(view.state.doc, d));
+        const diagnostics = result.diagnostics.map((d) =>
+          toCodeMirrorDiagnostic(view.state.doc, d),
+        );
         view.dispatch(setDiagnostics(view.state, diagnostics));
         return;
       }
@@ -347,7 +359,8 @@ export default function AssemblerPanel({ dockPanelApi }: AssemblerPanelProps = {
     if (nativeDialogInFlightRef.current) return;
     nativeDialogInFlightRef.current = true;
     try {
-      const defaultPath = currentPath ?? (await invoke<string | null>("get_last_file_dialog_dir")) ?? undefined;
+      const defaultPath =
+        currentPath ?? (await invoke<string | null>("get_last_file_dialog_dir")) ?? undefined;
       const selected = await saveFileDialog({
         filters: [{ name: "Assembly Source", extensions: ["s", "asm", "a65"] }],
         defaultPath,
@@ -420,7 +433,10 @@ export default function AssemblerPanel({ dockPanelApi }: AssemblerPanelProps = {
     const copySelection = () => {
       const view = viewRef.current;
       if (!view) return;
-      const text = view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to);
+      const text = view.state.sliceDoc(
+        view.state.selection.main.from,
+        view.state.selection.main.to,
+      );
       if (text) writeText(text).catch((err) => console.error("copy to clipboard failed:", err));
     };
     const cutSelection = () => {
@@ -440,7 +456,10 @@ export default function AssemblerPanel({ dockPanelApi }: AssemblerPanelProps = {
         .then((text) => {
           if (!text) return;
           const { from, to } = view.state.selection.main;
-          view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length } });
+          view.dispatch({
+            changes: { from, to, insert: text },
+            selection: { anchor: from + text.length },
+          });
         })
         .catch((err) => console.error("paste from clipboard failed:", err));
     };
@@ -520,7 +539,11 @@ export default function AssemblerPanel({ dockPanelApi }: AssemblerPanelProps = {
               clearedLines.add(reportLine);
               return;
             }
-            survivors.push({ ...(diagnostic as EditorDiagnostic), from: update.changes.mapPos(from), to: update.changes.mapPos(to) });
+            survivors.push({
+              ...(diagnostic as EditorDiagnostic),
+              from: update.changes.mapPos(from),
+              to: update.changes.mapPos(to),
+            });
           });
           if (clearedLines.size > 0) {
             update.view.dispatch(setDiagnostics(update.state, survivors));
@@ -550,11 +573,19 @@ export default function AssemblerPanel({ dockPanelApi }: AssemblerPanelProps = {
     // CodeMirror's contenteditable surface isn't recognized by the generic
     // `<input>`/`<textarea>` fallback there — without this, the native Edit
     // menu's Cut/Copy/Paste silently no-ops while focus is in this editor.
-    const unregisterOverride = editMenu?.registerOverride(() => {
-      if (!view.hasFocus) return null;
-      const hasSelection = !view.state.selection.main.empty;
-      return { canCut: hasSelection, canCopy: hasSelection, canPaste: true, cut: cutSelection, copy: copySelection, paste: pasteClipboard };
-    }) ?? null;
+    const unregisterOverride =
+      editMenu?.registerOverride(() => {
+        if (!view.hasFocus) return null;
+        const hasSelection = !view.state.selection.main.empty;
+        return {
+          canCut: hasSelection,
+          canCopy: hasSelection,
+          canPaste: true,
+          cut: cutSelection,
+          copy: copySelection,
+          paste: pasteClipboard,
+        };
+      }) ?? null;
 
     return () => {
       unregisterOverride?.();
@@ -599,11 +630,13 @@ export default function AssemblerPanel({ dockPanelApi }: AssemblerPanelProps = {
   return (
     <div className="assembler-panel">
       <div ref={containerRef} className="assembler-container" />
-      {report && (
-        report.success ? (
+      {report &&
+        (report.success ? (
           <div className="assembler-summary">
-            {report.segments.reduce((sum, s) => sum + s.length, 0)} bytes across {report.segments.length} segment
-            {report.segments.length === 1 ? "" : "s"}, {report.symbol_count} symbol{report.symbol_count === 1 ? "" : "s"}
+            {report.segments.reduce((sum, s) => sum + s.length, 0)} bytes across{" "}
+            {report.segments.length} segment
+            {report.segments.length === 1 ? "" : "s"}, {report.symbol_count} symbol
+            {report.symbol_count === 1 ? "" : "s"}
           </div>
         ) : (
           <div className="assembler-diagnostics">
@@ -613,16 +646,16 @@ export default function AssemblerPanel({ dockPanelApi }: AssemblerPanelProps = {
               </div>
             ))}
           </div>
-        )
-      )}
+        ))}
 
       {pendingAssemble && (
         <div className="modal-backdrop" onClick={cancelAssemble}>
           <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">Assemble to Memory</div>
             <div className="modal-message">
-              This will write the following segment{pendingAssemble.segments.length === 1 ? "" : "s"} to memory,
-              overwriting any existing contents:
+              This will write the following segment
+              {pendingAssemble.segments.length === 1 ? "" : "s"} to memory, overwriting any existing
+              contents:
             </div>
             <ul className="assembler-confirm-segments">
               {pendingAssemble.segments.map((s, i) => (
@@ -651,7 +684,10 @@ export default function AssemblerPanel({ dockPanelApi }: AssemblerPanelProps = {
               This buffer has unsaved changes. Starting a new file will discard them. Continue?
             </div>
             <div className="modal-buttons">
-              <button className="modal-btn-action modal-btn-cancel" onClick={() => setConfirmDiscard(false)}>
+              <button
+                className="modal-btn-action modal-btn-cancel"
+                onClick={() => setConfirmDiscard(false)}
+              >
                 Cancel
               </button>
               <button className="modal-btn-action modal-btn-ok" onClick={confirmNew}>
@@ -668,7 +704,10 @@ export default function AssemblerPanel({ dockPanelApi }: AssemblerPanelProps = {
             <div className="modal-title">File Error</div>
             <div className="modal-message">{fileErrorDialog}</div>
             <div className="modal-buttons">
-              <button className="modal-btn-action modal-btn-ok" onClick={() => setFileErrorDialog(null)}>
+              <button
+                className="modal-btn-action modal-btn-ok"
+                onClick={() => setFileErrorDialog(null)}
+              >
                 Dismiss
               </button>
             </div>

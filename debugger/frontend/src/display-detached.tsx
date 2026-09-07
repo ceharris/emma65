@@ -11,7 +11,7 @@ import "./styles/global.scss";
  * cross a window boundary, mirroring `terminal-detached.tsx` exactly. Installs the app-wide key
  * bindings directly, since this window has no `App.tsx` root to install them for it.
  */
-function DisplayDetachedWindow() {
+export function DisplayDetachedWindow() {
   useAppKeyBindings();
   return <DisplayPanel />;
 }

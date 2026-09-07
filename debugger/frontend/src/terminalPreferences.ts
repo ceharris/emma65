@@ -72,7 +72,12 @@ export interface TerminalPreferences {
  * (verified directly against the installed package's bundle) — what's
  * actually rendered for a slot left unset, independent of light/dark theme.
  */
-export const ANSI_PALETTE_FIELDS: { field: keyof TerminalTextPreferences; label: string; themeKey: keyof ITheme; defaultHex: string }[] = [
+export const ANSI_PALETTE_FIELDS: {
+  field: keyof TerminalTextPreferences;
+  label: string;
+  themeKey: keyof ITheme;
+  defaultHex: string;
+}[] = [
   { field: "black", label: "Black", themeKey: "black", defaultHex: "#2e3436" },
   { field: "red", label: "Red", themeKey: "red", defaultHex: "#cc0000" },
   { field: "green", label: "Green", themeKey: "green", defaultHex: "#4e9a06" },
@@ -84,9 +89,19 @@ export const ANSI_PALETTE_FIELDS: { field: keyof TerminalTextPreferences; label:
   { field: "bright_black", label: "Bright Black", themeKey: "brightBlack", defaultHex: "#555753" },
   { field: "bright_red", label: "Bright Red", themeKey: "brightRed", defaultHex: "#ef2929" },
   { field: "bright_green", label: "Bright Green", themeKey: "brightGreen", defaultHex: "#8ae234" },
-  { field: "bright_yellow", label: "Bright Yellow", themeKey: "brightYellow", defaultHex: "#fce94f" },
+  {
+    field: "bright_yellow",
+    label: "Bright Yellow",
+    themeKey: "brightYellow",
+    defaultHex: "#fce94f",
+  },
   { field: "bright_blue", label: "Bright Blue", themeKey: "brightBlue", defaultHex: "#729fcf" },
-  { field: "bright_magenta", label: "Bright Magenta", themeKey: "brightMagenta", defaultHex: "#ad7fa8" },
+  {
+    field: "bright_magenta",
+    label: "Bright Magenta",
+    themeKey: "brightMagenta",
+    defaultHex: "#ad7fa8",
+  },
   { field: "bright_cyan", label: "Bright Cyan", themeKey: "brightCyan", defaultHex: "#34e2e2" },
   { field: "bright_white", label: "Bright White", themeKey: "brightWhite", defaultHex: "#eeeeec" },
 ];

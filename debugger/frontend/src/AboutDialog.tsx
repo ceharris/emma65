@@ -30,13 +30,18 @@ export default function AboutDialog() {
         })
         .catch((e) => console.error("get_about_info failed:", e));
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   /** Opens the repo link in the user's default browser, mirroring Help > View on GitHub. */
   const openRepoUrl = (e: React.MouseEvent) => {
     e.preventDefault();
-    if (repoUrl) invoke("plugin:opener|open_url", { url: repoUrl }).catch((err) => console.error("open_url failed:", err));
+    if (repoUrl)
+      invoke("plugin:opener|open_url", { url: repoUrl }).catch((err) =>
+        console.error("open_url failed:", err),
+      );
   };
 
   const close = () => setOpen(false);
@@ -45,7 +50,10 @@ export default function AboutDialog() {
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" || e.key === "Enter") { e.preventDefault(); close(); }
+      if (e.key === "Escape" || e.key === "Enter") {
+        e.preventDefault();
+        close();
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
@@ -70,7 +78,9 @@ export default function AboutDialog() {
 
         {repoUrl && (
           <div className="modal-message">
-            <a href={repoUrl} onClick={openRepoUrl}>{repoUrl}</a>
+            <a href={repoUrl} onClick={openRepoUrl}>
+              {repoUrl}
+            </a>
           </div>
         )}
 

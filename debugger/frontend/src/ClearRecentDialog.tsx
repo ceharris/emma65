@@ -18,7 +18,9 @@ export default function ClearRecentDialog() {
       setOpen(true);
       setSubmitting(false);
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   const cancel = () => setOpen(false);
@@ -39,8 +41,14 @@ export default function ClearRecentDialog() {
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); cancel(); }
-      if (e.key === "Enter") { e.preventDefault(); commit(); }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cancel();
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        commit();
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
@@ -58,7 +66,11 @@ export default function ClearRecentDialog() {
         </div>
 
         <div className="modal-buttons">
-          <button className="modal-btn-action modal-btn-cancel" onClick={cancel} disabled={submitting}>
+          <button
+            className="modal-btn-action modal-btn-cancel"
+            onClick={cancel}
+            disabled={submitting}
+          >
             Cancel
           </button>
           <button className="modal-btn-action modal-btn-ok" onClick={commit} disabled={submitting}>

@@ -24,7 +24,11 @@ function HeaderActionButton() {
   const action = actions.breakpoints;
   if (!action) return null;
   return (
-    <button onClick={action.onClick} disabled={action.disabled} title={action.disabledTitle ?? action.title}>
+    <button
+      onClick={action.onClick}
+      disabled={action.disabled}
+      title={action.disabledTitle ?? action.title}
+    >
       {action.title}
     </button>
   );
@@ -49,7 +53,9 @@ beforeEach(() => {
 
 describe("BreakpointPanel", () => {
   it("shows a waiting placeholder, then an empty state when there are no breakpoints", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd) => (cmd === "get_breakpoints" ? [] : undefined));
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "get_breakpoints" ? [] : undefined,
+    );
     render(<BreakpointPanel />, { wrapper: Providers });
 
     expect(screen.getByText("Waiting…")).toBeInTheDocument();
@@ -58,7 +64,12 @@ describe("BreakpointPanel", () => {
 
   it("renders fetched breakpoints, formatting the address and showing the label when present", async () => {
     vi.mocked(invoke).mockImplementation(async (cmd) =>
-      cmd === "get_breakpoints" ? [breakpoint({ addr: 0x55aa, label: "reset_vec" }), breakpoint({ addr: 0x02, enabled: false })] : undefined,
+      cmd === "get_breakpoints"
+        ? [
+            breakpoint({ addr: 0x55aa, label: "reset_vec" }),
+            breakpoint({ addr: 0x02, enabled: false }),
+          ]
+        : undefined,
     );
     render(<BreakpointPanel />, { wrapper: Providers });
 
@@ -68,7 +79,9 @@ describe("BreakpointPanel", () => {
   });
 
   it("updates rows when a breakpoints-changed event arrives", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd) => (cmd === "get_breakpoints" ? [] : undefined));
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "get_breakpoints" ? [] : undefined,
+    );
     render(<BreakpointPanel />, { wrapper: Providers });
     await screen.findByText("No breakpoints");
 
@@ -81,7 +94,10 @@ describe("BreakpointPanel", () => {
     const user = userEvent.setup();
     vi.mocked(invoke).mockImplementation(async (cmd) =>
       cmd === "get_breakpoints"
-        ? [breakpoint({ addr: 0x1000, enabled: true }), breakpoint({ addr: 0x2000, enabled: false })]
+        ? [
+            breakpoint({ addr: 0x1000, enabled: true }),
+            breakpoint({ addr: 0x2000, enabled: false }),
+          ]
         : undefined,
     );
     render(<BreakpointPanel />, { wrapper: Providers });
@@ -96,7 +112,9 @@ describe("BreakpointPanel", () => {
 
   it("removing a breakpoint invokes remove_breakpoint with its address", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) => (cmd === "get_breakpoints" ? [breakpoint({ addr: 0x4000 })] : undefined));
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "get_breakpoints" ? [breakpoint({ addr: 0x4000 })] : undefined,
+    );
     render(<BreakpointPanel />, { wrapper: Providers });
     await screen.findByText("4000");
 
@@ -171,7 +189,9 @@ describe("BreakpointPanel", () => {
 
   it("Escape closes the add-breakpoint dialog", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) => (cmd === "get_breakpoints" ? [] : undefined));
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "get_breakpoints" ? [] : undefined,
+    );
     render(<BreakpointPanel />, { wrapper: Providers });
     await screen.findByText("No breakpoints");
 

@@ -112,10 +112,18 @@
   }
 }
 
-.wp-true     { color: var(--color-indicator-stop); }
-.wp-false    { color: var(--color-idle); }
-.wp-error    { color: var(--color-error); }
-.wp-disabled { color: var(--color-muted); }
+.wp-true {
+  color: var(--color-indicator-stop);
+}
+.wp-false {
+  color: var(--color-idle);
+}
+.wp-error {
+  color: var(--color-error);
+}
+.wp-disabled {
+  color: var(--color-muted);
+}
 
 .wp-vars-section {
   flex: 0 0 auto;

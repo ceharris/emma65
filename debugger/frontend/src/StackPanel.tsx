@@ -18,31 +18,45 @@ const VISIBLE_PAIRS = 8;
 function formatData(value: number | null, radix: DataRadix): string {
   if (value !== null) {
     switch (radix) {
-      case "hex":  return value.toString(16).toUpperCase().padStart(2, "0");
-      case "udec": return value.toString(10);
-      case "sdec": return ((value << 24) >> 24).toString(10);
-      case "oct":  return value.toString(8).padStart(3, "0");
-      case "bin":  return value.toString(2).padStart(8, "0");
+      case "hex":
+        return value.toString(16).toUpperCase().padStart(2, "0");
+      case "udec":
+        return value.toString(10);
+      case "sdec":
+        return ((value << 24) >> 24).toString(10);
+      case "oct":
+        return value.toString(8).padStart(3, "0");
+      case "bin":
+        return value.toString(2).padStart(8, "0");
     }
-  }
-  else {
+  } else {
     switch (radix) {
-      case "hex": return "--";
-      case "udec": return "---";
-      case "sdec": return "----";
-      case "oct": return "---";
-      case "bin": return "--------";
+      case "hex":
+        return "--";
+      case "udec":
+        return "---";
+      case "sdec":
+        return "----";
+      case "oct":
+        return "---";
+      case "bin":
+        return "--------";
     }
   }
 }
 
 function radixDataWidth(radix: DataRadix): number {
   switch (radix) {
-    case "hex": return 50;
-    case "udec": return 60;
-    case "sdec": return 65;
-    case "oct": return 60;
-    case "bin": return 100;
+    case "hex":
+      return 50;
+    case "udec":
+      return 60;
+    case "sdec":
+      return 65;
+    case "oct":
+      return 60;
+    case "bin":
+      return 100;
   }
 }
 
@@ -87,9 +101,7 @@ function buildRows(s: number, page: number[], alignOdd: boolean): StackRow[] {
   if (!alignOdd) {
     activePairOffset = lastPushed & 0xfe;
   } else {
-    activePairOffset = lastPushed % 2 === 1
-      ? lastPushed
-      : (lastPushed - 1 + 256) % 256;
+    activePairOffset = lastPushed % 2 === 1 ? lastPushed : (lastPushed - 1 + 256) % 256;
   }
 
   const rows: StackRow[] = [];
@@ -126,8 +138,12 @@ export default function StackPanel() {
   }, [fetchStack]);
 
   useEffect(() => {
-    const unlistenHalted = listen("debugger-halted", () => { fetchStack(); });
-    const unlistenTick   = listen("debugger-running-tick", () => { fetchStack(); });
+    const unlistenHalted = listen("debugger-halted", () => {
+      fetchStack();
+    });
+    const unlistenTick = listen("debugger-running-tick", () => {
+      fetchStack();
+    });
     return () => {
       unlistenHalted.then((f) => f());
       unlistenTick.then((f) => f());
@@ -142,24 +158,24 @@ export default function StackPanel() {
     <div className="stack-panel">
       <div className="stack-header">
         <RadixButton radix={dataRadix} onCycle={cycleDataRadix} />
-        <button
-          className="align-btn"
-          onClick={toggleAlign}
-          title="Toggle even/odd word alignment"
-        >
+        <button className="align-btn" onClick={toggleAlign} title="Toggle even/odd word alignment">
           {alignOdd ? "ODD" : "EVEN"}
         </button>
       </div>
       {snap === null ? (
         <span className="stack-empty">Waiting…</span>
       ) : (
-        <div className="stack-body" style={{width: `${dataWidth}%`}}>
+        <div className="stack-body" style={{ width: `${dataWidth}%` }}>
           {buildRows(snap.s, snap.page, alignOdd).map((row) => (
             <div key={row.offset} className={`stack-row${row.isActive ? " stack-row-active" : ""}`}>
               <span className="stack-chevron">{row.isActive ? ">" : " "}</span>
               <span className="stack-addr">{formatAddr(row.offset)}</span>
-              <span className={`stack-lo${row.lo === null ? " stack-placeholder" : ""}`}>{formatData(row.lo, dataRadix)}</span>
-              <span className={`stack-hi${row.hi === null ? " stack-placeholder" : ""}`}>{formatData(row.hi, dataRadix)}</span>
+              <span className={`stack-lo${row.lo === null ? " stack-placeholder" : ""}`}>
+                {formatData(row.lo, dataRadix)}
+              </span>
+              <span className={`stack-hi${row.hi === null ? " stack-placeholder" : ""}`}>
+                {formatData(row.hi, dataRadix)}
+              </span>
             </div>
           ))}
         </div>

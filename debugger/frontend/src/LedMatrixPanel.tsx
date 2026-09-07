@@ -65,7 +65,13 @@ function decodeBase64(base64: string): Uint8ClampedArray<ArrayBuffer> {
 
 /** Draws one LED. Deliberately isolated from `drawMatrix`'s grid-walking loop so a later
  * enhancement (e.g. a radial-gradient glow for lit LEDs) only has to change this function. */
-function drawLed(ctx: CanvasRenderingContext2D, cx: number, cy: number, radius: number, color: string) {
+function drawLed(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  color: string,
+) {
   ctx.beginPath();
   ctx.arc(cx, cy, radius, 0, Math.PI * 2);
   ctx.fillStyle = color;
@@ -174,7 +180,9 @@ export default function LedMatrixPanel() {
     // Reloading the active profile can change the device's arrangement (issue #605); re-fetch
     // rather than assuming geometry is fixed for this panel's lifetime.
     const unlistenPromise = listen("session-loaded", fetchGeometry);
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   useEffect(() => {

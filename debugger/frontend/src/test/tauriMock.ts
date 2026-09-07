@@ -26,33 +26,28 @@ interface MockEvent<T> {
 
 type MockEventHandler = (event: MockEvent<unknown>) => void;
 
-const {
-  invoke,
-  listen,
-  emitTo,
-  getCurrentWindow,
-  listenersByEvent,
-  nextEventId,
-} = vi.hoisted(() => {
-  return {
-    invoke: vi.fn().mockResolvedValue(undefined),
-    listen: vi.fn((event: string, handler: MockEventHandler) => {
-      let handlers = listenersByEvent.get(event);
-      if (!handlers) {
-        handlers = new Set();
-        listenersByEvent.set(event, handlers);
-      }
-      handlers.add(handler);
-      return Promise.resolve(() => {
-        handlers?.delete(handler);
-      });
-    }),
-    emitTo: vi.fn(() => Promise.resolve()),
-    getCurrentWindow: vi.fn(() => ({ label: "main" })),
-    listenersByEvent: new Map<string, Set<MockEventHandler>>(),
-    nextEventId: { current: 0 },
-  };
-});
+const { invoke, listen, emitTo, getCurrentWindow, listenersByEvent, nextEventId } = vi.hoisted(
+  () => {
+    return {
+      invoke: vi.fn().mockResolvedValue(undefined),
+      listen: vi.fn((event: string, handler: MockEventHandler) => {
+        let handlers = listenersByEvent.get(event);
+        if (!handlers) {
+          handlers = new Set();
+          listenersByEvent.set(event, handlers);
+        }
+        handlers.add(handler);
+        return Promise.resolve(() => {
+          handlers?.delete(handler);
+        });
+      }),
+      emitTo: vi.fn(() => Promise.resolve()),
+      getCurrentWindow: vi.fn(() => ({ label: "main" })),
+      listenersByEvent: new Map<string, Set<MockEventHandler>>(),
+      nextEventId: { current: 0 },
+    };
+  },
+);
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen, emitTo }));

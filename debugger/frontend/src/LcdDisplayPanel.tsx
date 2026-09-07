@@ -111,7 +111,11 @@ function decodeFrame(payload: LcdDisplayFramePayload): LcdFrame {
 
 /** Linearly blends `from` toward `to` by `t` (0..1), per channel, rounded to the nearest
  * integer. */
-function blendColor(from: [number, number, number], to: [number, number, number], t: number): string {
+function blendColor(
+  from: [number, number, number],
+  to: [number, number, number],
+  t: number,
+): string {
   const r = Math.round(from[0] + (to[0] - from[0]) * t);
   const g = Math.round(from[1] + (to[1] - from[1]) * t);
   const b = Math.round(from[2] + (to[2] - from[2]) * t);
@@ -121,7 +125,13 @@ function blendColor(from: [number, number, number], to: [number, number, number]
 /** Draws one dot as a plain square centered at `(cx, cy)` with the given full side length (before
  * `DOT_FILL_RATIO` is applied by the caller). Isolated from `drawFrame`'s grid-walking loop the
  * same way `LedMatrixPanel.tsx`'s `drawLed` is. */
-function drawDot(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, color: string) {
+function drawDot(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) {
   const half = size / 2;
   ctx.fillStyle = color;
   ctx.fillRect(cx - half, cy - half, size, size);
@@ -141,12 +151,19 @@ function drawDot(ctx: CanvasRenderingContext2D, cx: number, cy: number, size: nu
  * worse the fewer pixels each dot spans. Rounding every dot to the same integer device-pixel grid
  * makes each one a plain translation of the same shape, so their AA coverage -- and thus apparent
  * brightness -- is identical. */
-function drawFrame(canvas: HTMLCanvasElement, frame: LcdFrame, geometry: LcdDisplayGeometry, pitch: number) {
+function drawFrame(
+  canvas: HTMLCanvasElement,
+  frame: LcdFrame,
+  geometry: LcdDisplayGeometry,
+  pitch: number,
+) {
   const ctx = canvas.getContext("2d");
   if (!ctx || frame.widthDots === 0 || frame.cellHeightDots === 0) return;
 
-  const totalDotsWide = geometry.columns * DOTS_PER_CELL_WIDTH + (geometry.columns - 1) * CELL_GAP_PITCHES;
-  const totalDotsHigh = geometry.rows * frame.cellHeightDots + (geometry.rows - 1) * CELL_GAP_PITCHES;
+  const totalDotsWide =
+    geometry.columns * DOTS_PER_CELL_WIDTH + (geometry.columns - 1) * CELL_GAP_PITCHES;
+  const totalDotsHigh =
+    geometry.rows * frame.cellHeightDots + (geometry.rows - 1) * CELL_GAP_PITCHES;
   const bezelPx = BEZEL_PITCHES * pitch;
   const edgeGapPx = EDGE_GAP_PITCHES * pitch;
   const viewportWidthPx = totalDotsWide * pitch + 2 * edgeGapPx;
@@ -182,7 +199,10 @@ function drawFrame(canvas: HTMLCanvasElement, frame: LcdFrame, geometry: LcdDisp
   for (let row = 0; row < geometry.rows; row++) {
     for (let dotRow = 0; dotRow < frame.cellHeightDots; dotRow++) {
       const rawY = row * frame.cellHeightDots + dotRow;
-      const cy = Math.round(gridOriginDevice + (row * (frame.cellHeightDots + CELL_GAP_PITCHES) + dotRow + 0.5) * pitchDevice);
+      const cy = Math.round(
+        gridOriginDevice +
+          (row * (frame.cellHeightDots + CELL_GAP_PITCHES) + dotRow + 0.5) * pitchDevice,
+      );
       for (let col = 0; col < geometry.columns; col++) {
         for (let dotCol = 0; dotCol < DOTS_PER_CELL_WIDTH; dotCol++) {
           const rawX = col * DOTS_PER_CELL_WIDTH + dotCol;
@@ -190,9 +210,15 @@ function drawFrame(canvas: HTMLCanvasElement, frame: LcdFrame, geometry: LcdDisp
           const r = frame.pixels[offset];
           const g = frame.pixels[offset + 1];
           const b = frame.pixels[offset + 2];
-          const isBackground = r === geometry.background[0] && g === geometry.background[1] && b === geometry.background[2];
+          const isBackground =
+            r === geometry.background[0] &&
+            g === geometry.background[1] &&
+            b === geometry.background[2];
           const color = isBackground ? offColor : `rgb(${r}, ${g}, ${b})`;
-          const cx = Math.round(gridOriginDevice + (col * (DOTS_PER_CELL_WIDTH + CELL_GAP_PITCHES) + dotCol + 0.5) * pitchDevice);
+          const cx = Math.round(
+            gridOriginDevice +
+              (col * (DOTS_PER_CELL_WIDTH + CELL_GAP_PITCHES) + dotCol + 0.5) * pitchDevice,
+          );
           drawDot(ctx, cx, cy, dotSize, color);
         }
       }
@@ -252,7 +278,9 @@ export default function LcdDisplayPanel() {
     // Reloading the active profile can change the device's `geometry=` attribute (issue #605);
     // re-fetch rather than assuming geometry is fixed for this panel's lifetime.
     const unlistenPromise = listen("session-loaded", fetchGeometry);
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   useEffect(() => {
@@ -300,10 +328,19 @@ export default function LcdDisplayPanel() {
     const recomputePitch = () => {
       const cellHeightDots = frameRef.current?.cellHeightDots || 8;
       const totalDotsWide =
-        geometry.columns * DOTS_PER_CELL_WIDTH + (geometry.columns - 1) * CELL_GAP_PITCHES + 2 * BEZEL_PITCHES + 2 * EDGE_GAP_PITCHES;
+        geometry.columns * DOTS_PER_CELL_WIDTH +
+        (geometry.columns - 1) * CELL_GAP_PITCHES +
+        2 * BEZEL_PITCHES +
+        2 * EDGE_GAP_PITCHES;
       const totalDotsHigh =
-        geometry.rows * cellHeightDots + (geometry.rows - 1) * CELL_GAP_PITCHES + 2 * BEZEL_PITCHES + 2 * EDGE_GAP_PITCHES;
-      const fit = Math.min(container.clientWidth / totalDotsWide, container.clientHeight / totalDotsHigh);
+        geometry.rows * cellHeightDots +
+        (geometry.rows - 1) * CELL_GAP_PITCHES +
+        2 * BEZEL_PITCHES +
+        2 * EDGE_GAP_PITCHES;
+      const fit = Math.min(
+        container.clientWidth / totalDotsWide,
+        container.clientHeight / totalDotsHigh,
+      );
       setPitch(Math.max(MIN_PITCH_PX, fit));
     };
     recomputePitch();

@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  ReactNode,
+} from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
@@ -34,14 +42,16 @@ const EditMenuContext = createContext<EditMenuContextValue | null>(null);
 const TEXT_INPUT_TYPES = new Set(["text", "search", "url", "tel", "password"]);
 
 function isPlainEditable(el: Element | null): el is HTMLInputElement | HTMLTextAreaElement {
-  if (el instanceof HTMLInputElement) return TEXT_INPUT_TYPES.has(el.type) && !el.disabled && !el.readOnly;
+  if (el instanceof HTMLInputElement)
+    return TEXT_INPUT_TYPES.has(el.type) && !el.disabled && !el.readOnly;
   if (el instanceof HTMLTextAreaElement) return !el.disabled && !el.readOnly;
   return false;
 }
 
 /** Replaces `el`'s value via React's native-value setter so its controlled `onChange` still fires, then dispatches the bubbling `input` event React listens for. */
 function setNativeValue(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
-  const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  const proto =
+    el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
   setter?.call(el, value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -72,14 +82,20 @@ function defaultHandlerFor(el: HTMLInputElement | HTMLTextAreaElement): EditMenu
     cut: () => {
       const text = selectedText();
       if (!text) return;
-      writeText(text).then(() => replaceSelection("")).catch((err) => console.error("cut failed:", err));
+      writeText(text)
+        .then(() => replaceSelection(""))
+        .catch((err) => console.error("cut failed:", err));
     },
     copy: () => {
       const text = selectedText();
       if (text) writeText(text).catch((err) => console.error("copy failed:", err));
     },
     paste: () => {
-      readText().then((text) => { if (text) replaceSelection(text); }).catch((err) => console.error("paste failed:", err));
+      readText()
+        .then((text) => {
+          if (text) replaceSelection(text);
+        })
+        .catch((err) => console.error("paste failed:", err));
     },
   };
 }
@@ -119,27 +135,38 @@ export function EditMenuProvider({ children }: { children: ReactNode }) {
   const recompute = useCallback(() => {
     const handler =
       overrideRef.current?.() ??
-      (isPlainEditable(document.activeElement) ? defaultHandlerFor(document.activeElement) : null) ??
+      (isPlainEditable(document.activeElement)
+        ? defaultHandlerFor(document.activeElement)
+        : null) ??
       selectionHandler();
     activeHandlerRef.current = handler;
 
-    const flags = { cut: handler?.canCut ?? false, copy: handler?.canCopy ?? false, paste: handler?.canPaste ?? false };
+    const flags = {
+      cut: handler?.canCut ?? false,
+      copy: handler?.canCopy ?? false,
+      paste: handler?.canPaste ?? false,
+    };
     const key = JSON.stringify(flags);
     if (key === lastPushedRef.current) return;
     lastPushedRef.current = key;
-    invoke("set_edit_menu_enabled", { flags }).catch((err) => console.error("set_edit_menu_enabled failed:", err));
+    invoke("set_edit_menu_enabled", { flags }).catch((err) =>
+      console.error("set_edit_menu_enabled failed:", err),
+    );
   }, []);
 
-  const registerOverride = useCallback((build: () => EditMenuHandler | null) => {
-    overrideRef.current = build;
-    recompute();
-    return () => {
-      if (overrideRef.current === build) {
-        overrideRef.current = null;
-        recompute();
-      }
-    };
-  }, [recompute]);
+  const registerOverride = useCallback(
+    (build: () => EditMenuHandler | null) => {
+      overrideRef.current = build;
+      recompute();
+      return () => {
+        if (overrideRef.current === build) {
+          overrideRef.current = null;
+          recompute();
+        }
+      };
+    },
+    [recompute],
+  );
 
   useEffect(() => {
     document.addEventListener("focusin", recompute);
@@ -165,10 +192,15 @@ export function EditMenuProvider({ children }: { children: ReactNode }) {
       else if (event.payload === "copy") handler?.copy?.();
       else if (event.payload === "paste") handler?.paste?.();
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
-  const value = useMemo(() => ({ registerOverride, notifyChanged: recompute }), [registerOverride, recompute]);
+  const value = useMemo(
+    () => ({ registerOverride, notifyChanged: recompute }),
+    [registerOverride, recompute],
+  );
 
   return <EditMenuContext.Provider value={value}>{children}</EditMenuContext.Provider>;
 }

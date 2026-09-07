@@ -156,7 +156,11 @@ describe("EditMenuProvider", () => {
 
     let unregister: (() => void) | undefined;
     act(() => {
-      unregister = api.current!.registerOverride(() => ({ canCut: false, canCopy: true, canPaste: false }));
+      unregister = api.current!.registerOverride(() => ({
+        canCut: false,
+        canCopy: true,
+        canPaste: false,
+      }));
     });
 
     await waitFor(() =>
@@ -183,7 +187,11 @@ describe("EditMenuProvider", () => {
       </EditMenuProvider>,
     );
     act(() => {
-      api.current!.registerOverride(() => ({ canCut: false, canCopy: overrideCopy, canPaste: false }));
+      api.current!.registerOverride(() => ({
+        canCut: false,
+        canCopy: overrideCopy,
+        canPaste: false,
+      }));
     });
     await waitFor(() =>
       expect(invoke).toHaveBeenLastCalledWith("set_edit_menu_enabled", {

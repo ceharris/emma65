@@ -135,7 +135,9 @@ export const APP_KEY_BINDINGS: AppKeyBinding[] = [
     // accelerator (`TOGGLE_LCD_DISPLAY_ID`).
     run: () => {
       if (getCurrentWindow().label === LCD_DISPLAY_DETACHED_WINDOW_LABEL) {
-        invoke("attach_lcd_display").catch((err) => console.error("attach_lcd_display failed:", err));
+        invoke("attach_lcd_display").catch((err) =>
+          console.error("attach_lcd_display failed:", err),
+        );
       } else {
         revealPanel("lcd-display");
       }

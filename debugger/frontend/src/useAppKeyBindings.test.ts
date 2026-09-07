@@ -22,15 +22,21 @@ describe("APP_KEY_BINDINGS matches predicates", () => {
   for (const { name, index, code } of cases) {
     describe(name, () => {
       it("matches its own Ctrl+Shift+<letter> combo", () => {
-        expect(APP_KEY_BINDINGS[index].matches(keydown({ ctrlKey: true, shiftKey: true, code }))).toBe(true);
+        expect(
+          APP_KEY_BINDINGS[index].matches(keydown({ ctrlKey: true, shiftKey: true, code })),
+        ).toBe(true);
       });
 
       it("rejects the combo when Ctrl is missing", () => {
-        expect(APP_KEY_BINDINGS[index].matches(keydown({ ctrlKey: false, shiftKey: true, code }))).toBe(false);
+        expect(
+          APP_KEY_BINDINGS[index].matches(keydown({ ctrlKey: false, shiftKey: true, code })),
+        ).toBe(false);
       });
 
       it("rejects the combo when Shift is missing", () => {
-        expect(APP_KEY_BINDINGS[index].matches(keydown({ ctrlKey: true, shiftKey: false, code }))).toBe(false);
+        expect(
+          APP_KEY_BINDINGS[index].matches(keydown({ ctrlKey: true, shiftKey: false, code })),
+        ).toBe(false);
       });
 
       it("rejects a different key code", () => {
@@ -44,7 +50,9 @@ describe("APP_KEY_BINDINGS matches predicates", () => {
 
 describe("useAppKeyBindings", () => {
   it("skips main-window-accelerator bindings when running in the main window", () => {
-    vi.mocked(getCurrentWindow).mockReturnValue({ label: "main" } as ReturnType<typeof getCurrentWindow>);
+    vi.mocked(getCurrentWindow).mockReturnValue({ label: "main" } as ReturnType<
+      typeof getCurrentWindow
+    >);
     renderHook(() => useAppKeyBindings());
 
     window.dispatchEvent(keydown({ ctrlKey: true, shiftKey: true, code: "KeyT" }));

@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  ReactNode,
+} from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useExecutionContext } from "./ExecutionContext";
@@ -7,8 +15,13 @@ import { useExecutionContext } from "./ExecutionContext";
 export type ExecState = "stopped" | "stepping" | "running";
 
 interface RegisterSnapshot {
-  a: number; x: number; y: number; s: number;
-  pc: number; p: number; changed_flags: number;
+  a: number;
+  x: number;
+  y: number;
+  s: number;
+  pc: number;
+  p: number;
+  changed_flags: number;
   cpu_stopped: boolean;
   cpu_waiting: boolean;
   breakpoint_hit: boolean;
@@ -26,13 +39,14 @@ const INTERVAL_DEFAULT = 500;
  * thumb by one tick advances the interval by that tier's step size.
  */
 const INTERVAL_TIERS: [number, number, number][] = [
-  [INTERVAL_MIN, 100, 1],     // 100 steps
-  [100, 200, 5],              // 20 steps
-  [200, 500, 25],             // 12 steps
-  [500, INTERVAL_MAX, 50],    // 10 steps
+  [INTERVAL_MIN, 100, 1], // 100 steps
+  [100, 200, 5], // 20 steps
+  [200, 500, 25], // 12 steps
+  [500, INTERVAL_MAX, 50], // 10 steps
 ];
 const INTERVAL_TOTAL_STEPS = INTERVAL_TIERS.reduce(
-    (sum, [lo, hi, step]) => sum + (hi - lo) / step, 0
+  (sum, [lo, hi, step]) => sum + (hi - lo) / step,
+  0,
 ); // = 142
 
 const SLIDER_STEPS = INTERVAL_TOTAL_STEPS; // 142 — 1:1 with raw steps
@@ -125,24 +139,29 @@ export function RunControlsProvider({ children }: { children: ReactNode }) {
       isFreeRunningRef.current = false;
       stoppingRef.current = false;
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   /** Execute one step using the named command and return the snapshot. Clears stepping lock on completion. */
-  const doStep = useCallback(async (command: string = "step_into"): Promise<RegisterSnapshot | null> => {
-    if (steppingRef.current) return null;
-    setStepping(true);
-    try {
-      const snap = await invoke<RegisterSnapshot>(command);
-      onStep(snap);
-      return snap;
-    } catch (e) {
-      console.error(`${command} failed:`, e);
-      return null;
-    } finally {
-      setStepping(false);
-    }
-  }, [onStep]);
+  const doStep = useCallback(
+    async (command: string = "step_into"): Promise<RegisterSnapshot | null> => {
+      if (steppingRef.current) return null;
+      setStepping(true);
+      try {
+        const snap = await invoke<RegisterSnapshot>(command);
+        onStep(snap);
+        return snap;
+      } catch (e) {
+        console.error(`${command} failed:`, e);
+        return null;
+      } finally {
+        setStepping(false);
+      }
+    },
+    [onStep],
+  );
 
   /** Single manual step (F11). */
   const stepInto = useCallback(async () => {
@@ -273,7 +292,9 @@ export function RunControlsProvider({ children }: { children: ReactNode }) {
         clearAutoStepTimer();
       }
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, [clearAutoStepTimer]);
 
   // A native Run-menu accelerator or click (see `on_menu_event` in `lib.rs`)
@@ -284,15 +305,29 @@ export function RunControlsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unlistenPromise = listen<string>("run-menu-action", (event) => {
       switch (event.payload) {
-        case "run-cpu": runCpu(); break;
-        case "stop-cpu": stopCpu(); break;
-        case "step-into": stepInto(); break;
-        case "step-over": stepOver(); break;
-        case "step-return": stepReturn(); break;
-        case "toggle-auto-step": toggleAutoStep(); break;
+        case "run-cpu":
+          runCpu();
+          break;
+        case "stop-cpu":
+          stopCpu();
+          break;
+        case "step-into":
+          stepInto();
+          break;
+        case "step-over":
+          stepOver();
+          break;
+        case "step-return":
+          stepReturn();
+          break;
+        case "toggle-auto-step":
+          toggleAutoStep();
+          break;
       }
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, [runCpu, stopCpu, stepInto, stepOver, stepReturn, toggleAutoStep]);
 
   // Keeps the native Run menu's enabled state in lockstep with the floating
@@ -350,7 +385,9 @@ export function RunControlsProvider({ children }: { children: ReactNode }) {
 
   const commitIntervalInput = useCallback((raw: string) => {
     const parsed = parseInt(raw, 10);
-    const clamped = isNaN(parsed) ? INTERVAL_DEFAULT : Math.min(INTERVAL_MAX, Math.max(INTERVAL_MIN, parsed));
+    const clamped = isNaN(parsed)
+      ? INTERVAL_DEFAULT
+      : Math.min(INTERVAL_MAX, Math.max(INTERVAL_MIN, parsed));
     // Snap to the nearest tier step by round-tripping through the slider mapping.
     const snapped = sliderToInterval(intervalToSlider(clamped));
     setIntervalMs(snapped);
@@ -361,16 +398,22 @@ export function RunControlsProvider({ children }: { children: ReactNode }) {
     setIntervalInputValue(e.target.value);
   }, []);
 
-  const handleIntervalInputBlur = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
-    commitIntervalInput(e.target.value);
-  }, [commitIntervalInput]);
+  const handleIntervalInputBlur = useCallback(
+    (e: React.FocusEvent<HTMLInputElement>) => {
+      commitIntervalInput(e.target.value);
+    },
+    [commitIntervalInput],
+  );
 
-  const handleIntervalInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      commitIntervalInput((e.target as HTMLInputElement).value);
-      (e.target as HTMLInputElement).blur();
-    }
-  }, [commitIntervalInput]);
+  const handleIntervalInputKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        commitIntervalInput((e.target as HTMLInputElement).value);
+        (e.target as HTMLInputElement).blur();
+      }
+    },
+    [commitIntervalInput],
+  );
 
   return (
     <RunControlsContext.Provider
