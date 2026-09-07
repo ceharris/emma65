@@ -36,8 +36,9 @@ A simple polling console device for byte-stream I/O over a configurable
 | 0 | Data   | Returns the latch's value if non-zero, else the next buffered input byte, else `0`; either way, clears the latch and interrupt status | Sends the byte to the transport (no-op if unconnected) |
 | 1 | Latch  | If the latch is currently zero, pulls the next buffered input byte into it (a one-byte lookahead); returns the latch; clears interrupt status | Overwrites the latch and drains the input buffer; if the value matches the configured break key, raises IRQ instead of clearing it |
 
-- Input is buffered in a 64 kilobyte ring buffer as it arrives from the
-  transport, so bytes aren't lost between polls.
+- Input is buffered in a 64 kilobyte ring buffer internal to the device
+  as it arrives from the transport, so bytes aren't lost between polls -- 
+  even when pasting large blocks of text into the associated terminal.
 - An optional break key (e.g. ASCII Ctrl+C) can be configured: when that
   byte is seen in the input, the buffer is drained, the break key value is
   latched, and the CPU's IRQ signal is asserted — a "stop the program" key
