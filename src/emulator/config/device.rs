@@ -109,7 +109,7 @@ fn parse_prefixed_u32(s: &str) -> Result<u32, std::num::ParseIntError> {
     }
 }
 
-fn parse_suffixed_u32(s: &str) -> Result<u32, std::num::ParseIntError> {
+pub(super) fn parse_suffixed_u32(s: &str) -> Result<u32, std::num::ParseIntError> {
     if let Some(k_str) = s.strip_suffix("K") {
         Ok(k_str.parse::<u32>()? * 1024)
     } else if let Some(k_str) = s.strip_suffix("k") {

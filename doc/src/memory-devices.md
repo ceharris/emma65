@@ -21,11 +21,13 @@ bus.
 [[devices]]
 type = "ram"
 address = 0x0000
-size = 32768               # or "32K"
+size = 32768               # or the quoted string "32K"
 ```
 
-- `size` (required, bytes or `K`/`k` suffix) — how much address space the
-  region occupies.
+- `size` (required) — how much address space the region occupies, either a
+  plain integer number of bytes or a quoted string with a `K`/`k` suffix for
+  kibibytes (e.g. `"32K"`). The suffixed form must be a TOML string —
+  `size = 32K` without quotes is invalid TOML, not a valid size.
 - `image` (optional, path) — a binary, Intel Hex, or Motorola S-Record file
   loaded at `offset` (default `0`) within the region at startup; see
   [Running the Emulator](running-the-emulator.md) for the recognized file
@@ -51,8 +53,10 @@ size = 32768
 image = "~/roms/my.bin"    # .bin, .rom, .hex, .ihx, .ihex, .s19, .srec
 ```
 
-- `size` (required, bytes or `K`/`k` suffix) — how much address space the
-  region occupies.
+- `size` (required) — how much address space the region occupies, either a
+  plain integer number of bytes or a quoted string with a `K`/`k` suffix for
+  kibibytes (e.g. `"32K"`). The suffixed form must be a TOML string —
+  `size = 32K` without quotes is invalid TOML, not a valid size.
 - `image` (required, path) — a binary, Intel Hex, or Motorola S-Record file
   loaded at `offset` (default `0`) within the region at startup; see
   [Running the Emulator](running-the-emulator.md) for the recognized file
