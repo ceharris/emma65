@@ -17,10 +17,10 @@ for updating an existing installation.
 
 The plain `emma65` and `emma65-tracer` binaries have no system library
 dependencies beyond Rust itself. Building the rest of the workspace needs
-additional development packages: `emma65-display` and `emma65-led-matrix`
-need the SDL2 libraries (`emma65-led-matrix` also needs SDL2_gfx), and
-`emma65-debugger` needs Tauri's Linux dependencies (WebKitGTK, GTK,
-libayatana-appindicator, librsvg).
+additional development packages: `emma65-display`, `emma65-led-matrix`, and
+`emma65-lcd-display` need the SDL2 libraries (`emma65-led-matrix` also needs
+SDL2_gfx), and `emma65-debugger` needs Tauri's Linux dependencies (WebKitGTK,
+GTK, libayatana-appindicator, librsvg).
 
 ### Ubuntu Linux
 
@@ -64,6 +64,7 @@ independent of the others (see above):
 cargo build --release              # emma65 + emma65-tracer only
 cargo build --release -p emma65-display
 cargo build --release -p emma65-led-matrix
+cargo build --release -p emma65-lcd-display
 cargo build --release -p emma65-debugger
 ```
 
@@ -75,6 +76,7 @@ all land in the same place, `~/.cargo/bin` by default):
 cargo install --path .            # emma65, emma65-tracer
 cargo install --path display      # emma65-display
 cargo install --path led-matrix   # emma65-led-matrix
+cargo install --path lcd-display  # emma65-lcd-display
 ```
 
 `emma65-debugger` isn't installed this way; build it as a packaged desktop
