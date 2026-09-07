@@ -510,7 +510,7 @@ linear-feedback shift register. It occupies 2 bytes of address space:
   high byte (loads both into the register together). A seed of `0x0000` is
   clamped to `0x0001`, since an all-zero state would never change.
 
-This device is never IRQ-capable.
+This device is not IRQ-capable.
 
 ### Configuration
 
@@ -553,6 +553,20 @@ selecting which 4 KB segment of the module's 1024 KB memory space is mapped
 into that 4 KB window of the 6502's address space — banks `0x00`–`0x7F` are
 RAM, `0x80`–`0xFF` are ROM. The bank registers support both read and write,
 so a program doesn't need to keep a shadow copy.
+
+```text
+                                    6 5 0 2   A d d r e s s   B u s
+                    A15 A14 A13 A12 A11 A10  A9  A8  A7  A6  A5  A4  A3  A2  A1  A0
+                      │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │
+  ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓  │   │   │   │   │   │   │   │   │   │   │   │
+  ┃   MMU Bank Registers (0..15)   ┃  │   │   │   │   │   │   │   │   │   │   │   │
+  ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛  │   │   │   │   │   │   │   │   │   │   │   │
+      │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │
+     B7  B6  B5  B4  B3  B2  B1  B0   │   │   │   │   │   │   │   │   │   │   │   │
+      │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │   │
+    M19 M18 M17 M16 M15 M14 M13 M12 M11 M10  M9  M8  M7  M6  M5  M4  M3  M2  M1  M0
+                      E f f e c t i v e   M e m o r y   A d d r e s s
+```
 
 At reset, the MMU is disabled and a fixed mapping is used instead: the low
 32 KB of RAM (banks `0x00`–`0x07`) fills the lower half of the address
