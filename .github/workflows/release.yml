@@ -238,9 +238,9 @@ jobs:
         with:
           name: release-asset
           path: |
-            debugger/src-tauri/target/release/bundle/deb/*.deb
-            debugger/src-tauri/target/release/bundle/rpm/*.rpm
-            debugger/src-tauri/target/release/bundle/appimage/*.AppImage
+            target/release/bundle/deb/*.deb
+            target/release/bundle/rpm/*.rpm
+            target/release/bundle/appimage/*.AppImage
 
   publish:
     name: Publish GitHub Release
