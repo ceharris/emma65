@@ -125,92 +125,6 @@ protocol = "ascii"
   [VIA Peer Protocol](appendix-via-protocol.md).
 - `irq` (optional, default `1`).
 
-## MC6840 Programmable Timer Module (`ptm/6840`)
-
-A faithful emulation of the Motorola MC6840 Programmable Timer Module (PTM):
-three independent 16-bit timers, each capable of continuous or single-shot
-generation (square-wave or pulse-width output), as well as frequency/period
-or pulse-width *measurement* against an external gate/clock.
-
-The PTM occupies 8 bytes of address space. Offset 0 is shared between two of
-the three control registers:
-
-| Offset | Write | Read |
-|--------|-------|------|
-| 0 | CR3 (if CR2 bit 0 clear) or CR1 (if set) | — |
-| 1 | CR2 | Status register |
-| 2 | Timer 1 latch MSB buffer | Timer 1 counter MSB (also loads the LSB buffer) |
-| 3 | Timer 1 latch LSB (transfers the latched 16-bit value) | Timer 1 counter LSB buffer |
-| 4 | Timer 2 latch MSB buffer | Timer 2 counter MSB |
-| 5 | Timer 2 latch LSB | Timer 2 counter LSB buffer |
-| 6 | Timer 3 latch MSB buffer | Timer 3 counter MSB |
-| 7 | Timer 3 latch LSB | Timer 3 counter LSB buffer |
-
-To load a 16-bit latch: write the MSB to the timer's MSB-buffer offset, then
-the LSB to the timer's own offset — the full value transfers atomically on
-the LSB write. To read a 16-bit counter: read the timer's own offset (which
-also snapshots the LSB into its buffer), then read the adjacent LSB-buffer
-offset. All three counters are big-endian in this register map (MSB first),
-the opposite of the 6502's own little-endian convention.
-
-Like the VIA, the PTM has no display or console of its own — a virtual
-peripheral connects over a [Transport](#transport-options) to exchange
-gate/clock/output signal state via the
-[PTM Peer Protocol](appendix-ptm-protocol.md), with a full state dump sent
-on connection.
-
-### Configuration
-
-```toml
-[[devices]]
-type = "ptm/6840"
-address = 0xFF90
-transport = "unix:~/.emma/sock/mc6840"
-```
-
-- `transport` (optional) — same multipoint (`tcp:`/`unix:`) restriction as
-  the VIA, for the same reason.
-- `protocol` (optional, `"ascii"` or `"binary"`, default `"ascii"`).
-- `irq` (optional, default `2`).
-
-## MC6850 Asynchronous Communications Adapter (`acia/6850`)
-
-A faithful emulation of the Motorola MC6850 Asynchronous Communications
-Interface Adapter (ACIA) — two addressable registers, matching the real
-chip:
-
-| Offset | Read | Write |
-|--------|------|-------|
-| 0 | Status register   | Control register |
-| 1 | RX data register  | TX data register |
-
-**Control register** (write offset 0): bits 1–0 select the counter divide
-ratio (`11` triggers a master reset); bits 4–2 select word format (data
-bits/parity/stop bits); bits 6–5 enable/configure the transmit interrupt;
-bit 7 enables the receive interrupt.
-
-**Status register** (read offset 0): bit 0 RDRF (receive data register
-full), bit 1 TDRE (transmit data register empty), bit 5 OVRN (overrun), bit
-7 interrupt pending. DCD, CTS, FE, and PE always read `0` in this emulation
-— there's no real serial line to report a carrier, clear-to-send, framing,
-or parity condition from.
-
-TX is immediate: a byte written to the TX register goes straight to the
-transport; TDRE clears on write and is restored on the next CPU tick. RX is
-polled from the transport once per tick.
-
-### Configuration
-
-```toml
-[[devices]]
-type = "acia/6850"
-address = 0xFFF4
-transport = "pty:~/.emma/dev/ttyS1"
-```
-
-- `transport` (optional) — any [Transport](#transport-options) kind.
-- `irq` (optional, default `4`).
-
 ## R6551 Asynchronous Communication Adapter (`acia/6551`)
 
 An emulation of the Rockwell 6551 Asynchronous Communications Interface
@@ -263,83 +177,175 @@ transport = "pty:~/.emma/dev/ttyS0"
   simply kept until read and OVRN never sets.
 - `irq` (optional, default `5`).
 
-## RGB LED Matrix Display (`display/matrix`)
+## MC6850 Asynchronous Communications Adapter (`acia/6850`)
 
-A memory-mapped RGB LED matrix display supporting 1, 2, 4, or 8 attached
-32×32 matrices, fixed at configuration time. It occupies two separate
-ranges: a block of pixel memory (one byte per pixel) and a 2-byte
-command/data register pair elsewhere in the address space, so pixel memory
-can start on a convenient boundary without the registers getting in the way.
+A faithful emulation of the Motorola MC6850 Asynchronous Communications
+Interface Adapter (ACIA) — two addressable registers, matching the real
+chip:
 
-**Pixel memory** is a flat, row-major raster of the composed canvas —
-`columns * 32` pixels wide by `rows * 32` tall (from `arrangement`, below) —
-addressed exactly like a real framebuffer: byte `row * width + col`. Each
-pixel byte indexes one of 256 shared palette entries (16-bit RGB565 color,
-matching real LED matrix driver hardware); the default palette follows the
-Xterm 256-color layout (16 named colors, a 6×6×6 color cube, a 24-level
-grayscale ramp). Writes target an off-screen buffer per matrix — nothing
-appears on screen until that matrix is swapped to its visible buffer.
+| Offset | Read | Write |
+|--------|------|-------|
+| 0 | Status register   | Control register |
+| 1 | RX data register  | TX data register |
 
-**Command/data registers** — write the command byte, then the argument
-bytes it expects, one per write; a command that produces a reply is read
-back one byte per read of the data register:
+**Control register** (write offset 0): bits 1–0 select the counter divide
+ratio (`11` triggers a master reset); bits 4–2 select word format (data
+bits/parity/stop bits); bits 6–5 enable/configure the transmit interrupt;
+bit 7 enables the receive interrupt.
 
-| Command | Value | Write bytes | Read bytes | Effect |
-|---------|:-----:|-------------|------------|--------|
-| `SWAP`             | 0 | 1 (matrix bitmask)                | —              | Swaps each matrix whose bit is set to its visible buffer immediately, regardless of whether it's actually changed |
-| `SET_AUTOREFRESH`  | 1 | 1 (matrix bitmask)                | —              | Replaces which matrices auto-swap on every dirty vsync (all matrices, by default) |
-| `SET_POWER`        | 2 | 1 (matrix bitmask; bit set = on)  | —              | Turns matrix drivers on/off (all on, by default) |
-| `SET_BRIGHTNESS`   | 3 | 1 (`0`–`255`)                     | —              | Sets overall brightness uniformly across every attached matrix |
-| `PALETTE_WRITE`    | 4 | 4: `index`, `red`, `green`, `blue`| —              | Sets palette entry `index` (colors are down-converted to RGB565) |
-| `PALETTE_READ`     | 5 | 1: `index`                        | 3: `red`, `green`, `blue` | Reads back palette entry `index` (scaled up from its stored RGB565 value) |
+**Status register** (read offset 0): bit 0 RDRF (receive data register
+full), bit 1 TDRE (transmit data register empty), bit 5 OVRN (overrun), bit
+7 interrupt pending. DCD, CTS, FE, and PE always read `0` in this emulation
+— there's no real serial line to report a carrier, clear-to-send, framing,
+or parity condition from.
 
-The command register always reads `0`; writing it discards whatever partial
-command sequence was in progress and arms a new one. There's no interrupt
-capability — swaps are always synchronous, so there's nothing to wait on.
+TX is immediate: a byte written to the TX register goes straight to the
+transport; TDRE clears on write and is restored on the next CPU tick. RX is
+polled from the transport once per tick.
 
-Like `display` and `display/lcd`, this device's output is graphical, so
-the plain `emma65` CLI can't just print it to its terminal window the way
-`console` or an ACIA does. A display panel that can actually draw it is
-available two ways:
+### Configuration
 
-- **The debugger** — the LED Matrix panel renders each matrix as an
-  independent, composited canvas in-process, no configuration needed.
+```toml
+[[devices]]
+type = "acia/6850"
+address = 0xFFF4
+transport = "pty:~/.emma/dev/ttyS1"
+```
+
+- `transport` (optional) — any [Transport](#transport-options) kind.
+- `irq` (optional, default `4`).
+
+## MC6840 Programmable Timer Module (`ptm/6840`)
+
+A faithful emulation of the Motorola MC6840 Programmable Timer Module (PTM):
+three independent 16-bit timers, each capable of continuous or single-shot
+generation (square-wave or pulse-width output), as well as frequency/period
+or pulse-width *measurement* against an external gate/clock.
+
+The PTM occupies 8 bytes of address space. Offset 0 is shared between two of
+the three control registers:
+
+| Offset | Write | Read |
+|--------|-------|------|
+| 0 | CR3 (if CR2 bit 0 clear) or CR1 (if set) | — |
+| 1 | CR2 | Status register |
+| 2 | Timer 1 latch MSB buffer | Timer 1 counter MSB (also loads the LSB buffer) |
+| 3 | Timer 1 latch LSB (transfers the latched 16-bit value) | Timer 1 counter LSB buffer |
+| 4 | Timer 2 latch MSB buffer | Timer 2 counter MSB |
+| 5 | Timer 2 latch LSB | Timer 2 counter LSB buffer |
+| 6 | Timer 3 latch MSB buffer | Timer 3 counter MSB |
+| 7 | Timer 3 latch LSB | Timer 3 counter LSB buffer |
+
+To load a 16-bit latch: write the MSB to the timer's MSB-buffer offset, then
+the LSB to the timer's own offset — the full value transfers atomically on
+the LSB write. To read a 16-bit counter: read the timer's own offset (which
+also snapshots the LSB into its buffer), then read the adjacent LSB-buffer
+offset. All three counters are big-endian in this register map (MSB first),
+the opposite of the 6502's own little-endian convention.
+
+Like the VIA, the PTM has no display or console of its own — a virtual
+peripheral connects over a [Transport](#transport-options) to exchange
+gate/clock/output signal state via the
+[PTM Peer Protocol](appendix-ptm-protocol.md), with a full state dump sent
+on connection.
+
+### Configuration
+
+```toml
+[[devices]]
+type = "ptm/6840"
+address = 0xFF90
+transport = "unix:~/.emma/sock/mc6840"
+```
+
+- `transport` (optional) — same multipoint (`tcp:`/`unix:`) restriction as
+  the VIA, for the same reason.
+- `protocol` (optional, `"ascii"` or `"binary"`, default `"ascii"`).
+- `irq` (optional, default `2`).
+
+## Character Display (`display`)
+
+A memory-mapped character/color-cell text display, structurally similar to
+the VIC-II in the Commodore 64 (separate character RAM and color RAM over a
+fixed grid), but with a full 8-bit palette index per cell rather than 4-bit,
+and a grid size that's configurable rather than fixed (40×25 by default).
+The 8×8 glyph font and RGB24 color palette are supplied at configuration
+time and are *not* part of the device's bus-addressable memory — only the
+two per-cell RAM arrays and two control registers are:
+
+| Region | Offset | Size | Access | Notes |
+|--------|--------|------|--------|-------|
+| Character RAM | `0` | `cells` | R/W | Glyph index per cell (`cells = columns * rows`) |
+| Color RAM | `cells` | `cells` | R/W | Palette index per cell |
+| Control register | `2*cells` | 1 | R/W | Bit 0: request a swap now. Bit 1: auto-swap on every vsync. Bit 3: arm a palette update. Bit 7 (read-only): a requested swap is still pending |
+| Status/data register | `2*cells + 1` | 1 | R/W | Read: bit 0 vsync occurred, bit 1 a palette update was accepted (both clear on read). Write: feeds a 4-byte armed palette-update sequence (`index`, `red`, `green`, `blue`), ignored unless control bit 3 was set first |
+
+Character/color RAM writes always target an off-screen buffer; nothing
+changes on screen until a swap — either requested explicitly (control bit
+0) or automatically on every vsync (control bit 1).
+
+**Keyboard input** (optional): configuring `keyboard-address=` maps a
+second, separate 2-byte data/latch register pair — behaviorally identical
+to [Console](#console-console)'s (the same latch-and-clear-on-read
+semantics, the same optional break-key handling) — anywhere else in the
+address space, so a program can treat the display as a combined
+screen-and-keyboard console. This is also what makes the device IRQ-capable
+at all; with no keyboard range configured it never asserts IRQ. **In the
+plain `emma65` CLI, configuring `keyboard-address=` maps the registers but
+nothing feeds them input** — it's the debugger's Display panel that
+actually captures keystrokes and wires them into that range, so this
+attribute is only useful when running under the debugger.
+
+See `plan/memory-mapped-display-device-spec.md` in the repository for the
+full register-level specification. Unlike the other register-window devices,
+`display`'s output is graphical, so the plain `emma65` CLI can't just print
+it to its terminal window the way `console` or an ACIA does. A display panel
+that can actually draw it is available two ways:
+
+- **The debugger** — the Display panel renders composited frames in-process,
+  no configuration needed, and also supplies the live keyboard input
+  described above.
 - **Standalone `emma65`** — configure a `pipe:` transport pointing at the
-  bundled `emma65-led-matrix` SDL2 peripheral binary (see
-  [Running the LED Matrix Peripheral](running-the-led-matrix-peripheral.md)
-  below). The wire protocol is designed for high throughput — it only
-  sends a matrix's pixels when that matrix actually swaps, and a palette
-  update only when the palette actually changes — so the peripheral stays
-  in sync without redrawing anything that hasn't changed. See the
-  [LED Matrix External Protocol](appendix-led-matrix-protocol.md) for
+  bundled `emma65-display` SDL2 peripheral binary (see
+  [Running the Display Peripheral](running-the-display-peripheral.md) below).
+  The wire protocol is designed for high throughput — it sends one composited
+  frame per vsync rather than streaming every individual memory write, so the
+  peripheral stays in sync without the overhead of redrawing more often than
+  the display actually changes. See the
+  [Character Display External Protocol](appendix-display-protocol.md) for
   details.
 
 ### Configuration
 
 ```toml
 [[devices]]
-type = "display/matrix"
-address = 0x9000
-register-address = 0x9400
-arrangement = "2x2"
-transport = "pipe:/path/to/emma65-led-matrix"
+type = "display"
+address = 0xF000
+columns = 40
+rows = 25
+transport = "pipe:/path/to/emma65-display"
 ```
 
-`arrangement` (required, `COLSxROWS`, e.g. `2x2`) describes how the matrices
-are physically daisy-chained: the matrix count (`columns * rows`, must be
-1, 2, 4, or 8) and how bus addresses map onto them. Matrix *n* occupies the
-`32x32` sub-rectangle at `((n / columns) * 32, (n % columns) * 32)` of the
-composed canvas. There is no separate `matrix-count` attribute — a bare
-count doesn't say how the matrices are wired, and having both invited them
-to silently disagree. A `1xN` (single column) arrangement reproduces the
-original one-matrix-per-1024-contiguous-bytes layout.
+- `columns`/`rows` (optional, default 40×25) — grid size; both must be
+  positive.
+- `palette` (optional, path) — a text file, one `RRGGBB` (or `#RRGGBB`)
+  color per line, either 16 or 256 entries; overrides the compiled-in
+  default palette.
+- `font` (optional, path) — a raw 2048-byte file (256 glyphs × 8 bytes, one
+  byte per row, bit 0 = leftmost pixel); overrides the compiled-in default
+  8×8 font.
+- `double-buffered` (optional bool, default `true`).
+- `frame-rate-hz` (optional, default `60`) — vsync/auto-swap cadence; not
+  the same as the external protocol's own frame rate.
+- `transport` (optional) — `pipe:` only, for the same atomic bulk-send
+  reason as `display/matrix`.
+- `keyboard-address` (optional) — see above.
+- `break` (optional, byte) — break-key code for the keyboard sub-range; has
+  no effect unless `keyboard-address=` is also set.
+- `irq` (optional, default `7`) — only meaningful (and only allocated) when
+  `keyboard-address=` is set.
 
-`register-address` (required) selects where the 2-byte command/data register
-pair is mapped, separately from pixel memory. `transport` (optional) accepts
-`pipe:` only — other transport kinds don't support the atomic bulk sends
-this protocol relies on.
-
-## Character LCD Display (`display/lcd`)
+## LCD Display (`display/lcd`)
 
 A memory-mapped character LCD module emulating a Hitachi HD44780-compatible
 controller/driver, faithfully reproducing its real two-register bus
@@ -424,87 +430,81 @@ custom colors — each, if given, overrides the corresponding channel of the
 `polarity`/`backlight` preset. None of these are part of the HD44780's own
 behavior, and none are bus-addressable.
 
-## Character Display (`display`)
+## RGB LED Matrix Display (`display/matrix`)
 
-A memory-mapped character/color-cell text display, structurally similar to
-the VIC-II in the Commodore 64 (separate character RAM and color RAM over a
-fixed grid), but with a full 8-bit palette index per cell rather than 4-bit,
-and a grid size that's configurable rather than fixed (40×25 by default).
-The 8×8 glyph font and RGB24 color palette are supplied at configuration
-time and are *not* part of the device's bus-addressable memory — only the
-two per-cell RAM arrays and two control registers are:
+A memory-mapped RGB LED matrix display supporting 1, 2, 4, or 8 attached
+32×32 matrices, fixed at configuration time. It occupies two separate
+ranges: a block of pixel memory (one byte per pixel) and a 2-byte
+command/data register pair elsewhere in the address space, so pixel memory
+can start on a convenient boundary without the registers getting in the way.
 
-| Region | Offset | Size | Access | Notes |
-|--------|--------|------|--------|-------|
-| Character RAM | `0` | `cells` | R/W | Glyph index per cell (`cells = columns * rows`) |
-| Color RAM | `cells` | `cells` | R/W | Palette index per cell |
-| Control register | `2*cells` | 1 | R/W | Bit 0: request a swap now. Bit 1: auto-swap on every vsync. Bit 3: arm a palette update. Bit 7 (read-only): a requested swap is still pending |
-| Status/data register | `2*cells + 1` | 1 | R/W | Read: bit 0 vsync occurred, bit 1 a palette update was accepted (both clear on read). Write: feeds a 4-byte armed palette-update sequence (`index`, `red`, `green`, `blue`), ignored unless control bit 3 was set first |
+**Pixel memory** is a flat, row-major raster of the composed canvas —
+`columns * 32` pixels wide by `rows * 32` tall (from `arrangement`, below) —
+addressed exactly like a real framebuffer: byte `row * width + col`. Each
+pixel byte indexes one of 256 shared palette entries (16-bit RGB565 color,
+matching real LED matrix driver hardware); the default palette follows the
+Xterm 256-color layout (16 named colors, a 6×6×6 color cube, a 24-level
+grayscale ramp). Writes target an off-screen buffer per matrix — nothing
+appears on screen until that matrix is swapped to its visible buffer.
 
-Character/color RAM writes always target an off-screen buffer; nothing
-changes on screen until a swap — either requested explicitly (control bit
-0) or automatically on every vsync (control bit 1).
+**Command/data registers** — write the command byte, then the argument
+bytes it expects, one per write; a command that produces a reply is read
+back one byte per read of the data register:
 
-**Keyboard input** (optional): configuring `keyboard-address=` maps a
-second, separate 2-byte data/latch register pair — behaviorally identical
-to [Console](#console-console)'s (the same latch-and-clear-on-read
-semantics, the same optional break-key handling) — anywhere else in the
-address space, so a program can treat the display as a combined
-screen-and-keyboard console. This is also what makes the device IRQ-capable
-at all; with no keyboard range configured it never asserts IRQ. **In the
-plain `emma65` CLI, configuring `keyboard-address=` maps the registers but
-nothing feeds them input** — it's the debugger's Display panel that
-actually captures keystrokes and wires them into that range, so this
-attribute is only useful when running under the debugger.
+| Command | Value | Write bytes | Read bytes | Effect |
+|---------|:-----:|-------------|------------|--------|
+| `SWAP`             | 0 | 1 (matrix bitmask)                | —              | Swaps each matrix whose bit is set to its visible buffer immediately, regardless of whether it's actually changed |
+| `SET_AUTOREFRESH`  | 1 | 1 (matrix bitmask)                | —              | Replaces which matrices auto-swap on every dirty vsync (all matrices, by default) |
+| `SET_POWER`        | 2 | 1 (matrix bitmask; bit set = on)  | —              | Turns matrix drivers on/off (all on, by default) |
+| `SET_BRIGHTNESS`   | 3 | 1 (`0`–`255`)                     | —              | Sets overall brightness uniformly across every attached matrix |
+| `PALETTE_WRITE`    | 4 | 4: `index`, `red`, `green`, `blue`| —              | Sets palette entry `index` (colors are down-converted to RGB565) |
+| `PALETTE_READ`     | 5 | 1: `index`                        | 3: `red`, `green`, `blue` | Reads back palette entry `index` (scaled up from its stored RGB565 value) |
 
-See `plan/memory-mapped-display-device-spec.md` in the repository for the
-full register-level specification. Unlike the other register-window devices,
-`display`'s output is graphical, so the plain `emma65` CLI can't just print
-it to its terminal window the way `console` or an ACIA does. A display panel
-that can actually draw it is available two ways:
+The command register always reads `0`; writing it discards whatever partial
+command sequence was in progress and arms a new one. There's no interrupt
+capability — swaps are always synchronous, so there's nothing to wait on.
 
-- **The debugger** — the Display panel renders composited frames in-process,
-  no configuration needed, and also supplies the live keyboard input
-  described above.
+Like `display` and `display/lcd`, this device's output is graphical, so
+the plain `emma65` CLI can't just print it to its terminal window the way
+`console` or an ACIA does. A display panel that can actually draw it is
+available two ways:
+
+- **The debugger** — the LED Matrix panel renders each matrix as an
+  independent, composited canvas in-process, no configuration needed.
 - **Standalone `emma65`** — configure a `pipe:` transport pointing at the
-  bundled `emma65-display` SDL2 peripheral binary (see
-  [Running the Display Peripheral](running-the-display-peripheral.md) below).
-  The wire protocol is designed for high throughput — it sends one composited
-  frame per vsync rather than streaming every individual memory write, so the
-  peripheral stays in sync without the overhead of redrawing more often than
-  the display actually changes. See the
-  [Character Display External Protocol](appendix-display-protocol.md) for
+  bundled `emma65-led-matrix` SDL2 peripheral binary (see
+  [Running the LED Matrix Peripheral](running-the-led-matrix-peripheral.md)
+  below). The wire protocol is designed for high throughput — it only
+  sends a matrix's pixels when that matrix actually swaps, and a palette
+  update only when the palette actually changes — so the peripheral stays
+  in sync without redrawing anything that hasn't changed. See the
+  [LED Matrix External Protocol](appendix-led-matrix-protocol.md) for
   details.
 
 ### Configuration
 
 ```toml
 [[devices]]
-type = "display"
-address = 0xF000
-columns = 40
-rows = 25
-transport = "pipe:/path/to/emma65-display"
+type = "display/matrix"
+address = 0x9000
+register-address = 0x9400
+arrangement = "2x2"
+transport = "pipe:/path/to/emma65-led-matrix"
 ```
 
-- `columns`/`rows` (optional, default 40×25) — grid size; both must be
-  positive.
-- `palette` (optional, path) — a text file, one `RRGGBB` (or `#RRGGBB`)
-  color per line, either 16 or 256 entries; overrides the compiled-in
-  default palette.
-- `font` (optional, path) — a raw 2048-byte file (256 glyphs × 8 bytes, one
-  byte per row, bit 0 = leftmost pixel); overrides the compiled-in default
-  8×8 font.
-- `double-buffered` (optional bool, default `true`).
-- `frame-rate-hz` (optional, default `60`) — vsync/auto-swap cadence; not
-  the same as the external protocol's own frame rate.
-- `transport` (optional) — `pipe:` only, for the same atomic bulk-send
-  reason as `display/matrix`.
-- `keyboard-address` (optional) — see above.
-- `break` (optional, byte) — break-key code for the keyboard sub-range; has
-  no effect unless `keyboard-address=` is also set.
-- `irq` (optional, default `7`) — only meaningful (and only allocated) when
-  `keyboard-address=` is set.
+`arrangement` (required, `COLSxROWS`, e.g. `2x2`) describes how the matrices
+are physically daisy-chained: the matrix count (`columns * rows`, must be
+1, 2, 4, or 8) and how bus addresses map onto them. Matrix *n* occupies the
+`32x32` sub-rectangle at `((n / columns) * 32, (n % columns) * 32)` of the
+composed canvas. There is no separate `matrix-count` attribute — a bare
+count doesn't say how the matrices are wired, and having both invited them
+to silently disagree. A `1xN` (single column) arrangement reproduces the
+original one-matrix-per-1024-contiguous-bytes layout.
+
+`register-address` (required) selects where the 2-byte command/data register
+pair is mapped, separately from pixel memory. `transport` (optional) accepts
+`pipe:` only — other transport kinds don't support the atomic bulk sends
+this protocol relies on.
 
 ## 16-bit Galois LFSR (`lfsr`)
 
