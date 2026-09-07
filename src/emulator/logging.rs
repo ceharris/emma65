@@ -87,7 +87,11 @@ pub struct LogRecord {
 /// `\n`/`\r` sequence, preserving the one-record-per-line contract.
 fn format_record(rec: &LogRecord, out: &mut String) {
     let ts = jiff::Timestamp::try_from(rec.timestamp).unwrap_or(jiff::Timestamp::UNIX_EPOCH);
-    let _ = write!(out, "{ts:.3} {} {} {} ", rec.cycles, rec.level, rec.category);
+    let _ = write!(
+        out,
+        "{ts:.3} {} {} {} ",
+        rec.cycles, rec.level, rec.category
+    );
     for ch in rec.message.chars() {
         match ch {
             '\n' => out.push_str("\\n"),
@@ -103,7 +107,10 @@ fn format_record(rec: &LogRecord, out: &mut String) {
 enum Sink {
     /// Hands records to a background writer thread over a bounded channel; drops and counts a
     /// record if the channel is full rather than ever blocking the caller.
-    File { tx: crossbeam_channel::Sender<LogRecord>, dropped: Arc<AtomicU64> },
+    File {
+        tx: crossbeam_channel::Sender<LogRecord>,
+        dropped: Arc<AtomicU64>,
+    },
     /// No file sink configured: forwards through the `log` crate instead, at the matching
     /// `log::Level`, so nobody's `RUST_LOG`-based visibility regresses by default.
     LogCrate,
@@ -121,7 +128,10 @@ pub struct LogSender {
 impl Default for LogSender {
     /// A sender with no file sink configured; forwards through the `log` crate.
     fn default() -> Self {
-        LogSender { sink: Sink::LogCrate, cycles: Default::default() }
+        LogSender {
+            sink: Sink::LogCrate,
+            cycles: Default::default(),
+        }
     }
 }
 
@@ -134,7 +144,13 @@ impl LogSender {
         let cycles = self.cycles.load(Ordering::Relaxed);
         match &self.sink {
             Sink::File { tx, dropped } => {
-                let rec = LogRecord { timestamp: std::time::SystemTime::now(), cycles, level, category, message };
+                let rec = LogRecord {
+                    timestamp: std::time::SystemTime::now(),
+                    cycles,
+                    level,
+                    category,
+                    message,
+                };
                 if tx.try_send(rec).is_err() {
                     dropped.fetch_add(1, Ordering::Relaxed);
                 }
@@ -178,7 +194,10 @@ fn bounded_file_sink(capacity: usize) -> (Sink, crossbeam_channel::Receiver<LogR
 /// file see new lines right away). Returns a producer handle (backed by `Sink::File`) and a join
 /// handle; once every `LogSender` clone is dropped, the channel disconnects, the thread drains
 /// what's left and exits, and `join()` returns.
-pub fn spawn_log_writer<W: Write + Send + 'static>(writer: W, capacity: usize) -> (LogSender, std::thread::JoinHandle<()>) {
+pub fn spawn_log_writer<W: Write + Send + 'static>(
+    writer: W,
+    capacity: usize,
+) -> (LogSender, std::thread::JoinHandle<()>) {
     let (sink, rx) = bounded_file_sink(capacity);
     let handle = std::thread::spawn(move || {
         let mut writer = BufWriter::new(writer);
@@ -190,7 +209,13 @@ pub fn spawn_log_writer<W: Write + Send + 'static>(writer: W, capacity: usize) -
             let _ = writer.flush();
         }
     });
-    (LogSender { sink, cycles: Default::default() }, handle)
+    (
+        LogSender {
+            sink,
+            cycles: Default::default(),
+        },
+        handle,
+    )
 }
 
 /// Spawns a background thread draining a bounded channel of `capacity` and invoking `on_record`
@@ -199,7 +224,10 @@ pub fn spawn_log_writer<W: Write + Send + 'static>(writer: W, capacity: usize) -
 /// same never-blocks/drop-and-count-on-full semantics as `spawn_log_writer`) and a join handle;
 /// once every `LogSender` clone is dropped, the channel disconnects, the thread drains what's
 /// left (calling `on_record` for each) and exits, and `join()` returns.
-pub fn spawn_log_collector<F>(capacity: usize, mut on_record: F) -> (LogSender, std::thread::JoinHandle<()>)
+pub fn spawn_log_collector<F>(
+    capacity: usize,
+    mut on_record: F,
+) -> (LogSender, std::thread::JoinHandle<()>)
 where
     F: FnMut(LogRecord) + Send + 'static,
 {
@@ -209,7 +237,13 @@ where
             on_record(rec);
         }
     });
-    (LogSender { sink, cycles: Default::default() }, handle)
+    (
+        LogSender {
+            sink,
+            cycles: Default::default(),
+        },
+        handle,
+    )
 }
 
 /// Formats `$fmt, $args...` and logs it through `$sender` at `$level`/`$category` — the same
@@ -224,9 +258,17 @@ pub(crate) use log_msg;
 /// Builds a `LogSender`/`Receiver` pair for tests elsewhere in this crate (e.g. `Cpu` and device
 /// `reset()` tests) to assert on the `LogRecord`s a call site emits, without a writer thread.
 #[cfg(test)]
-pub(crate) fn test_channel_sender(capacity: usize) -> (LogSender, crossbeam_channel::Receiver<LogRecord>) {
+pub(crate) fn test_channel_sender(
+    capacity: usize,
+) -> (LogSender, crossbeam_channel::Receiver<LogRecord>) {
     let (sink, rx) = bounded_file_sink(capacity);
-    (LogSender { sink, cycles: Default::default() }, rx)
+    (
+        LogSender {
+            sink,
+            cycles: Default::default(),
+        },
+        rx,
+    )
 }
 
 #[cfg(test)]
@@ -288,7 +330,13 @@ mod tests {
     fn full_channel_drops_and_counts_subsequent_records() {
         let (tx, rx) = crossbeam_channel::bounded::<LogRecord>(1);
         let dropped = Arc::new(AtomicU64::new(0));
-        let sender = LogSender { sink: Sink::File { tx, dropped: dropped.clone() }, cycles: Default::default() };
+        let sender = LogSender {
+            sink: Sink::File {
+                tx,
+                dropped: dropped.clone(),
+            },
+            cycles: Default::default(),
+        };
 
         sender.log(LogLevel::Info, LogCategory::Device, "first");
         sender.log(LogLevel::Info, LogCategory::Device, "second");
@@ -348,7 +396,14 @@ mod tests {
     fn log_msg_macro_formats_and_logs() {
         let (sender, rx) = test_channel_sender(4);
 
-        log_msg!(sender, LogLevel::Error, LogCategory::Transport, "conn {} failed: {}", 3, "timeout");
+        log_msg!(
+            sender,
+            LogLevel::Error,
+            LogCategory::Transport,
+            "conn {} failed: {}",
+            3,
+            "timeout"
+        );
 
         let received = rx.recv().unwrap();
         assert_eq!(received.message, "conn 3 failed: timeout");

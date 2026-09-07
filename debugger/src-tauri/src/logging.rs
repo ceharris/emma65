@@ -44,7 +44,11 @@ impl From<LogRecord> for LogRecordDto {
     /// Converts `timestamp` to epoch milliseconds (defaulting to 0 if it predates the epoch)
     /// and `level`/`category` via their existing `Display` impls.
     fn from(record: LogRecord) -> Self {
-        let timestamp_ms = record.timestamp.duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+        let timestamp_ms = record
+            .timestamp
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
         LogRecordDto {
             timestamp_ms,
             cycles: record.cycles,
@@ -122,19 +126,26 @@ mod tests {
 
         let app_handle = app.handle().clone();
         std::thread::spawn(move || {
-            push_record(&app_handle, LogRecord {
-                timestamp: SystemTime::now(),
-                cycles: 42,
-                level: LogLevel::Info,
-                category: LogCategory::Cpu,
-                message: "background thread test message".into(),
-            });
+            push_record(
+                &app_handle,
+                LogRecord {
+                    timestamp: SystemTime::now(),
+                    cycles: 42,
+                    level: LogLevel::Info,
+                    category: LogCategory::Cpu,
+                    message: "background thread test message".into(),
+                },
+            );
         })
         .join()
         .expect("push_record thread panicked");
 
         let state = app.state::<LogState>();
-        assert_eq!(state.0.lock().unwrap().len(), 1, "push_record did not append to LogState");
+        assert_eq!(
+            state.0.lock().unwrap().len(),
+            1,
+            "push_record did not append to LogState"
+        );
 
         let payload = rx
             .recv_timeout(Duration::from_secs(2))

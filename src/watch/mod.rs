@@ -1,25 +1,24 @@
 //! Support for watchpoint expressions. pre
+mod compiler;
+mod context;
 mod error;
-mod scanner;
-mod token;
+mod evaluator;
 mod expr;
 mod parser;
-mod evaluator;
-mod compiler;
+mod scanner;
+mod token;
 mod variables;
-mod context;
 
 use std::collections::HashSet;
 
+pub use self::context::WatchContext;
+pub use self::error::{Error, WatchError};
+pub use self::expr::Operand;
+pub use self::parser::Mapper;
 use crate::watch::compiler::OpCode;
 use crate::watch::evaluator::eval;
 use crate::watch::parser::Parser;
 use crate::watch::variables::Variables;
-pub use self::error::{Error, WatchError};
-pub use self::context::WatchContext;
-pub use self::expr::Operand;
-pub use self::parser::Mapper;
-
 
 /// A compiled watch expression, ready for repeated evaluation.
 pub struct Watchpoint {
@@ -44,7 +43,6 @@ pub struct WatchCompiler {
 }
 
 impl WatchCompiler {
-
     /// Creates a new compiler.
     ///
     /// # Arguments
@@ -64,13 +62,20 @@ impl WatchCompiler {
     /// Parses and compiles `source` into a [`Watchpoint`].
     ///
     /// New variables introduced by walrus assignments are allocated in `evaluator`.
-    pub fn compile(&mut self, source: &str, evaluator: &mut WatchEvaluator) -> Result<Watchpoint, Error> {
+    pub fn compile(
+        &mut self,
+        source: &str,
+        evaluator: &mut WatchEvaluator,
+    ) -> Result<Watchpoint, Error> {
         match self.parser.parse(source, &mut evaluator.vars)? {
             None => Err(Error::from(0, 0, "empty expression")),
             Some(expr) => {
                 let code = compiler::compile(expr);
                 evaluator.grow_storage();
-                Ok(Watchpoint { source: source.to_string(), code })
+                Ok(Watchpoint {
+                    source: source.to_string(),
+                    code,
+                })
             }
         }
     }
@@ -81,7 +86,11 @@ impl WatchCompiler {
     /// Whitespace-only content between expressions is silently ignored. On a parse error,
     /// parsing resumes at the next semicolon so subsequent expressions are still attempted.
     /// New variables introduced by walrus assignments are allocated in `evaluator`.
-    pub fn compile_all(&mut self, source: &str, evaluator: &mut WatchEvaluator) -> (Vec<Watchpoint>, Vec<Error>) {
+    pub fn compile_all(
+        &mut self,
+        source: &str,
+        evaluator: &mut WatchEvaluator,
+    ) -> (Vec<Watchpoint>, Vec<Error>) {
         let mut watchpoints = Vec::new();
         let mut errors = Vec::new();
         for result in self.parser.parse_all(source, &mut evaluator.vars) {
@@ -89,7 +98,10 @@ impl WatchCompiler {
                 Ok((expr_source, expr)) => {
                     let code = compiler::compile(expr);
                     evaluator.grow_storage();
-                    watchpoints.push(Watchpoint { source: expr_source.to_string(), code });
+                    watchpoints.push(Watchpoint {
+                        source: expr_source.to_string(),
+                        code,
+                    });
                 }
                 Err(e) => errors.push(e),
             }
@@ -109,7 +121,6 @@ pub struct WatchEvaluator {
 }
 
 impl WatchEvaluator {
-
     pub fn new() -> Self {
         Self {
             watchpoints: Vec::new(),
@@ -161,7 +172,12 @@ impl WatchEvaluator {
     /// in internal storage so other variables' IDs stay stable.
     pub fn named_variables(&self) -> Vec<(&str, Operand)> {
         let referenced = self.referenced_variable_ids();
-        self.vars.names().iter().map(|s| s.as_str()).zip(self.var_storage.iter().copied()).enumerate()
+        self.vars
+            .names()
+            .iter()
+            .map(|s| s.as_str())
+            .zip(self.var_storage.iter().copied())
+            .enumerate()
             .filter(|(id, _)| referenced.contains(&(*id as Operand)))
             .map(|(_, pair)| pair)
             .collect()
@@ -219,7 +235,10 @@ impl WatchEvaluator {
     /// per-row value/status rather than triggering on the first truthy one.
     /// Variable assignments in earlier watchpoints update internal storage
     /// and are visible to subsequent watchpoints in the same call.
-    pub fn evaluate_each(&mut self, context: &dyn WatchContext) -> Vec<Result<Operand, WatchError>> {
+    pub fn evaluate_each(
+        &mut self,
+        context: &dyn WatchContext,
+    ) -> Vec<Result<Operand, WatchError>> {
         let mut results = Vec::with_capacity(self.watchpoints.len());
         for wp in &self.watchpoints {
             results.push(eval(&wp.code, context, &mut self.var_storage));
@@ -257,16 +276,30 @@ mod tests {
     }
 
     impl MockMachine {
-        fn new() -> Self { Self { register: 0 } }
-        fn with_register(register: Operand) -> Self { Self { register } }
+        fn new() -> Self {
+            Self { register: 0 }
+        }
+        fn with_register(register: Operand) -> Self {
+            Self { register }
+        }
     }
 
     impl WatchContext for MockMachine {
-        fn read_register_u32(&self, _id: Operand) -> Operand { self.register }
-        fn read_register_i32(&self, _id: Operand) -> Operand { self.register }
-        fn read_flag(&self, _id: Operand) -> Operand { 0 }
-        fn read_mem_u32(&self, _addr: u16, _width: u8) -> u32 { 0 }
-        fn read_mem_i32(&self, _addr: u16, _width: u8) -> u32 { 0 }
+        fn read_register_u32(&self, _id: Operand) -> Operand {
+            self.register
+        }
+        fn read_register_i32(&self, _id: Operand) -> Operand {
+            self.register
+        }
+        fn read_flag(&self, _id: Operand) -> Operand {
+            0
+        }
+        fn read_mem_u32(&self, _addr: u16, _width: u8) -> u32 {
+            0
+        }
+        fn read_mem_i32(&self, _addr: u16, _width: u8) -> u32 {
+            0
+        }
     }
 
     fn compiler() -> WatchCompiler {
@@ -289,7 +322,11 @@ mod tests {
 
     #[test]
     fn compile_invalid_expression_returns_error() {
-        assert!(compiler().compile("A ==", &mut WatchEvaluator::new()).is_err());
+        assert!(
+            compiler()
+                .compile("A ==", &mut WatchEvaluator::new())
+                .is_err()
+        );
     }
 
     #[test]
@@ -330,14 +367,16 @@ mod tests {
 
     #[test]
     fn compile_all_whitespace_between_expressions_is_ignored() {
-        let (wps, errs) = compiler().compile_all("A == 0;\n\n   \nA == 1;", &mut WatchEvaluator::new());
+        let (wps, errs) =
+            compiler().compile_all("A == 0;\n\n   \nA == 1;", &mut WatchEvaluator::new());
         assert_eq!(wps.len(), 2);
         assert!(errs.is_empty());
     }
 
     #[test]
     fn compile_all_collects_errors_and_continues() {
-        let (wps, errs) = compiler().compile_all("A == 0;\nA ==;\nA == 2;", &mut WatchEvaluator::new());
+        let (wps, errs) =
+            compiler().compile_all("A == 0;\nA ==;\nA == 2;", &mut WatchEvaluator::new());
         assert_eq!(wps.len(), 2);
         assert_eq!(errs.len(), 1);
         assert_eq!(wps[0].source(), "A == 0");
@@ -367,7 +406,10 @@ mod tests {
         let mut ev = WatchEvaluator::new();
         let wp = c.compile("A == 42", &mut ev).unwrap();
         ev.add(wp);
-        assert_eq!(ev.evaluate_all(&MockMachine::with_register(42)), Ok(Some(0)));
+        assert_eq!(
+            ev.evaluate_all(&MockMachine::with_register(42)),
+            Ok(Some(0))
+        );
     }
 
     #[test]
@@ -380,7 +422,10 @@ mod tests {
         ev.add(wp0);
         ev.add(wp1);
         ev.add(wp2);
-        assert_eq!(ev.evaluate_all(&MockMachine::with_register(42)), Ok(Some(1)));
+        assert_eq!(
+            ev.evaluate_all(&MockMachine::with_register(42)),
+            Ok(Some(1))
+        );
     }
 
     #[test]
@@ -423,11 +468,10 @@ mod tests {
         ev.add(wp_falsy);
         ev.add(wp_error);
         let results = ev.evaluate_each(&MockMachine::with_register(42));
-        assert_eq!(results, vec![
-            Ok(1),
-            Ok(0),
-            Err(WatchError::DivisionByZero),
-        ]);
+        assert_eq!(
+            results,
+            vec![Ok(1), Ok(0), Err(WatchError::DivisionByZero),]
+        );
     }
 
     #[test]

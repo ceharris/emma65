@@ -36,7 +36,14 @@ pub struct AssembleReport {
 }
 
 fn diagnostics_from_errors(errors: &[assembler::Error]) -> Vec<AssembleDiagnostic> {
-    errors.iter().map(|e| AssembleDiagnostic { line: e.line(), column: e.column(), message: e.message().to_string() }).collect()
+    errors
+        .iter()
+        .map(|e| AssembleDiagnostic {
+            line: e.line(),
+            column: e.column(),
+            message: e.message().to_string(),
+        })
+        .collect()
 }
 
 /// Assembles `source` and reports the resulting segments/diagnostics without
@@ -45,13 +52,27 @@ fn diagnostics_from_errors(errors: &[assembler::Error]) -> Vec<AssembleDiagnosti
 fn assemble_preview_report(source: &str) -> AssembleReport {
     match assembler::assemble(source) {
         Ok(program) => {
-            let segments =
-                program.segments.iter().map(|s| SegmentSummary { origin: s.origin, length: s.bytes.len() }).collect();
-            AssembleReport { success: true, diagnostics: Vec::new(), segments, symbol_count: program.symbols.len() }
+            let segments = program
+                .segments
+                .iter()
+                .map(|s| SegmentSummary {
+                    origin: s.origin,
+                    length: s.bytes.len(),
+                })
+                .collect();
+            AssembleReport {
+                success: true,
+                diagnostics: Vec::new(),
+                segments,
+                symbol_count: program.symbols.len(),
+            }
         }
-        Err(errors) => {
-            AssembleReport { success: false, diagnostics: diagnostics_from_errors(&errors), segments: Vec::new(), symbol_count: 0 }
-        }
+        Err(errors) => AssembleReport {
+            success: false,
+            diagnostics: diagnostics_from_errors(&errors),
+            segments: Vec::new(),
+            symbol_count: 0,
+        },
     }
 }
 
@@ -67,7 +88,12 @@ fn assemble_and_patch(source: &str, cpu: &mut Cpu) -> AssembleReport {
     let program = match assembler::assemble(source) {
         Ok(program) => program,
         Err(errors) => {
-            return AssembleReport { success: false, diagnostics: diagnostics_from_errors(&errors), segments: Vec::new(), symbol_count: 0 };
+            return AssembleReport {
+                success: false,
+                diagnostics: diagnostics_from_errors(&errors),
+                segments: Vec::new(),
+                symbol_count: 0,
+            };
         }
     };
 
@@ -79,14 +105,22 @@ fn assemble_and_patch(source: &str, cpu: &mut Cpu) -> AssembleReport {
             for (i, &byte) in segment.bytes.iter().enumerate() {
                 bus.patch(segment.origin.wrapping_add(i as u16), byte);
             }
-            SegmentSummary { origin: segment.origin, length: segment.bytes.len() }
+            SegmentSummary {
+                origin: segment.origin,
+                length: segment.bytes.len(),
+            }
         })
         .collect();
     let symbol_table = bus.symbol_table_mut();
     symbol_table.clear_source(&SymbolSource::Assembler);
     symbol_table.insert_from(&program.symbols);
 
-    AssembleReport { success: true, diagnostics: Vec::new(), segments, symbol_count: program.symbols.len() }
+    AssembleReport {
+        success: true,
+        diagnostics: Vec::new(),
+        segments,
+        symbol_count: program.symbols.len(),
+    }
 }
 
 /// Assembles `source` and reports the resulting segments/diagnostics without
@@ -119,7 +153,11 @@ pub fn assemble_preview(source: String) -> AssembleReport {
 /// and a second call is cheaper than carrying an `AssembledProgram` across
 /// the IPC boundary.
 #[tauri::command]
-pub fn assemble_and_load(source: String, cpu_state: State<CpuState>, app: AppHandle) -> Result<AssembleReport, String> {
+pub fn assemble_and_load(
+    source: String,
+    cpu_state: State<CpuState>,
+    app: AppHandle,
+) -> Result<AssembleReport, String> {
     let (report, pc) = {
         let mut guard = cpu_state.0.lock().unwrap();
         let cpu = guard.as_mut().ok_or("CPU not ready")?;
@@ -136,14 +174,18 @@ pub fn assemble_and_load(source: String, cpu_state: State<CpuState>, app: AppHan
 /// panel's Open… command.
 #[tauri::command]
 pub async fn read_source_file(path: String) -> Result<String, String> {
-    tokio::fs::read_to_string(&path).await.map_err(|e| e.to_string())
+    tokio::fs::read_to_string(&path)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Writes `contents` verbatim to the file at `path`, creating or overwriting
 /// it, for the Assembler panel's Save/Save As… commands.
 #[tauri::command]
 pub async fn write_source_file(path: String, contents: String) -> Result<(), String> {
-    tokio::fs::write(&path, contents).await.map_err(|e| e.to_string())
+    tokio::fs::write(&path, contents)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -171,7 +213,13 @@ mod tests {
 
         assert!(report.success);
         assert!(report.diagnostics.is_empty());
-        assert_eq!(report.segments, vec![SegmentSummary { origin: 0x8000, length: 4 }]);
+        assert_eq!(
+            report.segments,
+            vec![SegmentSummary {
+                origin: 0x8000,
+                length: 4
+            }]
+        );
         assert_eq!(report.symbol_count, 1);
     }
 
@@ -194,7 +242,13 @@ mod tests {
 
         assert!(report.success);
         assert!(report.diagnostics.is_empty());
-        assert_eq!(report.segments, vec![SegmentSummary { origin: 0x8000, length: 4 }]);
+        assert_eq!(
+            report.segments,
+            vec![SegmentSummary {
+                origin: 0x8000,
+                length: 4
+            }]
+        );
         assert_eq!(report.symbol_count, 1);
 
         let mut buf = [0u8; 4];
@@ -226,12 +280,17 @@ mod tests {
     #[test]
     fn assemble_and_patch_merges_symbols_additively_without_clearing_existing() {
         let mut cpu = make_cpu();
-        cpu.bus_mut().symbol_table_mut().insert("existing".to_string(), 0x1234);
+        cpu.bus_mut()
+            .symbol_table_mut()
+            .insert("existing".to_string(), 0x1234);
 
         let report = assemble_and_patch(".org $8000\nstart:\nNOP\n", &mut cpu);
 
         assert!(report.success);
-        assert_eq!(cpu.bus().symbol_table().address_for("existing"), Some(0x1234));
+        assert_eq!(
+            cpu.bus().symbol_table().address_for("existing"),
+            Some(0x1234)
+        );
         assert_eq!(cpu.bus().symbol_table().address_for("start"), Some(0x8000));
     }
 
@@ -239,7 +298,11 @@ mod tests {
     fn assemble_and_patch_reassemble_after_label_move_leaves_no_ghost() {
         let mut cpu = make_cpu();
         let file_source = SymbolSource::File(std::path::PathBuf::from("/rom/labels.lbl"));
-        cpu.bus_mut().symbol_table_mut().insert_tagged("ROM_ENTRY".to_string(), 0xF000, file_source.clone());
+        cpu.bus_mut().symbol_table_mut().insert_tagged(
+            "ROM_ENTRY".to_string(),
+            0xF000,
+            file_source.clone(),
+        );
 
         let first = assemble_and_patch(".org $8000\nSTART:\nNOP\n", &mut cpu);
         assert!(first.success);
@@ -249,11 +312,19 @@ mod tests {
         assert!(second.success);
 
         // The label moved; its old address must no longer report it.
-        assert!(!cpu.bus().symbol_table().names_for(0x8000).any(|n| n == "START"));
+        assert!(
+            !cpu.bus()
+                .symbol_table()
+                .names_for(0x8000)
+                .any(|n| n == "START")
+        );
         assert_eq!(cpu.bus().symbol_table().address_for("START"), Some(0x9000));
 
         // A pre-existing File-sourced symbol survives both assembles untouched.
-        assert_eq!(cpu.bus().symbol_table().address_for("ROM_ENTRY"), Some(0xF000));
+        assert_eq!(
+            cpu.bus().symbol_table().address_for("ROM_ENTRY"),
+            Some(0xF000)
+        );
     }
 
     #[test]
@@ -264,7 +335,16 @@ mod tests {
         assert!(report.success);
         assert_eq!(
             report.segments,
-            vec![SegmentSummary { origin: 0x8000, length: 2 }, SegmentSummary { origin: 0x9000, length: 3 }],
+            vec![
+                SegmentSummary {
+                    origin: 0x8000,
+                    length: 2
+                },
+                SegmentSummary {
+                    origin: 0x9000,
+                    length: 3
+                }
+            ],
         );
 
         let mut first = [0u8; 2];
@@ -278,11 +358,14 @@ mod tests {
 
     #[tokio::test]
     async fn write_source_file_then_read_source_file_round_trips_contents() {
-        let dir = std::env::temp_dir().join(format!("emma65-assembler-test-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("emma65-assembler-test-{}", std::process::id()));
         tokio::fs::create_dir_all(&dir).await.unwrap();
         let path = dir.join("program.s").to_string_lossy().into_owned();
 
-        write_source_file(path.clone(), ".org $8000\nSTART:\nNOP\n".to_string()).await.unwrap();
+        write_source_file(path.clone(), ".org $8000\nSTART:\nNOP\n".to_string())
+            .await
+            .unwrap();
         let contents = read_source_file(path).await.unwrap();
 
         assert_eq!(contents, ".org $8000\nSTART:\nNOP\n");
@@ -291,7 +374,8 @@ mod tests {
 
     #[tokio::test]
     async fn read_source_file_missing_path_reports_error() {
-        let result = read_source_file("/nonexistent/emma65-assembler-test/program.s".to_string()).await;
+        let result =
+            read_source_file("/nonexistent/emma65-assembler-test/program.s".to_string()).await;
         assert!(result.is_err());
     }
 }

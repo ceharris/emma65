@@ -77,10 +77,8 @@ pub struct Phoebe {
 }
 
 impl Phoebe {
-
     /// Constructs a new `Phoebe` device mapped to the given region and register address.
-    pub fn new(name: &'static str,
-               control_register_address: u16) -> Self {
+    pub fn new(name: &'static str, control_register_address: u16) -> Self {
         Self {
             name,
             control_register_address,
@@ -106,11 +104,22 @@ impl Phoebe {
         name: &'static str,
         control_register_address: u16,
         rom_data: Vec<u8>,
-        ram_data: Vec<u8>) -> Self {
-        assert_eq!(rom_data.len(), ROM_SIZE,
-                   "ROM data size {} does not match ROM size {}", rom_data.len(), ROM_SIZE);
-        assert_eq!(ram_data.len(), RAM_SIZE,
-                   "RAM data size {} does not match RAM size {}", ram_data.len(), RAM_SIZE);
+        ram_data: Vec<u8>,
+    ) -> Self {
+        assert_eq!(
+            rom_data.len(),
+            ROM_SIZE,
+            "ROM data size {} does not match ROM size {}",
+            rom_data.len(),
+            ROM_SIZE
+        );
+        assert_eq!(
+            ram_data.len(),
+            RAM_SIZE,
+            "RAM data size {} does not match RAM size {}",
+            ram_data.len(),
+            RAM_SIZE
+        );
         let mut device = Self::new(name, control_register_address);
         device.rom_data = rom_data;
         device.ram_data = ram_data;
@@ -135,7 +144,10 @@ impl Phoebe {
     fn report_rejected_write(&self, address: u16) {
         if let Some(sender) = &self.error_sender {
             use crate::emulator::device::DeviceEvent;
-            let _ = sender.send(DeviceEvent::RejectedWrite { device: self.identity(), address });
+            let _ = sender.send(DeviceEvent::RejectedWrite {
+                device: self.identity(),
+                address,
+            });
         }
     }
 
@@ -159,18 +171,17 @@ impl Phoebe {
                 }
             } else {
                 let offset = (NUM_BANKS - 1) as usize * BANK_SIZE;
-                let effective_address = offset + (address as usize - (ROM_START as usize + BANK_SIZE));
+                let effective_address =
+                    offset + (address as usize - (ROM_START as usize + BANK_SIZE));
                 (true, effective_address)
             }
         } else {
             (false, address as usize)
         }
     }
-
 }
 
 impl IoDevice for Phoebe {
-
     fn read(&mut self, address: u16) -> u8 {
         self.peek(address)
     }
@@ -223,13 +234,22 @@ impl IoDevice for Phoebe {
 
     fn reset(&mut self) {
         self.set_control_register(0);
-        log_msg!(self.log_sender, LogLevel::Info, LogCategory::Device, "{} reset", self.identity());
+        log_msg!(
+            self.log_sender,
+            LogLevel::Info,
+            LogCategory::Device,
+            "{} reset",
+            self.identity()
+        );
     }
 
-    fn name(&self) -> &str { self.name }
+    fn name(&self) -> &str {
+        self.name
+    }
 
-    fn identity_address(&self) -> u16 { self.control_register_address }
-
+    fn identity_address(&self) -> u16 {
+        self.control_register_address
+    }
 }
 
 #[cfg(test)]
@@ -343,7 +363,13 @@ mod tests {
 
         match rx.try_recv() {
             Ok(event) => {
-                assert!(matches!(event, DeviceEvent::RejectedWrite{ address: 0xFFFF, .. }));
+                assert!(matches!(
+                    event,
+                    DeviceEvent::RejectedWrite {
+                        address: 0xFFFF,
+                        ..
+                    }
+                ));
             }
             Err(e) => panic!("Expected a DeviceEvent, but channel was empty: {:?}", e),
         }
@@ -382,7 +408,9 @@ mod tests {
         device.reset();
         let received = rx.recv().unwrap();
         assert_eq!(received.category, LogCategory::Device);
-        assert_eq!(received.message, format!("{DEVICE_NAME}@0x{CTRL_REGISTER_ADDRESS:04x} reset"));
+        assert_eq!(
+            received.message,
+            format!("{DEVICE_NAME}@0x{CTRL_REGISTER_ADDRESS:04x} reset")
+        );
     }
-
 }

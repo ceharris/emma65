@@ -1,13 +1,13 @@
 //! Memory bus, address decoding, and bus tracing.
 
 mod interrupt;
-mod region;
 mod loader;
+mod region;
 pub mod symbol;
 
-use rand::RngExt;
 pub use interrupt::{DeviceInterruptState, InterruptController, IrqSource, MAX_IRQ_SOURCES};
 pub use loader::BusLoadTarget;
+use rand::RngExt;
 pub use region::{AddressRange, BusOp};
 pub use symbol::{SymbolSource, SymbolTable};
 
@@ -68,7 +68,6 @@ impl Region {
     }
 }
 
-
 impl From<IrqSource> for DeviceId {
     fn from(id: IrqSource) -> Self {
         DeviceId(id.0)
@@ -89,7 +88,6 @@ impl Default for DeviceIdAllocator {
 }
 
 impl DeviceIdAllocator {
-
     pub fn new() -> Self {
         Self {
             irq_sources: 0,
@@ -100,7 +98,10 @@ impl DeviceIdAllocator {
     // Returns the DeviceId that corresponds to an IRQ number
     pub fn for_irq(&mut self, irq: u32) -> Result<DeviceId, BusConfigError> {
         if irq >= MAX_IRQ_SOURCES {
-            return Err(BusConfigError::UndefinedIrq { actual: irq, max: MAX_IRQ_SOURCES - 1})
+            return Err(BusConfigError::UndefinedIrq {
+                actual: irq,
+                max: MAX_IRQ_SOURCES - 1,
+            });
         }
         let irq_mask = 1 << irq as u64;
         if self.irq_sources & irq_mask == 0 {
@@ -117,7 +118,6 @@ impl DeviceIdAllocator {
         self.next_other_id += 1;
         id
     }
-    
 }
 
 /// The configurable memory bus with RAM, ROM, and IO device regions.
@@ -204,14 +204,17 @@ impl Bus {
             Some(RegionMatch::Ram { data, offset }) => {
                 data[offset] = value;
             }
-            Some(RegionMatch::Rom { data, offset, write_policy: _write_policy }) => {
+            Some(RegionMatch::Rom {
+                data,
+                offset,
+                write_policy: _write_policy,
+            }) => {
                 data[offset] = value;
-            },
+            }
             Some(RegionMatch::Device { device, addr }) => {
                 device.patch(addr, value);
             }
-            None => {
-            }
+            None => {}
         };
     }
 
@@ -234,12 +237,14 @@ impl Bus {
     /// [`IoDevice::take_nmi`]), and `reset` drains its pending reset request (see
     /// [`IoDevice::take_reset`]).
     pub fn device_interrupt_states(&mut self) -> impl Iterator<Item = DeviceInterruptState> + '_ {
-        self.devices.iter_mut().map(|(id, device)| DeviceInterruptState {
-            id: *id,
-            irq_active: device.irq_active(),
-            nmi: device.take_nmi(),
-            reset: device.take_reset(),
-        })
+        self.devices
+            .iter_mut()
+            .map(|(id, device)| DeviceInterruptState {
+                id: *id,
+                irq_active: device.irq_active(),
+                nmi: device.take_nmi(),
+                reset: device.take_reset(),
+            })
     }
 
     /// Replaces the ROM data for the region starting at `range.start` with `data`.
@@ -252,8 +257,13 @@ impl Bus {
             return Err(BusError::Unmapped { addr: range.start });
         }
         for region in &mut self.regions {
-            if let Region::Rom { range: r, data: rom_data, .. } = region
-                && *r == range {
+            if let Region::Rom {
+                range: r,
+                data: rom_data,
+                ..
+            } = region
+                && *r == range
+            {
                 rom_data.copy_from_slice(data);
                 return Ok(());
             }
@@ -288,15 +298,25 @@ impl Bus {
 
     fn find_region_mut(&mut self, addr: u16) -> Option<RegionMatch<'_>> {
         let idx = self.find_region_index(addr)?;
-        let Bus { regions, devices, .. } = self;
+        let Bus {
+            regions, devices, ..
+        } = self;
         match &mut regions[idx] {
             Region::Ram { range, data } => {
                 let offset = (addr - range.start) as usize;
                 Some(RegionMatch::Ram { data, offset })
             }
-            Region::Rom { range, data, write_policy } => {
+            Region::Rom {
+                range,
+                data,
+                write_policy,
+            } => {
                 let offset = (addr - range.start) as usize;
-                Some(RegionMatch::Rom { data, offset, write_policy: *write_policy })
+                Some(RegionMatch::Rom {
+                    data,
+                    offset,
+                    write_policy: *write_policy,
+                })
             }
             Region::Device { device_index, .. } => Some(RegionMatch::Device {
                 device: devices[*device_index].1.as_mut(),
@@ -304,7 +324,7 @@ impl Bus {
             }),
         }
     }
-    
+
     /// Returns a reference to the symbol table for this bus.
     pub fn symbol_table(&self) -> &SymbolTable {
         &self.symbol_table
@@ -314,7 +334,6 @@ impl Bus {
     pub fn symbol_table_mut(&mut self) -> &mut SymbolTable {
         &mut self.symbol_table
     }
-
 }
 
 impl Drop for Bus {
@@ -340,9 +359,19 @@ enum PeekMatch<'a> {
 }
 
 enum RegionMatch<'a> {
-    Ram { data: &'a mut Vec<u8>, offset: usize },
-    Rom { data: &'a mut Vec<u8>, offset: usize, write_policy: RomWritePolicy },
-    Device { device: &'a mut dyn IoDevice, addr: u16 },
+    Ram {
+        data: &'a mut Vec<u8>,
+        offset: usize,
+    },
+    Rom {
+        data: &'a mut Vec<u8>,
+        offset: usize,
+        write_policy: RomWritePolicy,
+    },
+    Device {
+        device: &'a mut dyn IoDevice,
+        addr: u16,
+    },
 }
 
 /// Builder for constructing a `Bus`.
@@ -400,10 +429,17 @@ impl BusConfig {
     }
 
     /// Maps a RAM region over `range`, filling each cell with the specified value.
-    pub fn ram_with_fill(mut self, range: AddressRange, fill_value: u8) -> Result<Self, BusConfigError> {
+    pub fn ram_with_fill(
+        mut self,
+        range: AddressRange,
+        fill_value: u8,
+    ) -> Result<Self, BusConfigError> {
         self.check_overlap(range)?;
         let len = range.len() as usize;
-        self.regions.push(Region::Ram { range, data: vec![fill_value; len] });
+        self.regions.push(Region::Ram {
+            range,
+            data: vec![fill_value; len],
+        });
         Ok(self)
     }
 
@@ -411,7 +447,11 @@ impl BusConfig {
     ///
     /// Unlike `rom()`, writes to this region succeed normally after construction.
     /// `data.len()` must equal `range.len()`.
-    pub fn ram_with_data(mut self, range: AddressRange, data: Vec<u8>) -> Result<Self, BusConfigError> {
+    pub fn ram_with_data(
+        mut self,
+        range: AddressRange,
+        data: Vec<u8>,
+    ) -> Result<Self, BusConfigError> {
         let expected = range.len() as usize;
         if data.len() != expected {
             return Err(BusConfigError::RomSizeMismatch {
@@ -439,7 +479,11 @@ impl BusConfig {
         }
         self.check_overlap(range)?;
         let write_policy = self.rom_write_policy;
-        self.regions.push(Region::Rom { range, data, write_policy });
+        self.regions.push(Region::Rom {
+            range,
+            data,
+            write_policy,
+        });
         Ok(self)
     }
 
@@ -453,27 +497,41 @@ impl BusConfig {
         id: DeviceId,
         device: Box<dyn IoDevice>,
     ) -> Result<Self, BusConfigError> {
-        if self.devices.iter().any(|(existing_id, _)| *existing_id == id) {
+        if self
+            .devices
+            .iter()
+            .any(|(existing_id, _)| *existing_id == id)
+        {
             return Err(BusConfigError::DuplicateDeviceId(id));
         }
         self.check_overlap(range)?;
         let device_index = self.devices.len();
         self.devices.push((id, device));
-        self.regions.push(Region::Device { range, device_index });
+        self.regions.push(Region::Device {
+            range,
+            device_index,
+        });
         Ok(self)
     }
 
     /// Maps an additional region over `range` for a device already registered via `device()`.
     ///
     /// Returns `BusConfigError::UnknownDeviceId` if `id` hasn't been registered yet.
-    pub fn extend_device(mut self, range: AddressRange, id: DeviceId) -> Result<Self, BusConfigError> {
+    pub fn extend_device(
+        mut self,
+        range: AddressRange,
+        id: DeviceId,
+    ) -> Result<Self, BusConfigError> {
         let device_index = self
             .devices
             .iter()
             .position(|(existing, _)| *existing == id)
             .ok_or(BusConfigError::UnknownDeviceId(id))?;
         self.check_overlap(range)?;
-        self.regions.push(Region::Device { range, device_index });
+        self.regions.push(Region::Device {
+            range,
+            device_index,
+        });
         Ok(self)
     }
 
@@ -482,7 +540,10 @@ impl BusConfig {
     ///
     /// Errors with [`BusConfigError::DuplicateVectorResolver`] if a resolver has already
     /// been installed — a system config may install at most one.
-    pub fn vector_resolver(mut self, resolver: Box<dyn VectorResolver>) -> Result<Self, BusConfigError> {
+    pub fn vector_resolver(
+        mut self,
+        resolver: Box<dyn VectorResolver>,
+    ) -> Result<Self, BusConfigError> {
         if self.vector_resolver.is_some() {
             return Err(BusConfigError::DuplicateVectorResolver);
         }
@@ -556,12 +617,13 @@ impl BusConfig {
             candidates.sort_by_key(|&idx| (regions[idx as usize].range().len(), idx));
 
             let addr = a as u16;
-            resolved[a] = candidates.iter().copied().find(|&idx| {
-                match &regions[idx as usize] {
+            resolved[a] = candidates
+                .iter()
+                .copied()
+                .find(|&idx| match &regions[idx as usize] {
                     Region::Device { device_index, .. } => devices[*device_index].1.claims(addr),
                     _ => true,
-                }
-            });
+                });
         }
 
         resolved.into_boxed_slice()
@@ -600,7 +662,11 @@ mod tests {
 
     impl MockDevice {
         fn new(address: u16, size: usize) -> Self {
-            Self { address, data: vec![0u8; size], read_count: 0 }
+            Self {
+                address,
+                data: vec![0u8; size],
+                read_count: 0,
+            }
         }
     }
 
@@ -688,11 +754,15 @@ mod tests {
 
     #[test]
     fn unmapped_error_policy() {
-        let mut bus = Bus::config()
-            .unmapped_policy(UnmappedPolicy::Error)
-            .build();
-        assert!(matches!(bus.read(0x1234), Err(BusError::Unmapped { addr: 0x1234 })));
-        assert!(matches!(bus.write(0x1234, 0x00), Err(BusError::Unmapped { addr: 0x1234 })));
+        let mut bus = Bus::config().unmapped_policy(UnmappedPolicy::Error).build();
+        assert!(matches!(
+            bus.read(0x1234),
+            Err(BusError::Unmapped { addr: 0x1234 })
+        ));
+        assert!(matches!(
+            bus.write(0x1234, 0x00),
+            Err(BusError::Unmapped { addr: 0x1234 })
+        ));
     }
 
     #[test]
@@ -700,9 +770,7 @@ mod tests {
         let mut table = SymbolTable::default();
         table.insert("foo".to_string(), 0xDEAD);
         table.insert("bar".to_string(), 0xBEEF);
-        let bus = Bus::config()
-            .symbol_table(&table)
-            .build();
+        let bus = Bus::config().symbol_table(&table).build();
         assert_eq!(bus.symbol_table.address_for("foo"), Some(0xDEAD));
         assert_eq!(bus.symbol_table.address_for("bar"), Some(0xBEEF));
     }
@@ -730,7 +798,10 @@ mod tests {
             .ram_with_fill(AddressRange::new(0x0000, 0x00FF), 0)
             .unwrap()
             .ram_with_fill(AddressRange::new(0x0000, 0x00FF), 0);
-        assert!(matches!(result, Err(BusConfigError::AmbiguousOverlap { .. })));
+        assert!(matches!(
+            result,
+            Err(BusConfigError::AmbiguousOverlap { .. })
+        ));
     }
 
     #[test]
@@ -753,7 +824,11 @@ mod tests {
         let mut dev = MockDevice::new(0xDF00, 16);
         dev.data[5] = 0x42;
         let mut bus = Bus::config()
-            .device(AddressRange::new(0xDF00, 0xDF0F), DeviceId(1), Box::new(dev))
+            .device(
+                AddressRange::new(0xDF00, 0xDF0F),
+                DeviceId(1),
+                Box::new(dev),
+            )
             .unwrap()
             .build();
         // Address 0xDF05 → offset 5 within the device.
@@ -832,16 +907,26 @@ mod tests {
     #[test]
     fn extend_device_errors_for_unknown_device_id() {
         let result = Bus::config().extend_device(AddressRange::new(0xFF00, 0xFF00), DeviceId(1));
-        assert!(matches!(result, Err(BusConfigError::UnknownDeviceId(DeviceId(1)))));
+        assert!(matches!(
+            result,
+            Err(BusConfigError::UnknownDeviceId(DeviceId(1)))
+        ));
     }
 
     #[test]
     fn extend_device_still_checks_overlap() {
         let result = Bus::config()
-            .device(AddressRange::new(0xDF00, 0xDF0F), DeviceId(1), Box::new(MockDevice::new(0xDF00, 16)))
+            .device(
+                AddressRange::new(0xDF00, 0xDF0F),
+                DeviceId(1),
+                Box::new(MockDevice::new(0xDF00, 16)),
+            )
             .unwrap()
             .extend_device(AddressRange::new(0xDF00, 0xDF0F), DeviceId(1));
-        assert!(matches!(result, Err(BusConfigError::AmbiguousOverlap { .. })));
+        assert!(matches!(
+            result,
+            Err(BusConfigError::AmbiguousOverlap { .. })
+        ));
     }
 
     #[test]
@@ -866,15 +951,18 @@ mod tests {
             .unwrap()
             .build();
         let new_data = vec![0xA5u8; 256];
-        bus.load_rom(AddressRange::new(0xC000, 0xC0FF), &new_data).unwrap();
+        bus.load_rom(AddressRange::new(0xC000, 0xC0FF), &new_data)
+            .unwrap();
         assert_eq!(bus.peek(0xC000).unwrap(), 0xA5);
     }
 
     #[test]
     fn rom_size_mismatch_error() {
-        let result = Bus::config()
-            .rom(AddressRange::new(0xC000, 0xC0FF), vec![0u8; 100]);
-        assert!(matches!(result, Err(BusConfigError::RomSizeMismatch { .. })));
+        let result = Bus::config().rom(AddressRange::new(0xC000, 0xC0FF), vec![0u8; 100]);
+        assert!(matches!(
+            result,
+            Err(BusConfigError::RomSizeMismatch { .. })
+        ));
     }
 
     #[test]
@@ -900,9 +988,11 @@ mod tests {
 
     #[test]
     fn ram_with_data_size_mismatch_error() {
-        let result = Bus::config()
-            .ram_with_data(AddressRange::new(0xC000, 0xC0FF), vec![0u8; 100]);
-        assert!(matches!(result, Err(BusConfigError::RomSizeMismatch { .. })));
+        let result = Bus::config().ram_with_data(AddressRange::new(0xC000, 0xC0FF), vec![0u8; 100]);
+        assert!(matches!(
+            result,
+            Err(BusConfigError::RomSizeMismatch { .. })
+        ));
     }
 
     // --- multi-region devices and conditional chip-select ---
@@ -912,7 +1002,11 @@ mod tests {
         let mut dev = MockDevice::new(0xDF00, 16);
         dev.data[5] = 0x42;
         let mut bus = Bus::config()
-            .device(AddressRange::new(0xDF00, 0xDF0F), DeviceId(1), Box::new(dev))
+            .device(
+                AddressRange::new(0xDF00, 0xDF0F),
+                DeviceId(1),
+                Box::new(dev),
+            )
             .unwrap()
             .build();
         // addr 0xDF05 - base_address() 0xDF00 = offset 5, via the default read_absolute/
@@ -999,7 +1093,10 @@ mod tests {
             .device(AddressRange::new(0x1234, 0x1234), DeviceId(1), declining)
             .unwrap()
             .build();
-        assert!(matches!(bus.read(0x1234), Err(BusError::Unmapped { addr: 0x1234 })));
+        assert!(matches!(
+            bus.read(0x1234),
+            Err(BusError::Unmapped { addr: 0x1234 })
+        ));
     }
 
     #[test]
@@ -1030,25 +1127,34 @@ mod tests {
     }
 
     impl IoDevice for CountingDevice {
-        fn read(&mut self, _offset: u16) -> u8 { 0 }
+        fn read(&mut self, _offset: u16) -> u8 {
+            0
+        }
         fn write(&mut self, _offset: u16, _value: u8) {}
-        fn peek(&self, _offset: u16) -> u8 { 0 }
+        fn peek(&self, _offset: u16) -> u8 {
+            0
+        }
         fn tick(&mut self, _cycles: u32) {
-            self.tick_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.tick_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
         fn reset(&mut self) {
-            self.reset_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.reset_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
         fn irq_active(&self) -> bool {
-            self.irq_active_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.irq_active_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             false
         }
         fn take_nmi(&mut self) -> bool {
-            self.take_nmi_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.take_nmi_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             false
         }
         fn take_reset(&mut self) -> bool {
-            self.take_reset_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.take_reset_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             false
         }
         fn identity_address(&self) -> u16 {
@@ -1101,8 +1207,15 @@ mod tests {
     }
 
     impl ClaimCountingDevice {
-        fn new(claims_result: bool, claims_calls: std::sync::Arc<std::sync::atomic::AtomicUsize>) -> Self {
-            Self { claims_result, claims_calls, value: 0 }
+        fn new(
+            claims_result: bool,
+            claims_calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        ) -> Self {
+            Self {
+                claims_result,
+                claims_calls,
+                value: 0,
+            }
         }
     }
 
@@ -1117,7 +1230,8 @@ mod tests {
             self.value
         }
         fn claims(&self, _addr: u16) -> bool {
-            self.claims_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.claims_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             self.claims_result
         }
         fn identity_address(&self) -> u16 {
@@ -1204,7 +1318,11 @@ mod tests {
         // The device's whole 16-byte region declines, so every address in it --
         // not just one spot-checked address -- must fall through to ROM.
         for addr in 0xC010..=0xC01F {
-            assert_eq!(bus.read(addr).unwrap(), 0xEA, "address {addr:#06x} should fall through to ROM");
+            assert_eq!(
+                bus.read(addr).unwrap(),
+                0xEA,
+                "address {addr:#06x} should fall through to ROM"
+            );
         }
     }
 
@@ -1212,9 +1330,15 @@ mod tests {
     fn device_id_allocator_next() {
         let mut allocator = DeviceIdAllocator::new();
         let id1 = allocator.next_available();
-        assert!(id1.0 >= MAX_IRQ_SOURCES, "must not be within range of IRQ source");
+        assert!(
+            id1.0 >= MAX_IRQ_SOURCES,
+            "must not be within range of IRQ source"
+        );
         let id2 = allocator.next_available();
-        assert!(id2.0 >= MAX_IRQ_SOURCES, "must not be within range of IRQ source");
+        assert!(
+            id2.0 >= MAX_IRQ_SOURCES,
+            "must not be within range of IRQ source"
+        );
         assert_ne!(id1, id2);
     }
 
@@ -1237,7 +1361,10 @@ mod tests {
     fn device_id_for_irq_duplicate() {
         let mut allocator = DeviceIdAllocator::new();
         assert!(matches!(allocator.for_irq(0), Ok(DeviceId(0))));
-        assert!(matches!(allocator.for_irq(0), Err(BusConfigError::DuplicateIrq(0))));
+        assert!(matches!(
+            allocator.for_irq(0),
+            Err(BusConfigError::DuplicateIrq(0))
+        ));
     }
 
     // --- vector resolver ---
@@ -1259,7 +1386,9 @@ mod tests {
             .vector_resolver(Box::new(IdentityVectorResolver))
             .unwrap()
             .vector_resolver(Box::new(IdentityVectorResolver));
-        assert!(matches!(result, Err(BusConfigError::DuplicateVectorResolver)));
+        assert!(matches!(
+            result,
+            Err(BusConfigError::DuplicateVectorResolver)
+        ));
     }
-
 }

@@ -22,14 +22,16 @@ impl<'a> BusLoadTarget<'a> {
 }
 
 impl<'a> LoadTarget for BusLoadTarget<'a> {
-
     /// Returns an error result if `data_len` exceeds the size of the bus address space
     /// (65536 bytes).
     fn check_fit(&self, data_len: usize) -> Result<(), LoadError> {
         if data_len + self.bias <= 0x10000 {
             Ok(())
         } else {
-            Err(LoadError::SizeMismatch { actual: data_len, expected: 0x10000 - self.bias })
+            Err(LoadError::SizeMismatch {
+                actual: data_len,
+                expected: 0x10000 - self.bias,
+            })
         }
     }
 
@@ -45,7 +47,10 @@ impl<'a> LoadTarget for BusLoadTarget<'a> {
             self.bus.patch(effective_offset as u16, data);
             Ok(())
         } else {
-            Err(LoadError::OutOfBounds { address: effective_offset, size: 1 })
+            Err(LoadError::OutOfBounds {
+                address: effective_offset,
+                size: 1,
+            })
         }
     }
 
@@ -62,7 +67,6 @@ impl<'a> LoadTarget for BusLoadTarget<'a> {
         }
         Ok(())
     }
-
 }
 
 #[cfg(test)]
@@ -71,7 +75,10 @@ mod tests {
     use crate::emulator::AddressRange;
 
     fn ram_bus() -> Bus {
-        Bus::config().ram_with_fill(AddressRange::new(0, 0xFFFF), 0).unwrap().build()
+        Bus::config()
+            .ram_with_fill(AddressRange::new(0, 0xFFFF), 0)
+            .unwrap()
+            .build()
     }
 
     fn load_target(bus: &mut Bus, bias: usize) -> BusLoadTarget<'_> {
@@ -159,5 +166,4 @@ mod tests {
         let mut target = load_target(&mut bus, 0x8000);
         target.write_slice(0, &mem).unwrap_err();
     }
-
 }

@@ -37,7 +37,11 @@ impl TraceDisassembler {
     /// against a one-time clone of `symbols` taken at construction — matching
     /// the labels in effect when the trace was recorded, not any later state.
     pub fn new(variant: CpuVariant, symbols: SymbolTable) -> Self {
-        Self { disassembler: Disassembler::new(variant), symbols, pending: None }
+        Self {
+            disassembler: Disassembler::new(variant),
+            symbols,
+            pending: None,
+        }
     }
 
     /// Feeds one trace record. Returns a completed line once an instruction's
@@ -78,7 +82,10 @@ impl TraceDisassembler {
             return None;
         }
         let pending = self.pending.take().unwrap();
-        Some(self.disassembler.build_line(pending.addr, pending.raw_bytes, &self.symbols))
+        Some(
+            self.disassembler
+                .build_line(pending.addr, pending.raw_bytes, &self.symbols),
+        )
     }
 }
 
@@ -157,7 +164,10 @@ impl TraceRowAssembler {
     /// Creates a new assembler for `variant`, resolving labels against a
     /// one-time clone of `symbols` taken at construction.
     pub fn new(variant: CpuVariant, symbols: SymbolTable) -> Self {
-        Self { disassembler: TraceDisassembler::new(variant, symbols), pending: None }
+        Self {
+            disassembler: TraceDisassembler::new(variant, symbols),
+            pending: None,
+        }
     }
 
     /// Feeds one trace record. Returns a completed row once its `Cycles`
@@ -167,8 +177,13 @@ impl TraceRowAssembler {
             TraceKind::Registers(regs) => {
                 // A new instruction has begun; drop any unfinished prior
                 // `PendingRow` (mirrors `TraceDisassembler`'s own behavior).
-                self.pending =
-                    Some(PendingRow { instr_id: rec.instr_id, regs, bus_ops: Vec::new(), line: None, cycles: None });
+                self.pending = Some(PendingRow {
+                    instr_id: rec.instr_id,
+                    regs,
+                    bus_ops: Vec::new(),
+                    line: None,
+                    cycles: None,
+                });
             }
             TraceKind::Read { addr, value } => {
                 if let Some(p) = self.pending.as_mut()
@@ -200,7 +215,11 @@ impl TraceRowAssembler {
             p.line = Some(line);
         }
 
-        if matches!(rec.kind, TraceKind::Cycles(_)) && self.pending.as_ref().is_some_and(|p| p.instr_id == rec.instr_id)
+        if matches!(rec.kind, TraceKind::Cycles(_))
+            && self
+                .pending
+                .as_ref()
+                .is_some_and(|p| p.instr_id == rec.instr_id)
         {
             return Self::complete(self.pending.take().unwrap());
         }
@@ -216,7 +235,13 @@ impl TraceRowAssembler {
     }
 
     fn complete(p: PendingRow) -> Option<TraceRow> {
-        Some(TraceRow { instr_id: p.instr_id, regs: p.regs, cycles: p.cycles, line: p.line?, bus_ops: p.bus_ops })
+        Some(TraceRow {
+            instr_id: p.instr_id,
+            regs: p.regs,
+            cycles: p.cycles,
+            line: p.line?,
+            bus_ops: p.bus_ops,
+        })
     }
 }
 
@@ -239,7 +264,11 @@ pub struct DisassemblingTraceCallback<C: TraceCallback, L: DisassemblyListener> 
 impl<C: TraceCallback, L: DisassemblyListener> DisassemblingTraceCallback<C, L> {
     /// Creates a new adapter wrapping `inner`, feeding reconstructed lines to `listener`.
     pub fn new(inner: C, disassembler: TraceDisassembler, listener: L) -> Self {
-        Self { inner, disassembler, listener }
+        Self {
+            inner,
+            disassembler,
+            listener,
+        }
     }
 }
 
@@ -278,7 +307,12 @@ mod tests {
         bus
     }
 
-    fn traced_records(variant: CpuVariant, start: u16, prog: &[u8], steps: usize) -> Vec<TraceRecord> {
+    fn traced_records(
+        variant: CpuVariant,
+        start: u16,
+        prog: &[u8],
+        steps: usize,
+    ) -> Vec<TraceRecord> {
         let mut bus = program_bus(start, prog);
         bus.write(0xFFFC, (start & 0xFF) as u8).unwrap();
         bus.write(0xFFFD, (start >> 8) as u8).unwrap();
@@ -290,7 +324,10 @@ mod tests {
         cpu.set_trace_callback(Some(Box::new(CapturingCallback(records.clone()))));
 
         for _ in 0..steps {
-            assert!(matches!(cpu.step(None, true), StepResult::Executed(_)), "expected instruction to execute");
+            assert!(
+                matches!(cpu.step(None, true), StepResult::Executed(_)),
+                "expected instruction to execute"
+            );
         }
 
         records.lock().unwrap().clone()
@@ -334,7 +371,10 @@ mod tests {
         bus.write(0xFFFC, 0x00).unwrap();
         bus.write(0xFFFD, 0x02).unwrap();
 
-        let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02).bus(bus).build().unwrap();
+        let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
+            .bus(bus)
+            .build()
+            .unwrap();
         cpu.reset().unwrap();
         let records = Arc::new(Mutex::new(Vec::new()));
         cpu.set_trace_callback(Some(Box::new(CapturingCallback(records.clone()))));
@@ -344,7 +384,10 @@ mod tests {
         // The instruction is only 2 bytes, but its execution reads the pointer
         // bytes at $10/$11 and the final data byte at $0300 — none of those
         // should be mistaken for opcode/operand bytes.
-        assert!(records.len() > 3, "test setup should have produced pointer/data reads to exclude");
+        assert!(
+            records.len() > 3,
+            "test setup should have produced pointer/data reads to exclude"
+        );
 
         let mut td = TraceDisassembler::new(CpuVariant::Wdc65C02, SymbolTable::new());
         let lines = feed_all(&mut td, &records);
@@ -367,7 +410,11 @@ mod tests {
         let mut td = TraceDisassembler::new(CpuVariant::Wdc65C02, SymbolTable::new());
         let lines = feed_all(&mut td, &records);
 
-        assert_eq!(lines.len(), 3, "the not-taken BEQ must still appear in the reconstructed trace");
+        assert_eq!(
+            lines.len(),
+            3,
+            "the not-taken BEQ must still appear in the reconstructed trace"
+        );
         assert!(lines[0].mnemonic == Mnemonic::Lda);
         assert!(lines[1].mnemonic == Mnemonic::Beq);
         assert_eq!(lines[1].raw_bytes, vec![0xF0, 0x02]);
@@ -407,14 +454,20 @@ mod tests {
         let records = traced_records(CpuVariant::Wdc65C02, 0x0200, prog, 3);
 
         let td = TraceDisassembler::new(CpuVariant::Wdc65C02, SymbolTable::new());
-        let mut adapter =
-            DisassemblingTraceCallback::new(RecordingCallback(Vec::new()), td, RecordingListener(Vec::new()));
+        let mut adapter = DisassemblingTraceCallback::new(
+            RecordingCallback(Vec::new()),
+            td,
+            RecordingListener(Vec::new()),
+        );
 
         for &rec in &records {
             adapter.record(rec);
         }
 
-        assert_eq!(adapter.inner.0, records, "every record should be forwarded to the inner callback, in order");
+        assert_eq!(
+            adapter.inner.0, records,
+            "every record should be forwarded to the inner callback, in order"
+        );
         assert_eq!(adapter.listener.0.len(), 3, "one line per instruction");
         assert!(adapter.listener.0[0].mnemonic == Mnemonic::Lda);
         assert!(adapter.listener.0[1].mnemonic == Mnemonic::Sta);
@@ -422,7 +475,10 @@ mod tests {
     }
 
     fn feed_all_rows(assembler: &mut TraceRowAssembler, records: &[TraceRecord]) -> Vec<TraceRow> {
-        records.iter().filter_map(|rec| assembler.feed(rec)).collect()
+        records
+            .iter()
+            .filter_map(|rec| assembler.feed(rec))
+            .collect()
     }
 
     #[test]
@@ -435,7 +491,10 @@ mod tests {
 
         assert_eq!(rows.len(), 3, "one row per instruction");
         assert!(rows[0].line.mnemonic == Mnemonic::Lda);
-        assert!(rows[0].cycles.is_some(), "cycles should be captured from the trailing Cycles record");
+        assert!(
+            rows[0].cycles.is_some(),
+            "cycles should be captured from the trailing Cycles record"
+        );
         assert!(rows[1].line.mnemonic == Mnemonic::Sta);
         assert!(rows[2].line.mnemonic == Mnemonic::Inx);
     }
@@ -452,7 +511,11 @@ mod tests {
         assert_eq!(row.line.raw_bytes, vec![0x8D, 0x00, 0x03]);
         // The 3 opcode/operand fetch reads are recorded as `Read` bus ops too;
         // the write to $0300 should also appear.
-        assert!(row.bus_ops.iter().any(|op| matches!(op, TraceBusOp::Write { addr: 0x0300, .. })));
+        assert!(
+            row.bus_ops
+                .iter()
+                .any(|op| matches!(op, TraceBusOp::Write { addr: 0x0300, .. }))
+        );
     }
 
     #[test]
@@ -468,12 +531,20 @@ mod tests {
 
         // Feed everything except the trailing `Cycles` record, simulating a
         // trace stream truncated mid-instruction.
-        let without_cycles: Vec<_> =
-            records.iter().filter(|r| !matches!(r.kind, TraceKind::Cycles(_))).copied().collect();
+        let without_cycles: Vec<_> = records
+            .iter()
+            .filter(|r| !matches!(r.kind, TraceKind::Cycles(_)))
+            .copied()
+            .collect();
         let rows = feed_all_rows(&mut assembler, &without_cycles);
-        assert!(rows.is_empty(), "no row should complete without a Cycles record");
+        assert!(
+            rows.is_empty(),
+            "no row should complete without a Cycles record"
+        );
 
-        let flushed = assembler.flush().expect("disassembly was already complete, so flush should recover it");
+        let flushed = assembler
+            .flush()
+            .expect("disassembly was already complete, so flush should recover it");
         assert!(flushed.line.mnemonic == Mnemonic::Lda);
         assert_eq!(flushed.cycles, None);
     }
@@ -488,7 +559,12 @@ mod tests {
         let trace_lines = feed_all(&mut td, &records);
 
         let reference_bus = program_bus(0x0200, prog);
-        let reference = Disassembler::new(CpuVariant::Wdc65C02).disassemble_range(&reference_bus, 0x0200, 0x0200, 4);
+        let reference = Disassembler::new(CpuVariant::Wdc65C02).disassemble_range(
+            &reference_bus,
+            0x0200,
+            0x0200,
+            4,
+        );
 
         assert_eq!(trace_lines.len(), reference.len());
         for (t, r) in trace_lines.iter().zip(reference.iter()) {

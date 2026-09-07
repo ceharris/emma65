@@ -38,20 +38,34 @@ pub struct Header {
 /// `display/src/protocol.rs::decode_header` and `led-matrix/src/protocol.rs::decode_header`.
 pub fn decode_header(bytes: &[u8]) -> Result<Header, String> {
     if bytes.len() != HEADER_LEN {
-        return Err(format!("header must be exactly {HEADER_LEN} bytes, got {}", bytes.len()));
+        return Err(format!(
+            "header must be exactly {HEADER_LEN} bytes, got {}",
+            bytes.len()
+        ));
     }
     if bytes[0..4] != MAGIC {
-        return Err(format!("bad magic {:?}, expected {:?}", &bytes[0..4], MAGIC));
+        return Err(format!(
+            "bad magic {:?}, expected {:?}",
+            &bytes[0..4],
+            MAGIC
+        ));
     }
     let version = bytes[4];
     if version != SUPPORTED_VERSION {
-        return Err(format!("unsupported protocol version {version}, expected {SUPPORTED_VERSION}"));
+        return Err(format!(
+            "unsupported protocol version {version}, expected {SUPPORTED_VERSION}"
+        ));
     }
     let columns = bytes[5];
     let rows = bytes[6];
     let background = Rgb24::new(bytes[7], bytes[8], bytes[9]);
     let foreground = Rgb24::new(bytes[10], bytes[11], bytes[12]);
-    Ok(Header { columns, rows, background, foreground })
+    Ok(Header {
+        columns,
+        rows,
+        background,
+        foreground,
+    })
 }
 
 /// A frame message's dimensions (spec §5), decoded from [`FRAME_DIMENSIONS_LEN`] bytes — read

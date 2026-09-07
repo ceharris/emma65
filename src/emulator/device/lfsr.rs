@@ -131,7 +131,13 @@ impl super::IoDevice for Lfsr16 {
         self.state = DEFAULT_STATE;
         self.latch = 0;
         self.seed_buf = 0;
-        log_msg!(self.log_sender, LogLevel::Info, LogCategory::Device, "{} reset", self.identity());
+        log_msg!(
+            self.log_sender,
+            LogLevel::Info,
+            LogCategory::Device,
+            "{} reset",
+            self.identity()
+        );
     }
 
     fn name(&self) -> &str {
@@ -151,7 +157,9 @@ mod tests {
     const BASE: u16 = 0xD000;
 
     fn step_device() -> Lfsr16 {
-        Lfsr16::new("lfsr").with_address(BASE).with_continuous(false)
+        Lfsr16::new("lfsr")
+            .with_address(BASE)
+            .with_continuous(false)
     }
 
     fn continuous_device() -> Lfsr16 {
@@ -212,9 +220,9 @@ mod tests {
     fn high_byte_latch_stable() {
         let mut dev = step_device();
         seed(&mut dev, 0x0001);
-        let lo = dev.read(BASE);        // advance → 0xB400, latch it
-        let hi1 = dev.read(BASE + 1);  // return latched high
-        let hi2 = dev.read(BASE + 1);  // still latched high — no advance
+        let lo = dev.read(BASE); // advance → 0xB400, latch it
+        let hi1 = dev.read(BASE + 1); // return latched high
+        let hi2 = dev.read(BASE + 1); // still latched high — no advance
         let hi3 = dev.read(BASE + 1);
         assert_eq!(lo, 0x00);
         assert_eq!(hi1, 0xB4);

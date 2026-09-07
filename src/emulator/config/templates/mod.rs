@@ -7,8 +7,8 @@
 pub(super) mod asset;
 mod ehbasic;
 mod lcd;
-mod rain;
 mod msbasic;
+mod rain;
 mod snake;
 mod taliforth;
 
@@ -95,7 +95,12 @@ pub struct UnknownTemplateError {
 impl Display for UnknownTemplateError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let ids: Vec<_> = TEMPLATES.iter().map(|t| t.id).collect();
-        write!(f, "unknown starter-profile template '{}' (available: {})", self.id, ids.join(", "))
+        write!(
+            f,
+            "unknown starter-profile template '{}' (available: {})",
+            self.id,
+            ids.join(", ")
+        )
     }
 }
 
@@ -149,7 +154,10 @@ mod tests {
     use super::*;
 
     fn temp_dest(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("emma65-templates-registry-test-{name}-{:?}", std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!(
+            "emma65-templates-registry-test-{name}-{:?}",
+            std::thread::current().id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }

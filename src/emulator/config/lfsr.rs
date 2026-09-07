@@ -54,7 +54,9 @@ impl FromStr for AdvanceMode {
         match s.to_ascii_lowercase().as_str() {
             "continuous" => Ok(AdvanceMode::Continuous),
             "step" => Ok(AdvanceMode::Step),
-            _ => Err(format!("invalid advance mode '{s}'; expected 'continuous' or 'step'")),
+            _ => Err(format!(
+                "invalid advance mode '{s}'; expected 'continuous' or 'step'"
+            )),
         }
     }
 }
@@ -77,16 +79,18 @@ struct LfsrAttributes {
 }
 
 impl DeviceModule for LfsrModule {
-
     fn name(&self) -> &'static str {
         "lfsr"
     }
 
-    async fn instantiate(&self, bus_config: BusConfig, address: u16,
-                         attributes: &HashMap<String, Value>, context: &InstantiationContext,
-                         id_allocator: Arc<Mutex<DeviceIdAllocator>>)
-            -> Result<BusConfig, DeviceModuleError> {
-
+    async fn instantiate(
+        &self,
+        bus_config: BusConfig,
+        address: u16,
+        attributes: &HashMap<String, Value>,
+        context: &InstantiationContext,
+        id_allocator: Arc<Mutex<DeviceIdAllocator>>,
+    ) -> Result<BusConfig, DeviceModuleError> {
         let attrs = Dict::from_iter(attributes.clone());
         let config: LfsrAttributes = figment::Figment::new()
             .merge(Serialized::defaults(attrs))
@@ -105,9 +109,12 @@ impl DeviceModule for LfsrModule {
             device.set_log_sender(sender.clone());
         }
 
-        bus_config.device(
-            AddressRange::new(address, address + (BUS_SIZE - 1)),
-            device_id, Box::new(device))
+        bus_config
+            .device(
+                AddressRange::new(address, address + (BUS_SIZE - 1)),
+                device_id,
+                Box::new(device),
+            )
             .map_err(DeviceModuleError::BusConfig)
     }
 }

@@ -16,7 +16,11 @@ cargo test                # run the library/binary test suite
 cargo test --workspace    # also run the debugger, display, led-matrix, and lcd-display crates' tests
 cargo test <name>         # run a single test by name (partial match)
 cargo clippy              # lint (covers the debugger, display, led-matrix, and lcd-display crates too — all are workspace members)
+cargo fmt --all           # format all Rust code in the workspace
 ```
+
+Run `cargo fmt --all` before pushing a branch or opening a PR that touches any Rust code — CI runs
+`cargo fmt --all -- --check` and fails the build on unformatted code.
 
 The debugger's frontend (`debugger/frontend/`) is a separate React/TypeScript/Vite project.
 Tauri invokes `npm run build` there automatically as part of `cargo tauri build` /

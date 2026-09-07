@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone)]
 pub struct Text<'a> {
     buf: &'a str,
@@ -7,7 +6,6 @@ pub struct Text<'a> {
 }
 
 impl<'a> Text<'a> {
-
     pub fn from(buf: &'a str) -> Self {
         Self {
             buf,
@@ -22,7 +20,7 @@ impl<'a> Text<'a> {
 
     pub fn advance(&mut self) -> Option<u8> {
         if self.is_at_end() {
-            return None
+            return None;
         }
         let c = self.buf.as_bytes()[self.current];
 
@@ -33,7 +31,7 @@ impl<'a> Text<'a> {
 
     pub fn peek(&self) -> Option<u8> {
         if self.is_at_end() {
-            return None
+            return None;
         }
         Some(self.buf.as_bytes()[self.current])
     }
@@ -48,9 +46,7 @@ impl<'a> Text<'a> {
         self.start = self.current;
         text
     }
-
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -90,5 +86,4 @@ mod tests {
         assert_eq!(t.advance(), Some(b'a'));
         assert!(t.is_at_end());
     }
-
 }

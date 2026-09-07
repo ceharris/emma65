@@ -1,8 +1,8 @@
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// A [`PathBuf`] that expands a leading `~/` to the user's home directory on
 /// construction. Both `FromStr` and `Deserialize` perform expansion, so paths
@@ -11,12 +11,10 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 pub struct ExpandedPathBuf(PathBuf);
 
 impl ExpandedPathBuf {
-
     /// Expands `~/` at the start of `s` to `$HOME/`, then wraps the result.
     pub fn new(s: &str) -> Self {
         ExpandedPathBuf(expand(s))
     }
-
 }
 
 impl Deref for ExpandedPathBuf {
@@ -77,7 +75,9 @@ fn expand(s: &str) -> PathBuf {
         if let Ok(home) = std::env::var("HOME") {
             return PathBuf::from(home).join(rest);
         }
-    } else if s == "~" && let Ok(home) = std::env::var("HOME") {
+    } else if s == "~"
+        && let Ok(home) = std::env::var("HOME")
+    {
         return PathBuf::from(home);
     }
     PathBuf::from(s)

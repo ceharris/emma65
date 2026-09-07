@@ -137,7 +137,11 @@ fn current_target(app: &AppHandle) -> String {
 /// queued, so the panel always renders the most recent state rather than catching up on stale
 /// ones. Ends (returns) once every `DisplayFrame` sender is dropped — the channel equivalent of
 /// the terminal bridge seeing EOF on its pipe (see `CharDisplay::shutdown`).
-pub async fn run_display_bridge(mut rx: mpsc::Receiver<DisplayFrame>, app: AppHandle, frame_rate_hz: Option<u32>) {
+pub async fn run_display_bridge(
+    mut rx: mpsc::Receiver<DisplayFrame>,
+    app: AppHandle,
+    frame_rate_hz: Option<u32>,
+) {
     let min_interval = frame_rate_hz
         .filter(|hz| *hz > 0)
         .map(|hz| Duration::from_secs_f64(1.0 / hz as f64))
@@ -165,13 +169,19 @@ fn show_detached_display(app: &AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window(DISPLAY_DETACHED_WINDOW_LABEL)
         .ok_or_else(|| "display-detached window not found".to_string())?;
-    let geometry = app.state::<crate::preferences::UiConfigState>().0.lock().unwrap().display_window_geometry;
+    let geometry = app
+        .state::<crate::preferences::UiConfigState>()
+        .0
+        .lock()
+        .unwrap()
+        .display_window_geometry;
     if let Some(geometry) = geometry {
         crate::preferences::apply_window_geometry(&window, &geometry);
     }
     window.show().map_err(|e| e.to_string())?;
     let _ = window.set_focus();
-    *app.state::<DisplayTargetWindow>().0.lock().unwrap() = DISPLAY_DETACHED_WINDOW_LABEL.to_string();
+    *app.state::<DisplayTargetWindow>().0.lock().unwrap() =
+        DISPLAY_DETACHED_WINDOW_LABEL.to_string();
     Ok(())
 }
 
@@ -199,9 +209,9 @@ pub fn detach_display(app: AppHandle) -> Result<(), String> {
 pub(crate) fn reattach_display(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(DISPLAY_DETACHED_WINDOW_LABEL) {
         let state = app.state::<crate::preferences::UiConfigState>();
-        if let Err(e) =
-            crate::preferences::save_window_geometry(&window, &state, |c, g| c.display_window_geometry = Some(g))
-        {
+        if let Err(e) = crate::preferences::save_window_geometry(&window, &state, |c, g| {
+            c.display_window_geometry = Some(g)
+        }) {
             eprintln!("Failed to save display window geometry: {e}");
         }
         let _ = window.hide();
@@ -227,7 +237,9 @@ pub fn attach_display(app: AppHandle) {
 /// it's ever actually detached this run — mirrors `terminal::install_detached_window` exactly,
 /// including the app-menu strip and the Wayland/GTK resizable-toggle workaround.
 pub(crate) fn install_detached_window(app: &AppHandle) {
-    let Some(window) = app.get_webview_window(DISPLAY_DETACHED_WINDOW_LABEL) else { return };
+    let Some(window) = app.get_webview_window(DISPLAY_DETACHED_WINDOW_LABEL) else {
+        return;
+    };
     let _ = window.remove_menu();
     let window_for_events = window.clone();
     let app_for_events = app.clone();

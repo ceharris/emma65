@@ -98,7 +98,6 @@ pub const ROM_START: usize = MEMORY_SIZE / 2;
 
 const MMUE_MASK: u8 = 0b10000000;
 
-
 /// A bank-switched memory module with a simple MMU (designed for the Finch SBC).
 pub struct Finch {
     /// Name of the device as it appears in configuration and CLI.
@@ -122,19 +121,23 @@ pub struct Finch {
 }
 
 impl Finch {
-
     /// Constructs a new `Finch` device.
     ///
     /// ## Arguments
     /// - `bank_register_address` - base address for the sixteen bank registers
     /// - `control_register_address` - address for the control register
     ///
-    pub fn new(name: &'static str, bank_register_address: u16, control_register_address: u16) -> Self {
+    pub fn new(
+        name: &'static str,
+        bank_register_address: u16,
+        control_register_address: u16,
+    ) -> Self {
         Self {
             name,
             bank_register_range: AddressRange::new(
                 bank_register_address,
-                bank_register_address + (NUM_SLOTS - 1) as u16),
+                bank_register_address + (NUM_SLOTS - 1) as u16,
+            ),
             control_register_address,
             write_policy: None,
             error_sender: None,
@@ -154,12 +157,18 @@ impl Finch {
     ///   to the size of memory (1024K)
     ///
     pub fn with_data(
-            name: &'static str,
-            bank_register_address: u16,
-            control_register_address: u16,
-            data: Vec<u8>) -> Self {
-        assert_eq!(data.len(), BANK_SIZE * NUM_BANKS,
-                   "data size {} does not match ROM size {}", data.len(), BANK_SIZE * NUM_BANKS);
+        name: &'static str,
+        bank_register_address: u16,
+        control_register_address: u16,
+        data: Vec<u8>,
+    ) -> Self {
+        assert_eq!(
+            data.len(),
+            BANK_SIZE * NUM_BANKS,
+            "data size {} does not match ROM size {}",
+            data.len(),
+            BANK_SIZE * NUM_BANKS
+        );
         let mut device = Finch::new(name, bank_register_address, control_register_address);
         device.data = data;
         device
@@ -183,7 +192,10 @@ impl Finch {
     fn report_rejected_write(&self, address: u16) {
         if let Some(sender) = &self.error_sender {
             use crate::emulator::device::DeviceEvent;
-            let _ = sender.send(DeviceEvent::RejectedWrite { device: self.identity(), address });
+            let _ = sender.send(DeviceEvent::RejectedWrite {
+                device: self.identity(),
+                address,
+            });
         }
     }
 
@@ -202,11 +214,9 @@ impl Finch {
         };
         (address as usize & ADDRESS_MASK) | (bank << (16 - SLOT_BITS))
     }
-
 }
 
 impl IoDevice for Finch {
-
     fn read(&mut self, address: u16) -> u8 {
         self.peek(address)
     }
@@ -256,13 +266,22 @@ impl IoDevice for Finch {
 
     fn reset(&mut self) {
         self.control_register &= !MMUE_MASK;
-        log_msg!(self.log_sender, LogLevel::Info, LogCategory::Device, "{} reset", self.identity());
+        log_msg!(
+            self.log_sender,
+            LogLevel::Info,
+            LogCategory::Device,
+            "{} reset",
+            self.identity()
+        );
     }
 
-    fn name(&self) -> &str { self.name }
+    fn name(&self) -> &str {
+        self.name
+    }
 
-    fn identity_address(&self) -> u16 { self.control_register_address }
-
+    fn identity_address(&self) -> u16 {
+        self.control_register_address
+    }
 }
 
 #[cfg(test)]
@@ -276,7 +295,7 @@ mod tests {
     const CTRL_REGISTER_ADDRESS: u16 = 0xFFD8;
 
     fn device() -> Finch {
-        let data: Vec<u8> = vec![0; BANK_SIZE*NUM_BANKS];
+        let data: Vec<u8> = vec![0; BANK_SIZE * NUM_BANKS];
         Finch::with_data(DEVICE_NAME, BANK_REGISTER_BASE, CTRL_REGISTER_ADDRESS, data)
     }
 
@@ -331,7 +350,7 @@ mod tests {
     fn peek_memory() {
         let mut device = device_with_mmu_configured();
         for i in 0..NUM_SLOTS {
-            let bank =  i + 128 - 8;
+            let bank = i + 128 - 8;
             let address = bank << (16 - SLOT_BITS);
             device.data[address] = i as u8;
         }
@@ -357,7 +376,10 @@ mod tests {
         device.reset();
         let received = rx.recv().unwrap();
         assert_eq!(received.category, LogCategory::Device);
-        assert_eq!(received.message, format!("{DEVICE_NAME}@0x{CTRL_REGISTER_ADDRESS:04x} reset"));
+        assert_eq!(
+            received.message,
+            format!("{DEVICE_NAME}@0x{CTRL_REGISTER_ADDRESS:04x} reset")
+        );
     }
 
     #[test]
@@ -414,7 +436,13 @@ mod tests {
 
         match rx.try_recv() {
             Ok(event) => {
-                assert!(matches!(event, DeviceEvent::RejectedWrite{ address: 0xFFFF, .. }));
+                assert!(matches!(
+                    event,
+                    DeviceEvent::RejectedWrite {
+                        address: 0xFFFF,
+                        ..
+                    }
+                ));
             }
             Err(e) => panic!("Expected a DeviceEvent, but channel was empty: {:?}", e),
         }
@@ -434,5 +462,4 @@ mod tests {
         device.patch(0xFFFF, 0);
         assert_eq!(device.data[0x87FFF], 0);
     }
-
 }

@@ -43,7 +43,12 @@ fn apply_unary(op_type: &UnaryOperatorType, v: Operand) -> Operand {
     }
 }
 
-fn apply_binary(op_type: &BinaryOperatorType, l: Operand, r: Operand, expr: &Expr) -> Result<Operand, Error> {
+fn apply_binary(
+    op_type: &BinaryOperatorType,
+    l: Operand,
+    r: Operand,
+    expr: &Expr,
+) -> Result<Operand, Error> {
     match op_type {
         BinaryOperatorType::Add => Ok(l.wrapping_add(r)),
         BinaryOperatorType::Subtract => Ok(l.wrapping_sub(r)),
@@ -67,14 +72,17 @@ fn division_by_zero(expr: &Expr) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::parser::Parser;
+    use super::*;
 
     fn no_symbols() -> HashMap<String, Operand> {
         HashMap::new()
     }
 
-    fn eval_source(source: &str, symbols: &HashMap<String, Operand>) -> Result<Option<Operand>, Error> {
+    fn eval_source(
+        source: &str,
+        symbols: &HashMap<String, Operand>,
+    ) -> Result<Option<Operand>, Error> {
         let mut parser = Parser::new(source).unwrap();
         let expr = parser.parse_expr().unwrap();
         evaluate(&expr, symbols)
@@ -124,7 +132,10 @@ mod tests {
     #[test]
     fn evaluate_unary_operators() {
         assert_eq!(eval_source("+1", &no_symbols()).unwrap(), Some(1));
-        assert_eq!(eval_source("-1", &no_symbols()).unwrap(), Some(1u32.wrapping_neg()));
+        assert_eq!(
+            eval_source("-1", &no_symbols()).unwrap(),
+            Some(1u32.wrapping_neg())
+        );
         assert_eq!(eval_source("!0", &no_symbols()).unwrap(), Some(1));
         assert_eq!(eval_source("!1", &no_symbols()).unwrap(), Some(0));
         assert_eq!(eval_source("~0", &no_symbols()).unwrap(), Some(!0u32));
@@ -149,9 +160,18 @@ mod tests {
 
     #[test]
     fn evaluate_binary_bitwise_and_shift() {
-        assert_eq!(eval_source("0xff & 0x0f", &no_symbols()).unwrap(), Some(0x0f));
-        assert_eq!(eval_source("0xf0 | 0x0f", &no_symbols()).unwrap(), Some(0xff));
-        assert_eq!(eval_source("0xff ^ 0x0f", &no_symbols()).unwrap(), Some(0xf0));
+        assert_eq!(
+            eval_source("0xff & 0x0f", &no_symbols()).unwrap(),
+            Some(0x0f)
+        );
+        assert_eq!(
+            eval_source("0xf0 | 0x0f", &no_symbols()).unwrap(),
+            Some(0xff)
+        );
+        assert_eq!(
+            eval_source("0xff ^ 0x0f", &no_symbols()).unwrap(),
+            Some(0xf0)
+        );
         assert_eq!(eval_source("1 << 4", &no_symbols()).unwrap(), Some(0x10));
         assert_eq!(eval_source("0x10 >> 4", &no_symbols()).unwrap(), Some(1));
     }
@@ -168,14 +188,26 @@ mod tests {
     fn evaluate_division_by_zero_is_error() {
         let result = eval_source("1 / 0", &no_symbols());
         assert!(result.is_err());
-        assert!(result.err().unwrap().to_string().contains("division by zero"));
+        assert!(
+            result
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("division by zero")
+        );
     }
 
     #[test]
     fn evaluate_remainder_by_zero_is_error() {
         let result = eval_source("1 % 0", &no_symbols());
         assert!(result.is_err());
-        assert!(result.err().unwrap().to_string().contains("division by zero"));
+        assert!(
+            result
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("division by zero")
+        );
     }
 
     #[test]

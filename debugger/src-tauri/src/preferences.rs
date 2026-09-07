@@ -58,7 +58,11 @@ pub struct SymbolsColumnWidths {
 
 impl Default for SymbolsColumnWidths {
     fn default() -> Self {
-        Self { name: default_symbols_name_width(), address: default_symbols_address_width(), source: default_symbols_source_width() }
+        Self {
+            name: default_symbols_name_width(),
+            address: default_symbols_address_width(),
+            source: default_symbols_source_width(),
+        }
     }
 }
 
@@ -328,7 +332,10 @@ pub struct TerminalCompatibilityPreferences {
 
 impl Default for TerminalCompatibilityPreferences {
     fn default() -> Self {
-        Self { backspace_key: default_backspace_key(), delete_key: default_delete_key() }
+        Self {
+            backspace_key: default_backspace_key(),
+            delete_key: default_delete_key(),
+        }
     }
 }
 
@@ -360,7 +367,8 @@ pub fn load_ui_config_from(dir: &Path) -> UiConfig {
 /// Writes `config` to `ui.toml` under `dir`, creating the directory if it doesn't exist.
 fn save_ui_config_to(dir: &Path, config: &UiConfig) -> Result<(), String> {
     fs::create_dir_all(dir).map_err(|e| format!("Failed to create config directory: {e}"))?;
-    let contents = toml::to_string(config).map_err(|e| format!("Failed to serialize UI config: {e}"))?;
+    let contents =
+        toml::to_string(config).map_err(|e| format!("Failed to serialize UI config: {e}"))?;
     fs::write(dir.join("ui.toml"), contents).map_err(|e| format!("Failed to write UI config: {e}"))
 }
 
@@ -411,7 +419,9 @@ pub fn save_window_geometry(
     state: &UiConfigState,
     setter: impl FnOnce(&mut UiConfig, WindowGeometry),
 ) -> Result<(), String> {
-    let Some(geometry) = capture_window_geometry(window) else { return Ok(()) };
+    let Some(geometry) = capture_window_geometry(window) else {
+        return Ok(());
+    };
     let config = {
         let mut guard = state.0.lock().unwrap();
         setter(&mut guard, geometry);
@@ -429,7 +439,11 @@ pub fn get_theme(state: State<UiConfigState>) -> ThemeMode {
 /// Updates the theme mode, persists it to `~/.emma/debugger/config/ui.toml`,
 /// and notifies all windows.
 #[tauri::command]
-pub fn set_theme(mode: ThemeMode, state: State<UiConfigState>, app: AppHandle) -> Result<(), String> {
+pub fn set_theme(
+    mode: ThemeMode,
+    state: State<UiConfigState>,
+    app: AppHandle,
+) -> Result<(), String> {
     let config = {
         let mut guard = state.0.lock().unwrap();
         guard.theme = mode;
@@ -450,7 +464,10 @@ pub fn get_terminal_preferences(state: State<UiConfigState>) -> TerminalPreferen
 /// Replaces the terminal's configured preferences wholesale and persists them
 /// to `~/.emma/debugger/config/ui.toml`.
 #[tauri::command]
-pub fn set_terminal_preferences(preferences: TerminalPreferences, state: State<UiConfigState>) -> Result<(), String> {
+pub fn set_terminal_preferences(
+    preferences: TerminalPreferences,
+    state: State<UiConfigState>,
+) -> Result<(), String> {
     let config = {
         let mut guard = state.0.lock().unwrap();
         guard.terminal_preferences = preferences;
@@ -469,7 +486,10 @@ pub fn get_symbols_column_widths(state: State<UiConfigState>) -> SymbolsColumnWi
 /// `~/.emma/debugger/config/ui.toml`. Called once a column-resize drag ends
 /// (`SymbolsPanel.tsx`), not on every drag-move tick.
 #[tauri::command]
-pub fn set_symbols_column_widths(widths: SymbolsColumnWidths, state: State<UiConfigState>) -> Result<(), String> {
+pub fn set_symbols_column_widths(
+    widths: SymbolsColumnWidths,
+    state: State<UiConfigState>,
+) -> Result<(), String> {
     let config = {
         let mut guard = state.0.lock().unwrap();
         guard.symbols_column_widths = widths;
@@ -521,7 +541,10 @@ pub fn set_last_file_dialog_dir(path: String, state: State<UiConfigState>) -> Re
 /// Returns the parent directory of `path` as an owned `String`, or `None`
 /// if `path` has no parent (e.g. it's a bare filename or the root).
 fn parent_dir_string(path: &str) -> Option<String> {
-    Path::new(path).parent().map(|p| p.to_string_lossy().into_owned()).filter(|p| !p.is_empty())
+    Path::new(path)
+        .parent()
+        .map(|p| p.to_string_lossy().into_owned())
+        .filter(|p| !p.is_empty())
 }
 
 #[cfg(test)]
@@ -531,7 +554,10 @@ mod tests {
     #[test]
     fn round_trips_all_theme_modes() {
         for mode in [ThemeMode::Auto, ThemeMode::Dark, ThemeMode::Light] {
-            let config = UiConfig { theme: mode, ..Default::default() };
+            let config = UiConfig {
+                theme: mode,
+                ..Default::default()
+            };
             let serialized = toml::to_string(&config).unwrap();
             let deserialized: UiConfig = toml::from_str(&serialized).unwrap();
             assert_eq!(deserialized.theme, mode);
@@ -552,7 +578,10 @@ mod tests {
 
     #[test]
     fn round_trips_skip_exit_confirmation() {
-        let config = UiConfig { skip_exit_confirmation: true, ..Default::default() };
+        let config = UiConfig {
+            skip_exit_confirmation: true,
+            ..Default::default()
+        };
         let serialized = toml::to_string(&config).unwrap();
         let deserialized: UiConfig = toml::from_str(&serialized).unwrap();
         assert!(deserialized.skip_exit_confirmation);
@@ -573,8 +602,19 @@ mod tests {
 
     #[test]
     fn round_trips_window_geometry() {
-        let geometry = WindowGeometry { x: 100, y: 50, width: 1650, height: 1000, maximized: false, fullscreen: true };
-        let config = UiConfig { main_window_geometry: Some(geometry), terminal_window_geometry: Some(geometry), ..Default::default() };
+        let geometry = WindowGeometry {
+            x: 100,
+            y: 50,
+            width: 1650,
+            height: 1000,
+            maximized: false,
+            fullscreen: true,
+        };
+        let config = UiConfig {
+            main_window_geometry: Some(geometry),
+            terminal_window_geometry: Some(geometry),
+            ..Default::default()
+        };
         let serialized = toml::to_string(&config).unwrap();
         let deserialized: UiConfig = toml::from_str(&serialized).unwrap();
         assert_eq!(deserialized.main_window_geometry, Some(geometry));
@@ -588,19 +628,35 @@ mod tests {
         assert_eq!(config.terminal_preferences.text.scrollback, 1000);
         assert_eq!(config.terminal_preferences.text.font_family, None);
         assert_eq!(config.terminal_preferences.text.font_size, None);
-        assert_eq!(config.terminal_preferences.cursor.active_shape, CursorShape::Block);
-        assert_eq!(config.terminal_preferences.cursor.inactive_shape, CursorInactiveShape::Outline);
+        assert_eq!(
+            config.terminal_preferences.cursor.active_shape,
+            CursorShape::Block
+        );
+        assert_eq!(
+            config.terminal_preferences.cursor.inactive_shape,
+            CursorInactiveShape::Outline
+        );
         assert!(!config.terminal_preferences.cursor.blink);
-        assert_eq!(config.terminal_preferences.compatibility.backspace_key, TerminalKeyAction::Del);
-        assert_eq!(config.terminal_preferences.compatibility.delete_key, TerminalKeyAction::Dch);
+        assert_eq!(
+            config.terminal_preferences.compatibility.backspace_key,
+            TerminalKeyAction::Del
+        );
+        assert_eq!(
+            config.terminal_preferences.compatibility.delete_key,
+            TerminalKeyAction::Dch
+        );
     }
 
     #[test]
     fn defaults_terminal_preferences_fields_when_partially_specified() {
-        let config: UiConfig = toml::from_str("[terminal_preferences.text]\nscrollback = 5000\n").unwrap();
+        let config: UiConfig =
+            toml::from_str("[terminal_preferences.text]\nscrollback = 5000\n").unwrap();
         assert_eq!(config.terminal_preferences.text.scrollback, 5000);
         assert_eq!(config.terminal_preferences.text.font_family, None);
-        assert_eq!(config.terminal_preferences.cursor.active_shape, CursorShape::Block);
+        assert_eq!(
+            config.terminal_preferences.cursor.active_shape,
+            CursorShape::Block
+        );
     }
 
     #[test]
@@ -627,7 +683,10 @@ mod tests {
                 delete_key: TerminalKeyAction::Del,
             },
         };
-        let config = UiConfig { terminal_preferences: preferences.clone(), ..Default::default() };
+        let config = UiConfig {
+            terminal_preferences: preferences.clone(),
+            ..Default::default()
+        };
         let serialized = toml::to_string(&config).unwrap();
         let deserialized: UiConfig = toml::from_str(&serialized).unwrap();
         assert_eq!(deserialized.terminal_preferences, preferences);
@@ -635,10 +694,16 @@ mod tests {
 
     #[test]
     fn round_trips_last_file_dialog_dir() {
-        let config = UiConfig { last_file_dialog_dir: Some("/home/user/roms".to_string()), ..Default::default() };
+        let config = UiConfig {
+            last_file_dialog_dir: Some("/home/user/roms".to_string()),
+            ..Default::default()
+        };
         let serialized = toml::to_string(&config).unwrap();
         let deserialized: UiConfig = toml::from_str(&serialized).unwrap();
-        assert_eq!(deserialized.last_file_dialog_dir, Some("/home/user/roms".to_string()));
+        assert_eq!(
+            deserialized.last_file_dialog_dir,
+            Some("/home/user/roms".to_string())
+        );
     }
 
     #[test]
@@ -652,8 +717,15 @@ mod tests {
 
     #[test]
     fn round_trips_symbols_column_widths() {
-        let widths = SymbolsColumnWidths { name: 220, address: 80, source: 190 };
-        let config = UiConfig { symbols_column_widths: widths, ..Default::default() };
+        let widths = SymbolsColumnWidths {
+            name: 220,
+            address: 80,
+            source: 190,
+        };
+        let config = UiConfig {
+            symbols_column_widths: widths,
+            ..Default::default()
+        };
         let serialized = toml::to_string(&config).unwrap();
         let deserialized: UiConfig = toml::from_str(&serialized).unwrap();
         assert_eq!(deserialized.symbols_column_widths, widths);
@@ -661,8 +733,14 @@ mod tests {
 
     #[test]
     fn save_and_load_round_trip_via_tempdir() {
-        let dir = std::env::temp_dir().join(format!("emma65-preferences-test-{:?}", std::thread::current().id()));
-        let config = UiConfig { theme: ThemeMode::Light, ..Default::default() };
+        let dir = std::env::temp_dir().join(format!(
+            "emma65-preferences-test-{:?}",
+            std::thread::current().id()
+        ));
+        let config = UiConfig {
+            theme: ThemeMode::Light,
+            ..Default::default()
+        };
         save_ui_config_to(&dir, &config).unwrap();
         let loaded = load_ui_config_from(&dir);
         assert_eq!(loaded.theme, ThemeMode::Light);
@@ -671,7 +749,10 @@ mod tests {
 
     #[test]
     fn parent_dir_string_returns_containing_directory() {
-        assert_eq!(parent_dir_string("/some/dir/memory.bin"), Some("/some/dir".to_string()));
+        assert_eq!(
+            parent_dir_string("/some/dir/memory.bin"),
+            Some("/some/dir".to_string())
+        );
     }
 
     #[test]

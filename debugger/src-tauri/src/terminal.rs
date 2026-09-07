@@ -44,7 +44,9 @@ pub struct TerminalScaleFactorOverride(pub Option<f64>);
 /// `getCurrentWindow().scaleFactor()` when converting a CSS-px terminal grid
 /// size to a Tauri `LogicalSize` for the detached window's `setSize()`.
 #[tauri::command]
-pub fn get_terminal_scale_factor_override(state: State<TerminalScaleFactorOverride>) -> Option<f64> {
+pub fn get_terminal_scale_factor_override(
+    state: State<TerminalScaleFactorOverride>,
+) -> Option<f64> {
     state.0
 }
 
@@ -83,7 +85,10 @@ fn append_history(history: &TerminalHistory, bytes: &[u8]) {
 pub async fn run_terminal_bridge(rx: File, app: AppHandle) {
     let async_rx = match AsyncFd::new(rx) {
         Ok(fd) => fd,
-        Err(e) => { eprintln!("terminal bridge: AsyncFd::new failed: {e}"); return; }
+        Err(e) => {
+            eprintln!("terminal bridge: AsyncFd::new failed: {e}");
+            return;
+        }
     };
     let mut buf = [0u8; 256];
     loop {
@@ -114,7 +119,11 @@ pub async fn run_terminal_bridge(rx: File, app: AppHandle) {
 
 /// Reads the current `terminal-output` target window's label.
 fn current_target(app: &AppHandle) -> String {
-    app.state::<TerminalTargetWindow>().0.lock().unwrap().clone()
+    app.state::<TerminalTargetWindow>()
+        .0
+        .lock()
+        .unwrap()
+        .clone()
 }
 
 /// Tauri command: called by a terminal panel right after it mounts (the
@@ -148,13 +157,19 @@ fn show_detached_terminal(app: &AppHandle) -> Result<(), String> {
     // Apply the last-known geometry (issue #419) before showing, so the
     // window reappears where the user left it rather than at
     // tauri.conf.json's static default.
-    let geometry = app.state::<crate::preferences::UiConfigState>().0.lock().unwrap().terminal_window_geometry;
+    let geometry = app
+        .state::<crate::preferences::UiConfigState>()
+        .0
+        .lock()
+        .unwrap()
+        .terminal_window_geometry;
     if let Some(geometry) = geometry {
         crate::preferences::apply_window_geometry(&window, &geometry);
     }
     window.show().map_err(|e| e.to_string())?;
     let _ = window.set_focus();
-    *app.state::<TerminalTargetWindow>().0.lock().unwrap() = TERMINAL_DETACHED_WINDOW_LABEL.to_string();
+    *app.state::<TerminalTargetWindow>().0.lock().unwrap() =
+        TERMINAL_DETACHED_WINDOW_LABEL.to_string();
     // The detached window's own `TerminalPanel` is mounted exactly once,
     // when this statically-declared (see `install_detached_window`) window's
     // hidden webview first loads at app startup — unlike the docked panel,
@@ -213,9 +228,9 @@ pub(crate) fn reattach_terminal(app: &AppHandle) {
         // to where the user last left it rather than the stale value (or
         // none) from before this detach cycle.
         let state = app.state::<crate::preferences::UiConfigState>();
-        if let Err(e) =
-            crate::preferences::save_window_geometry(&window, &state, |c, g| c.terminal_window_geometry = Some(g))
-        {
+        if let Err(e) = crate::preferences::save_window_geometry(&window, &state, |c, g| {
+            c.terminal_window_geometry = Some(g)
+        }) {
             eprintln!("Failed to save terminal window geometry: {e}");
         }
         let _ = window.hide();
@@ -252,7 +267,9 @@ pub fn attach_terminal(app: AppHandle) {
 /// Wayland decoration-hit-test workaround for windows that get hidden/shown
 /// repeatedly (see the "Wayland/GTK window quirks" project notes).
 pub(crate) fn install_detached_window(app: &AppHandle) {
-    let Some(window) = app.get_webview_window(TERMINAL_DETACHED_WINDOW_LABEL) else { return };
+    let Some(window) = app.get_webview_window(TERMINAL_DETACHED_WINDOW_LABEL) else {
+        return;
+    };
     let _ = window.remove_menu();
     let window_for_events = window.clone();
     let app_for_events = app.clone();
@@ -309,4 +326,3 @@ mod tests {
         assert_eq!(&buf[buf.len() - 3..], b"bcd");
     }
 }
-

@@ -2,8 +2,8 @@
 
 use tauri::State;
 
-use crate::disassembly::LiveSnapshotRx;
 use crate::CpuState;
+use crate::disassembly::LiveSnapshotRx;
 
 /// Stack snapshot returned to the frontend.
 ///
@@ -29,13 +29,21 @@ pub fn get_stack(
     if let Some(cpu) = guard.as_ref() {
         let s = cpu.registers().s;
         let mut page = vec![0u8; 256];
-        cpu.bus().peek_range(0x0100, &mut page).map_err(|e| e.to_string())?;
+        cpu.bus()
+            .peek_range(0x0100, &mut page)
+            .map_err(|e| e.to_string())?;
         return Ok(StackSnapshot { s, page });
     }
     // CPU is free-running — read from the live snapshot channel.
-    let live = live_snapshot_rx.0.lock().unwrap()
+    let live = live_snapshot_rx
+        .0
+        .lock()
+        .unwrap()
         .as_ref()
         .and_then(|rx| rx.borrow().clone())
         .ok_or("CPU not ready")?;
-    Ok(StackSnapshot { s: live.registers.s, page: live.stack_page })
+    Ok(StackSnapshot {
+        s: live.registers.s,
+        page: live.stack_page,
+    })
 }

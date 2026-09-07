@@ -24,7 +24,6 @@ pub(crate) struct InputBuffer {
 }
 
 impl InputBuffer {
-
     /// Creates a new, empty `InputBuffer` with no break key configured.
     pub fn new() -> Self {
         Self {
@@ -93,7 +92,9 @@ impl InputBuffer {
     /// configured break key, the latch is set to it, the ring is drained, and the interrupt flag
     /// is set; otherwise the byte is appended to the ring.
     pub fn push(&mut self, byte: u8) {
-        if let Some(break_key) = self.break_key && byte == break_key {
+        if let Some(break_key) = self.break_key
+            && byte == break_key
+        {
             self.latch = byte;
             self.ring.clear();
             self.interrupt_flag = true;
@@ -114,13 +115,12 @@ impl InputBuffer {
     pub fn irq_active(&self) -> bool {
         self.interrupt_flag
     }
-
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::ring::RING_CAPACITY;
+    use super::*;
 
     #[test]
     fn read_data_resets_interrupt_flag() {
@@ -292,5 +292,4 @@ mod tests {
         assert!(buf.ring.is_empty(), "reset must clear the ring");
         assert!(!buf.irq_active(), "reset must clear the interrupt flag");
     }
-
 }

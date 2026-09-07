@@ -44,7 +44,7 @@ impl PartialEq<TokenType> for &TokenType {
             (TokenType::Number(n), TokenType::Number(other_n)) => n == other_n,
             (TokenType::Symbol(s), TokenType::Symbol(other_s)) => s == other_s,
             (TokenType::String(s), TokenType::String(other_s)) => s == other_s,
-            _ => mem::discriminant(*self) == mem::discriminant(other)
+            _ => mem::discriminant(*self) == mem::discriminant(other),
         }
     }
 }
@@ -56,12 +56,12 @@ pub struct Token<'a> {
     pub location: Location,
 }
 
-
 impl<'a> Token<'a> {
-
     pub fn from(token_type: TokenType, text: &'a str, line: usize, column: usize) -> Self {
         Token {
-            token_type, text, location: Location::from(line, column)
+            token_type,
+            text,
+            location: Location::from(line, column),
         }
     }
 
@@ -72,8 +72,6 @@ impl<'a> Token<'a> {
     pub fn text(&self) -> &'a str {
         self.text
     }
-
-
 }
 
 #[cfg(test)]
@@ -86,10 +84,21 @@ mod tests {
         assert_ne!(TokenType::Amper, TokenType::Bang);
         assert_eq!(TokenType::Number(42), TokenType::Number(42));
         assert_ne!(TokenType::Number(42), TokenType::Number(24));
-        assert_eq!(TokenType::Symbol(String::from("foo")), TokenType::Symbol(String::from("foo")));
-        assert_ne!(TokenType::Symbol(String::from("foo")), TokenType::Symbol(String::from("bar")));
-        assert_eq!(TokenType::String(String::from("hello")), TokenType::String(String::from("hello")));
-        assert_ne!(TokenType::String(String::from("hello")), TokenType::String(String::from("world")));
+        assert_eq!(
+            TokenType::Symbol(String::from("foo")),
+            TokenType::Symbol(String::from("foo"))
+        );
+        assert_ne!(
+            TokenType::Symbol(String::from("foo")),
+            TokenType::Symbol(String::from("bar"))
+        );
+        assert_eq!(
+            TokenType::String(String::from("hello")),
+            TokenType::String(String::from("hello"))
+        );
+        assert_ne!(
+            TokenType::String(String::from("hello")),
+            TokenType::String(String::from("world"))
+        );
     }
-
 }

@@ -1,5 +1,7 @@
 use crate::emulator::device::protocol::ProtocolMessageDecoder;
-use crate::emulator::device::protocol::{DecoderSupplier, EncoderSupplier, ProtocolMessageEncoder, ProtocolMessageEncoding};
+use crate::emulator::device::protocol::{
+    DecoderSupplier, EncoderSupplier, ProtocolMessageEncoder, ProtocolMessageEncoding,
+};
 use crate::emulator::{ChannelRelay, Transport, TransportEvent};
 
 /// Per-connection decode state. Encoding is stateless across connections
@@ -15,10 +17,11 @@ struct ProtocolSlot<T> {
 }
 
 impl<T> ProtocolSlot<T> {
-
-    fn new(client_tag: u8,
-           encoding: ProtocolMessageEncoding,
-           decoder_supplier: DecoderSupplier<T>) -> Self {
+    fn new(
+        client_tag: u8,
+        encoding: ProtocolMessageEncoding,
+        decoder_supplier: DecoderSupplier<T>,
+    ) -> Self {
         let decoder = decoder_supplier(encoding);
         Self {
             client_tag,
@@ -30,7 +33,6 @@ impl<T> ProtocolSlot<T> {
     fn feed(&mut self, b: u8) -> Option<T> {
         self.decoder.feed(b)
     }
-
 }
 
 /// A protocol manager takes responsibility for relaying peripheral protocol
@@ -56,11 +58,13 @@ pub(crate) struct ProtocolManager<T> {
 }
 
 impl<T> ProtocolManager<T> {
-    pub fn new(encoding: ProtocolMessageEncoding,
-               transport: Box<dyn Transport>,
-               relay: ChannelRelay<TransportEvent>,
-               encoder_supplier: EncoderSupplier<T>,
-               decoder_supplier: DecoderSupplier<T>) -> Self {
+    pub fn new(
+        encoding: ProtocolMessageEncoding,
+        transport: Box<dyn Transport>,
+        relay: ChannelRelay<TransportEvent>,
+        encoder_supplier: EncoderSupplier<T>,
+        decoder_supplier: DecoderSupplier<T>,
+    ) -> Self {
         Self {
             encoding,
             transport,
@@ -178,7 +182,6 @@ impl<T> ProtocolManager<T> {
     fn find_slot(tag: u8, slots: &mut [ProtocolSlot<T>]) -> Option<&mut ProtocolSlot<T>> {
         slots.iter_mut().find(|s| s.client_tag == tag)
     }
-
 }
 
 #[cfg(test)]
@@ -200,7 +203,12 @@ mod tests {
         /// the transport itself gets moved into the `ProtocolManager`.
         fn new() -> (Self, Arc<Mutex<Vec<u8>>>) {
             let sent = Arc::new(Mutex::new(Vec::new()));
-            (Self { sent: Arc::clone(&sent) }, sent)
+            (
+                Self {
+                    sent: Arc::clone(&sent),
+                },
+                sent,
+            )
         }
     }
 
@@ -209,7 +217,9 @@ mod tests {
             self.sent.lock().unwrap().push(byte);
         }
 
-        fn is_connected(&self) -> bool { true }
+        fn is_connected(&self) -> bool {
+            true
+        }
 
         fn shutdown(&mut self) {}
     }
@@ -234,19 +244,24 @@ mod tests {
     impl ProtocolMessageDecoder<TwoByteMsg> for TwoByteDecoder {
         fn feed(&mut self, b: u8) -> Option<TwoByteMsg> {
             match self.first.take() {
-                None => { self.first = Some(b); None }
+                None => {
+                    self.first = Some(b);
+                    None
+                }
                 Some(first) => Some(TwoByteMsg(first, b)),
             }
         }
     }
 
-    fn two_byte_encoder(_encoding: ProtocolMessageEncoding)
-                        -> Box<dyn ProtocolMessageEncoder<TwoByteMsg>> {
+    fn two_byte_encoder(
+        _encoding: ProtocolMessageEncoding,
+    ) -> Box<dyn ProtocolMessageEncoder<TwoByteMsg>> {
         Box::new(TwoByteEncoder)
     }
 
-    fn two_byte_decoder(_encoding: ProtocolMessageEncoding)
-                        -> Box<dyn ProtocolMessageDecoder<TwoByteMsg>> {
+    fn two_byte_decoder(
+        _encoding: ProtocolMessageEncoding,
+    ) -> Box<dyn ProtocolMessageDecoder<TwoByteMsg>> {
         Box::new(TwoByteDecoder::default())
     }
 
@@ -263,8 +278,16 @@ mod tests {
         }
         let relay = ChannelRelay::spawn(rx, 256);
         std::thread::sleep(std::time::Duration::from_millis(20));
-        (ProtocolManager::new(ProtocolMessageEncoding::Binary, Box::new(transport), relay,
-                              two_byte_encoder, two_byte_decoder), sent)
+        (
+            ProtocolManager::new(
+                ProtocolMessageEncoding::Binary,
+                Box::new(transport),
+                relay,
+                two_byte_encoder,
+                two_byte_decoder,
+            ),
+            sent,
+        )
     }
 
     // --- Tests ---
@@ -309,7 +332,10 @@ mod tests {
 
         // drain_into has no partial-drain mode, so both completed messages
         // come back from a single call, in arrival order.
-        assert_eq!(mgr.poll_transport(&[]), vec![TwoByteMsg(0x01, 0x02), TwoByteMsg(0x10, 0x20)]);
+        assert_eq!(
+            mgr.poll_transport(&[]),
+            vec![TwoByteMsg(0x01, 0x02), TwoByteMsg(0x10, 0x20)]
+        );
     }
 
     #[test]
@@ -323,9 +349,9 @@ mod tests {
     fn disconnected_discards_slot_and_partial_state() {
         let (mut mgr, _sent) = manager(vec![
             TransportEvent::Connected(1),
-            TransportEvent::Data(1, 0x01),   // partial message, never completed
+            TransportEvent::Data(1, 0x01), // partial message, never completed
             TransportEvent::Disconnected(1),
-            TransportEvent::Connected(1),    // tag reused by a new connection
+            TransportEvent::Connected(1), // tag reused by a new connection
             TransportEvent::Data(1, 0x02),
             TransportEvent::Data(1, 0x03),
         ]);

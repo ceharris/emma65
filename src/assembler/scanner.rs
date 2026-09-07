@@ -10,8 +10,7 @@ pub struct Scanner<'a> {
     column: usize,
 }
 
-impl <'a> Scanner<'a> {
-
+impl<'a> Scanner<'a> {
     pub fn new(source: &'a str) -> Self {
         Self {
             source: Text::from(source),
@@ -54,17 +53,15 @@ impl <'a> Scanner<'a> {
                     self.source.skip();
                     self.column += 1;
                 }
-                Some(b';') => {
-                    loop {
-                        match self.source.peek() {
-                            Some(b'\n') | None => break,
-                            Some(_) => {
-                                self.source.skip();
-                                self.column += 1;
-                            }
+                Some(b';') => loop {
+                    match self.source.peek() {
+                        Some(b'\n') | None => break,
+                        Some(_) => {
+                            self.source.skip();
+                            self.column += 1;
                         }
                     }
-                }
+                },
                 Some(_) | None => break,
             }
         }
@@ -94,12 +91,12 @@ impl <'a> Scanner<'a> {
             b'&' => match self.source.peek() {
                 Some(b'&') => Ok(Some(self.advance_and_make_token(TokenType::AmperAmper))),
                 Some(_) | None => Ok(Some(self.make_token(TokenType::Amper))),
-            }
+            },
             b'!' => Ok(Some(self.make_token(TokenType::Bang))),
             b'|' => match self.source.peek() {
                 Some(b'|') => Ok(Some(self.advance_and_make_token(TokenType::BarBar))),
                 Some(_) | None => Ok(Some(self.make_token(TokenType::Bar))),
-            }
+            },
             b'>' => match self.source.peek() {
                 Some(b'>') => Ok(Some(self.advance_and_make_token(TokenType::GreaterGreater))),
                 Some(_) | None => Ok(Some(self.make_token(TokenType::Greater))),
@@ -107,7 +104,7 @@ impl <'a> Scanner<'a> {
             b'<' => match self.source.peek() {
                 Some(b'<') => Ok(Some(self.advance_and_make_token(TokenType::LesserLesser))),
                 Some(_) | None => Ok(Some(self.make_token(TokenType::Lesser))),
-            }
+            },
             b'.' => Self::optional(self.make_directive()),
             b'$' => Self::optional(self.make_hexadecimal_number()),
             b'"' => Self::optional(self.make_string_literal()),
@@ -115,7 +112,11 @@ impl <'a> Scanner<'a> {
             b'0' => Self::optional(self.make_prefixed_number()),
             b'1'..=b'9' => Self::optional(self.make_decimal_number(c)),
             b'_' | b'A'..=b'Z' | b'a'..=b'z' => Ok(Some(self.make_symbol(c))),
-            _ => Err(Error::from(self.line, self.column, "unrecognized character")),
+            _ => Err(Error::from(
+                self.line,
+                self.column,
+                "unrecognized character",
+            )),
         }
     }
 
@@ -141,7 +142,7 @@ impl <'a> Scanner<'a> {
                     self.source.advance();
                     name.push(c.unwrap() as char)
                 }
-                Some(_) | None => break
+                Some(_) | None => break,
             }
         }
         self.make_token(TokenType::Symbol(name))
@@ -150,7 +151,13 @@ impl <'a> Scanner<'a> {
     fn make_directive(&mut self) -> Result<Token<'a>, Error> {
         match self.source.peek() {
             Some(b'_') | Some(b'A'..=b'Z') | Some(b'a'..=b'z') => {}
-            Some(_) | None => return Err(Error::from(self.line, self.column, "expected directive name")),
+            Some(_) | None => {
+                return Err(Error::from(
+                    self.line,
+                    self.column,
+                    "expected directive name",
+                ));
+            }
         }
         let mut name = String::new();
         loop {
@@ -160,7 +167,7 @@ impl <'a> Scanner<'a> {
                     self.source.advance();
                     name.push(c.unwrap() as char)
                 }
-                Some(_) | None => break
+                Some(_) | None => break,
             }
         }
         Ok(self.make_token(TokenType::Directive(name)))
@@ -171,24 +178,20 @@ impl <'a> Scanner<'a> {
             Some(b'b') | Some(b'B') => {
                 self.source.advance();
                 self.make_binary_number()
-            },
+            }
             Some(b'o') | Some(b'O') | Some(b'q') | Some(b'Q') => {
                 self.source.advance();
                 self.make_octal_number()
-            },
+            }
             Some(b'x') | Some(b'X') => {
                 self.source.advance();
                 self.make_hexadecimal_number()
-            },
-            Some(b'1'..=b'9') => {
-                self.make_octal_number()
-            },
+            }
+            Some(b'1'..=b'9') => self.make_octal_number(),
             Some(b'A'..=b'Z') | Some(b'a'..=b'z') => {
                 Err(Error::from(self.line, self.column, "invalid number"))
             }
-            Some(_) | None => {
-                Ok(self.make_token(TokenType::Number(0)))
-            }
+            Some(_) | None => Ok(self.make_token(TokenType::Number(0))),
         }
     }
 
@@ -203,15 +206,15 @@ impl <'a> Scanner<'a> {
                     value = (value << 1) | digit;
                     count += 1;
                 }
-                Some(b'2'..=b'9') | Some(b'A'..=b'Z') | Some(b'a'..=b'z') =>
-                    return Err(Error::from(self.line, self.column, "invalid binary digit")),
+                Some(b'2'..=b'9') | Some(b'A'..=b'Z') | Some(b'a'..=b'z') => {
+                    return Err(Error::from(self.line, self.column, "invalid binary digit"));
+                }
                 Some(_) | None => break,
             }
         }
         if count > 0 {
             Ok(self.make_token(TokenType::Number(value)))
-        }
-        else {
+        } else {
             Err(Error::from(self.line, self.column, "expected binary digit"))
         }
     }
@@ -227,15 +230,15 @@ impl <'a> Scanner<'a> {
                     value = (value << 3) | digit;
                     count += 1;
                 }
-                Some(b'8'..=b'9') | Some(b'A'..=b'Z') | Some(b'a'..=b'z') =>
-                    return Err(Error::from(self.line, self.column, "invalid octal digit")),
+                Some(b'8'..=b'9') | Some(b'A'..=b'Z') | Some(b'a'..=b'z') => {
+                    return Err(Error::from(self.line, self.column, "invalid octal digit"));
+                }
                 Some(_) | None => break,
             }
         }
         if count > 0 {
             Ok(self.make_token(TokenType::Number(value)))
-        }
-        else {
+        } else {
             Err(Error::from(self.line, self.column, "expected octal digit"))
         }
     }
@@ -247,10 +250,11 @@ impl <'a> Scanner<'a> {
                 Some(d) if d.is_ascii_digit() => {
                     self.source.advance();
                     let digit: u32 = (d - b'0').into();
-                    value = 10*value + digit;
+                    value = 10 * value + digit;
                 }
-                Some(b'A'..=b'Z') | Some(b'a'..=b'z') =>
-                    return Err(Error::from(self.line, self.column, "invalid decimal digit")),
+                Some(b'A'..=b'Z') | Some(b'a'..=b'z') => {
+                    return Err(Error::from(self.line, self.column, "invalid decimal digit"));
+                }
                 Some(_) | None => break,
             }
         }
@@ -263,7 +267,7 @@ impl <'a> Scanner<'a> {
         // map ASCII to 0..=15
         let mut digit = (d - b'0').into();
         if d > b'9' {
-            digit -= 7;  // adjust for gap between '9' and 'A'
+            digit -= 7; // adjust for gap between '9' and 'A'
         }
         digit
     }
@@ -279,18 +283,25 @@ impl <'a> Scanner<'a> {
                     value = (value << 4) | Self::hexadecimal_digit(c.unwrap());
                     count += 1;
                 }
-                Some(b'G'..=b'Z') | Some(b'g'..=b'z') =>
-                    return Err(Error::from(self.line, self.column, "invalid hexadecimal digit")),
+                Some(b'G'..=b'Z') | Some(b'g'..=b'z') => {
+                    return Err(Error::from(
+                        self.line,
+                        self.column,
+                        "invalid hexadecimal digit",
+                    ));
+                }
                 Some(_) | None => break,
             }
         }
         if count > 0 {
             Ok(self.make_token(TokenType::Number(value)))
+        } else {
+            Err(Error::from(
+                self.line,
+                self.column,
+                "expected hexadecimal digit",
+            ))
         }
-        else {
-            Err(Error::from(self.line, self.column, "expected hexadecimal digit"))
-        }
-
     }
 
     fn make_token(&mut self, token_type: TokenType) -> Token<'a> {
@@ -303,17 +314,29 @@ impl <'a> Scanner<'a> {
         let ch = self.scan_char_literal();
         match self.source.advance() {
             Some(b'\'') => Ok(self.make_token(TokenType::Number(ch?.into()))),
-            Some(_) | None => Err(Error::from(self.line, self.column, "expected closing single quote")),
+            Some(_) | None => Err(Error::from(
+                self.line,
+                self.column,
+                "expected closing single quote",
+            )),
         }
     }
 
     fn scan_char_literal(&mut self) -> Result<u8, Error> {
         let c = self.source.advance();
         match c {
-            Some(b'\'') => Err(Error::from(self.line, self.column, "empty character literal")),
+            Some(b'\'') => Err(Error::from(
+                self.line,
+                self.column,
+                "empty character literal",
+            )),
             Some(b'\\') => self.unescape(),
             Some(_) => Ok(c.unwrap()),
-            None => Err(Error::from(self.line, self.column, "expected character literal")),
+            None => Err(Error::from(
+                self.line,
+                self.column,
+                "expected character literal",
+            )),
         }
     }
 
@@ -323,14 +346,18 @@ impl <'a> Scanner<'a> {
             let c = self.source.advance();
             match c {
                 Some(b'\\') => {
-                    {
-                        let ch = self.unescape()?;
-                        s.push(ch as char)
-                    }
+                    let ch = self.unescape()?;
+                    s.push(ch as char)
                 }
                 Some(b'"') => break,
                 Some(_) => s.push(c.unwrap() as char),
-                None => return Err(Error::from(self.line, self.column, "expected closing quote")),
+                None => {
+                    return Err(Error::from(
+                        self.line,
+                        self.column,
+                        "expected closing quote",
+                    ));
+                }
             }
         }
         Ok(self.make_token(TokenType::String(s)))
@@ -344,10 +371,13 @@ impl <'a> Scanner<'a> {
             Some(b't') => Ok(b'\t'),
             Some(b'\'') => Ok(b'\''),
             Some(b'"') => Ok(b'"'),
-            Some(_) | None => Err(Error::from(self.line, self.column, "unrecognized escape sequence")),
+            Some(_) | None => Err(Error::from(
+                self.line,
+                self.column,
+                "unrecognized escape sequence",
+            )),
         }
     }
-
 }
 
 #[cfg(test)]
@@ -402,7 +432,10 @@ mod tests {
         assert_next_token_valid(".res", &TokenType::Directive(String::from("res")));
         assert_next_token_valid(".equ", &TokenType::Directive(String::from("equ")));
         assert_next_token_valid("\"foobar\"", &TokenType::String(String::from("foobar")));
-        assert_next_token_valid("\"\\n\\r\\t\\\\\"", &TokenType::String(String::from("\n\r\t\\")));
+        assert_next_token_valid(
+            "\"\\n\\r\\t\\\\\"",
+            &TokenType::String(String::from("\n\r\t\\")),
+        );
         assert_next_token_valid("\"\\\"\"", &TokenType::String(String::from("\"")));
         assert_next_token_valid("\"\\'\"", &TokenType::String(String::from("'")));
         assert_next_token_valid("'a'", &TokenType::Number(b'a'.into()));
@@ -440,20 +473,13 @@ mod tests {
         assert_next_token_valid("0b1", &TokenType::Number(1));
         assert_next_token_valid("0b11", &TokenType::Number(0b11));
         assert_next_token_valid("0B11", &TokenType::Number(0b11));
-        assert_next_token_invalid("0b",
-            |e|e.to_string().contains("expected binary"));
-        assert_next_token_invalid("0b2",
-            |e| { e.to_string().contains("binary digit")});
-        assert_next_token_invalid("0b9",
-            |e| { e.to_string().contains("binary digit")});
-        assert_next_token_invalid("0bA",
-            |e| { e.to_string().contains("binary digit")});
-        assert_next_token_invalid("0bZ",
-            |e| { e.to_string().contains("binary digit")});
-        assert_next_token_invalid("0ba",
-            |e| { e.to_string().contains("binary digit")});
-        assert_next_token_invalid("0bz",
-            |e| { e.to_string().contains("binary digit")});
+        assert_next_token_invalid("0b", |e| e.to_string().contains("expected binary"));
+        assert_next_token_invalid("0b2", |e| e.to_string().contains("binary digit"));
+        assert_next_token_invalid("0b9", |e| e.to_string().contains("binary digit"));
+        assert_next_token_invalid("0bA", |e| e.to_string().contains("binary digit"));
+        assert_next_token_invalid("0bZ", |e| e.to_string().contains("binary digit"));
+        assert_next_token_invalid("0ba", |e| e.to_string().contains("binary digit"));
+        assert_next_token_invalid("0bz", |e| e.to_string().contains("binary digit"));
     }
 
     #[test]
@@ -467,20 +493,13 @@ mod tests {
         assert_next_token_valid("0Q17", &TokenType::Number(0o17));
         assert_next_token_valid("017", &TokenType::Number(0o17));
         assert_next_token_valid("0", &TokenType::Number(0));
-        assert_next_token_invalid("0o",
-            |e| e.to_string().contains("expected octal"));
-        assert_next_token_invalid("0o8",
-            |e| e.to_string().contains("octal digit"));
-        assert_next_token_invalid("0o9",
-            |e| e.to_string().contains("octal digit"));
-        assert_next_token_invalid("0oA",
-            |e| e.to_string().contains("octal digit"));
-        assert_next_token_invalid("0oZ",
-            |e| e.to_string().contains("octal digit"));
-        assert_next_token_invalid("0oa",
-            |e| e.to_string().contains("octal digit"));
-        assert_next_token_invalid("0oz",
-            |e| e.to_string().contains("octal digit"));
+        assert_next_token_invalid("0o", |e| e.to_string().contains("expected octal"));
+        assert_next_token_invalid("0o8", |e| e.to_string().contains("octal digit"));
+        assert_next_token_invalid("0o9", |e| e.to_string().contains("octal digit"));
+        assert_next_token_invalid("0oA", |e| e.to_string().contains("octal digit"));
+        assert_next_token_invalid("0oZ", |e| e.to_string().contains("octal digit"));
+        assert_next_token_invalid("0oa", |e| e.to_string().contains("octal digit"));
+        assert_next_token_invalid("0oz", |e| e.to_string().contains("octal digit"));
     }
 
     #[test]
@@ -489,14 +508,10 @@ mod tests {
         assert_next_token_valid("1", &TokenType::Number(1));
         assert_next_token_valid("9", &TokenType::Number(9));
         assert_next_token_valid("19", &TokenType::Number(19));
-        assert_next_token_invalid("1A",
-            |e|e.to_string().contains("decimal digit"));
-        assert_next_token_invalid("1Z",
-            |e|e.to_string().contains("decimal digit"));
-        assert_next_token_invalid("1a",
-            |e|e.to_string().contains("decimal digit"));
-        assert_next_token_invalid("1z",
-            |e|e.to_string().contains("decimal digit"));
+        assert_next_token_invalid("1A", |e| e.to_string().contains("decimal digit"));
+        assert_next_token_invalid("1Z", |e| e.to_string().contains("decimal digit"));
+        assert_next_token_invalid("1a", |e| e.to_string().contains("decimal digit"));
+        assert_next_token_invalid("1z", |e| e.to_string().contains("decimal digit"));
     }
 
     #[test]
@@ -510,18 +525,12 @@ mod tests {
         assert_next_token_valid("0x1f", &TokenType::Number(0x1f));
         assert_next_token_valid("0X1f", &TokenType::Number(0x1f));
         assert_next_token_valid("$1f", &TokenType::Number(0x1f));
-        assert_next_token_invalid("$",
-            |e| { e.to_string().contains("expected hexadecimal")});
-        assert_next_token_invalid("0x",
-            |e| { e.to_string().contains("expected hexadecimal")});
-        assert_next_token_invalid("0xG",
-            |e| { e.to_string().contains("hexadecimal digit")});
-        assert_next_token_invalid("0xZ",
-            |e| { e.to_string().contains("hexadecimal digit")});
-        assert_next_token_invalid("0xg",
-            |e| { e.to_string().contains("hexadecimal digit")});
-        assert_next_token_invalid("0xz",
-            |e| { e.to_string().contains("hexadecimal digit")});
+        assert_next_token_invalid("$", |e| e.to_string().contains("expected hexadecimal"));
+        assert_next_token_invalid("0x", |e| e.to_string().contains("expected hexadecimal"));
+        assert_next_token_invalid("0xG", |e| e.to_string().contains("hexadecimal digit"));
+        assert_next_token_invalid("0xZ", |e| e.to_string().contains("hexadecimal digit"));
+        assert_next_token_invalid("0xg", |e| e.to_string().contains("hexadecimal digit"));
+        assert_next_token_invalid("0xz", |e| e.to_string().contains("hexadecimal digit"));
     }
 
     #[test]
@@ -548,10 +557,8 @@ mod tests {
         assert_next_token_valid(".org", &TokenType::Directive(String::from("org")));
         assert_next_token_valid(".ORG", &TokenType::Directive(String::from("ORG")));
         assert_next_token_valid(".equ", &TokenType::Directive(String::from("equ")));
-        assert_next_token_invalid(".",
-            |e| e.to_string().contains("expected directive name"));
-        assert_next_token_invalid(".1",
-            |e| e.to_string().contains("expected directive name"));
+        assert_next_token_invalid(".", |e| e.to_string().contains("expected directive name"));
+        assert_next_token_invalid(".1", |e| e.to_string().contains("expected directive name"));
     }
 
     #[test]
@@ -561,10 +568,8 @@ mod tests {
         assert_next_token_valid("\"\\t\\n\\r\"", &TokenType::String(String::from("\t\n\r")));
         assert_next_token_valid("\"\\\"\"", &TokenType::String(String::from("\"")));
         assert_next_token_valid("\"\\\\\"", &TokenType::String(String::from("\\")));
-        assert_next_token_invalid("\"",
-            |e| e.to_string().contains("closing"));
-        assert_next_token_invalid("\"\\@\"",
-            |e| e.to_string().contains("escape"));
+        assert_next_token_invalid("\"", |e| e.to_string().contains("closing"));
+        assert_next_token_invalid("\"\\@\"", |e| e.to_string().contains("escape"));
     }
 
     #[test]
@@ -575,16 +580,13 @@ mod tests {
         assert_next_token_valid("'\\r'", &TokenType::Number(b'\r'.into()));
         assert_next_token_valid("'\\''", &TokenType::Number(b'\''.into()));
         assert_next_token_valid("'\\\"'", &TokenType::Number(b'"'.into()));
-        assert_next_token_invalid("''",
-            |e| e.to_string().contains("expected"));
-        assert_next_token_invalid("'",
-            |e| e.to_string().contains("closing"));
+        assert_next_token_invalid("''", |e| e.to_string().contains("expected"));
+        assert_next_token_invalid("'", |e| e.to_string().contains("closing"));
     }
 
     #[test]
     fn next_token_unrecognized() {
-        assert_next_token_invalid("@",
-            |e| e.to_string().contains("unrecognized"));
+        assert_next_token_invalid("@", |e| e.to_string().contains("unrecognized"));
     }
 
     fn assert_whitespace_consumed(token_text: &str, expected_line: usize, expected_column: usize) {
@@ -617,7 +619,10 @@ mod tests {
         let mut scanner = Scanner::new("LDA #1 ; load one");
         let tokens = scanner.scan().unwrap();
         assert_eq!(tokens.len(), 3);
-        assert_eq!(tokens[0].token_type(), &TokenType::Symbol(String::from("LDA")));
+        assert_eq!(
+            tokens[0].token_type(),
+            &TokenType::Symbol(String::from("LDA"))
+        );
         assert_eq!(tokens[1].token_type(), &TokenType::Hash);
         assert_eq!(tokens[2].token_type(), &TokenType::Number(1));
     }
@@ -677,8 +682,16 @@ mod tests {
         assert!(result.err().unwrap().to_string().contains("invalid"))
     }
 
-    fn assert_token_sequence_valid(source_text: &str, expected_token_text: &[&str], expected_token_types: &[&TokenType]) {
-        assert_eq!(expected_token_text.len(), expected_token_types.len(), "mismatched expectations");
+    fn assert_token_sequence_valid(
+        source_text: &str,
+        expected_token_text: &[&str],
+        expected_token_types: &[&TokenType],
+    ) {
+        assert_eq!(
+            expected_token_text.len(),
+            expected_token_types.len(),
+            "mismatched expectations"
+        );
         let mut scanner = Scanner::new(source_text);
         let tokens = scanner.scan().unwrap();
         assert_eq!(tokens.len(), expected_token_text.len());
@@ -690,18 +703,36 @@ mod tests {
 
     #[test]
     fn scan_number_followed_by_token() {
-        assert_token_sequence_valid("0,", &["0", ","],
-                                    &[&TokenType::Number(0), &TokenType::Comma]);
-        assert_token_sequence_valid("9,", &["9", ","],
-                                    &[&TokenType::Number(9), &TokenType::Comma]);
-        assert_token_sequence_valid("0b0,", &["0b0", ","],
-                                    &[&TokenType::Number(0), &TokenType::Comma]);
-        assert_token_sequence_valid("0o0,", &["0o0", ","],
-                                    &[&TokenType::Number(0), &TokenType::Comma]);
-        assert_token_sequence_valid("01,", &["01", ","],
-                                    &[&TokenType::Number(1), &TokenType::Comma]);
-        assert_token_sequence_valid("0x0,", &["0x0", ","],
-                                    &[&TokenType::Number(0), &TokenType::Comma]);
+        assert_token_sequence_valid(
+            "0,",
+            &["0", ","],
+            &[&TokenType::Number(0), &TokenType::Comma],
+        );
+        assert_token_sequence_valid(
+            "9,",
+            &["9", ","],
+            &[&TokenType::Number(9), &TokenType::Comma],
+        );
+        assert_token_sequence_valid(
+            "0b0,",
+            &["0b0", ","],
+            &[&TokenType::Number(0), &TokenType::Comma],
+        );
+        assert_token_sequence_valid(
+            "0o0,",
+            &["0o0", ","],
+            &[&TokenType::Number(0), &TokenType::Comma],
+        );
+        assert_token_sequence_valid(
+            "01,",
+            &["01", ","],
+            &[&TokenType::Number(1), &TokenType::Comma],
+        );
+        assert_token_sequence_valid(
+            "0x0,",
+            &["0x0", ","],
+            &[&TokenType::Number(0), &TokenType::Comma],
+        );
     }
 
     #[test]
@@ -712,5 +743,4 @@ mod tests {
         assert_is_expected_token(&tokens[0], &TokenType::Directive(String::from("org")));
         assert_is_expected_token(&tokens[1], &TokenType::Number(0x8000));
     }
-
 }

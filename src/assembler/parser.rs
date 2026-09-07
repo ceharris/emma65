@@ -15,7 +15,6 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-
     pub fn new(source: &'a str) -> Result<Self, Error> {
         let tokens = Scanner::new(source).scan()?;
         Ok(Self { tokens, current: 0 })
@@ -94,7 +93,8 @@ impl<'a> Parser<'a> {
 
     fn parse_shift(&mut self) -> Result<Expr<'a>, Error> {
         let mut left = self.parse_term()?;
-        while let Some(op) = self.match_token(&[TokenType::LesserLesser, TokenType::GreaterGreater]) {
+        while let Some(op) = self.match_token(&[TokenType::LesserLesser, TokenType::GreaterGreater])
+        {
             let right = self.parse_term()?;
             left = Expr::binary(&op, Self::binary_operator(op.token_type()), left, right);
         }
@@ -112,7 +112,9 @@ impl<'a> Parser<'a> {
 
     fn parse_factor(&mut self) -> Result<Expr<'a>, Error> {
         let mut left = self.parse_unary()?;
-        while let Some(op) = self.match_token(&[TokenType::Star, TokenType::Slash, TokenType::Percent]) {
+        while let Some(op) =
+            self.match_token(&[TokenType::Star, TokenType::Slash, TokenType::Percent])
+        {
             let right = self.parse_unary()?;
             left = Expr::binary(&op, Self::binary_operator(op.token_type()), left, right);
         }
@@ -139,11 +141,19 @@ impl<'a> Parser<'a> {
 
     fn parse_unary(&mut self) -> Result<Expr<'a>, Error> {
         if let Some(op) = self.match_token(&[
-            TokenType::Minus, TokenType::Plus, TokenType::Bang, TokenType::Tilde,
-            TokenType::Lesser, TokenType::Greater,
+            TokenType::Minus,
+            TokenType::Plus,
+            TokenType::Bang,
+            TokenType::Tilde,
+            TokenType::Lesser,
+            TokenType::Greater,
         ]) {
             let operand = self.parse_unary()?;
-            Ok(Expr::unary(&op, Self::unary_operator(op.token_type()), operand))
+            Ok(Expr::unary(
+                &op,
+                Self::unary_operator(op.token_type()),
+                operand,
+            ))
         } else {
             self.parse_primary()
         }
@@ -173,8 +183,11 @@ impl<'a> Parser<'a> {
                     Ok(Expr::number(&token, *n))
                 }
                 TokenType::LeftParen => self.parse_grouping(),
-                _ => Err(Error::from(token.location.line, token.location.column,
-                                     "misplaced or unrecognized token")),
+                _ => Err(Error::from(
+                    token.location.line,
+                    token.location.column,
+                    "misplaced or unrecognized token",
+                )),
             },
             None => Err(Error::from(0, 0, "expected operand")),
         }
@@ -188,16 +201,24 @@ impl<'a> Parser<'a> {
                 Ok(Expr::grouping(&op, inner))
             }
             Some(token) => Err(Error::from(
-                token.location.line, token.location.column,
-                "expected closing parenthesis")),
+                token.location.line,
+                token.location.column,
+                "expected closing parenthesis",
+            )),
             None => Err(Error::from(
-                op.location.line, op.location.column,
-                "expected closing parenthesis")),
+                op.location.line,
+                op.location.column,
+                "expected closing parenthesis",
+            )),
         }
     }
 
     fn match_token(&mut self, types: &[TokenType]) -> Option<Token<'a>> {
-        if !self.is_at_end() && types.iter().any(|t| t == self.tokens[self.current].token_type()) {
+        if !self.is_at_end()
+            && types
+                .iter()
+                .any(|t| t == self.tokens[self.current].token_type())
+        {
             self.advance()
         } else {
             None
@@ -281,7 +302,10 @@ mod tests {
         let expr = parse("<label").unwrap();
         match expr.expr_type() {
             ExprType::Unary(UnaryOperatorType::Lsb, operand) => {
-                assert_eq!(operand.expr_type(), &ExprType::Symbol(String::from("label")));
+                assert_eq!(
+                    operand.expr_type(),
+                    &ExprType::Symbol(String::from("label"))
+                );
             }
             _ => panic!("expected Unary Lsb, got {:?}", expr),
         }

@@ -3,7 +3,10 @@ use std::sync::atomic::{AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use clap::Parser;
-use figment::{Figment, providers::{Env, Format, Toml}};
+use figment::{
+    Figment,
+    providers::{Env, Format, Toml},
+};
 use tauri::{AppHandle, Emitter, Listener, Manager, State};
 use tauri_plugin_log::{Target, TargetKind};
 use tauri_plugin_opener::OpenerExt;
@@ -11,7 +14,12 @@ use tokio::sync::{mpsc, oneshot};
 
 use emma65::disassembler::Disassembler;
 use emma65::emulator::bus::MAX_IRQ_SOURCES;
-use emma65::emulator::{Config, Cpu, DeviceRegistry, DisplayFrame, DisplayFrameSlot, DisplayGeometrySlot, EmulatorSession, InstantiationContext, InternalPipeTransport, IrqSource, LcdDisplayFrame, LcdDisplayFrameSlot, LcdDisplayGeometrySlot, LedMatrixFrame, LedMatrixFrameSlot, LedMatrixGeometrySlot, LogSender, Transport, TransportReporter, TransportSlot};
+use emma65::emulator::{
+    Config, Cpu, DeviceRegistry, DisplayFrame, DisplayFrameSlot, DisplayGeometrySlot,
+    EmulatorSession, InstantiationContext, InternalPipeTransport, IrqSource, LcdDisplayFrame,
+    LcdDisplayFrameSlot, LcdDisplayGeometrySlot, LedMatrixFrame, LedMatrixFrameSlot,
+    LedMatrixGeometrySlot, LogSender, Transport, TransportReporter, TransportSlot,
+};
 
 /// Label of the main debugger window, as assigned by the (unlabeled) first
 /// entry in `tauri.conf.json`'s `app.windows` list.
@@ -150,7 +158,24 @@ pub struct SessionStatusState(pub Mutex<Option<SessionStatus>>);
 /// `InstantiationContext::lcd_display_frame_sink`/`lcd_display_geometry_sink`, the same way as
 /// the display channel/slot above.
 #[allow(clippy::type_complexity)]
-async fn load_session(profile_dir: &Path, log_sender: LogSender) -> Result<(EmulatorSession, InternalPipeTransport, InternalPipeTransport, IrqSource, mpsc::Receiver<DisplayFrame>, Option<display::DisplayGeometryPayload>, mpsc::Receiver<LedMatrixFrame>, Option<led_matrix::LedMatrixGeometryPayload>, mpsc::Receiver<LcdDisplayFrame>, Option<lcd_display::LcdDisplayGeometryPayload>), String> {
+async fn load_session(
+    profile_dir: &Path,
+    log_sender: LogSender,
+) -> Result<
+    (
+        EmulatorSession,
+        InternalPipeTransport,
+        InternalPipeTransport,
+        IrqSource,
+        mpsc::Receiver<DisplayFrame>,
+        Option<display::DisplayGeometryPayload>,
+        mpsc::Receiver<LedMatrixFrame>,
+        Option<led_matrix::LedMatrixGeometryPayload>,
+        mpsc::Receiver<LcdDisplayFrame>,
+        Option<lcd_display::LcdDisplayGeometryPayload>,
+    ),
+    String,
+> {
     let config_path = profile_dir.join("emulator.toml");
 
     let config: Config = Figment::new()
@@ -166,15 +191,22 @@ async fn load_session(profile_dir: &Path, log_sender: LogSender) -> Result<(Emul
     let ((local, relay), remote) = InternalPipeTransport::pair(reporter.clone())
         .map_err(|e| format!("Failed to create console transport: {e}"))?;
 
-    let transport_slot: TransportSlot = Arc::new(Mutex::new(Some((Box::new(local) as Box<dyn Transport>, relay, reporter))));
+    let transport_slot: TransportSlot = Arc::new(Mutex::new(Some((
+        Box::new(local) as Box<dyn Transport>,
+        relay,
+        reporter,
+    ))));
 
     // No `DeviceId` exists yet at this point either — `CharDisplayModule::instantiate` binds its
     // own reporter once its id is known, same as the console reporter above.
     let kbd_reporter = TransportReporter::pending(None);
     let ((kbd_local, kbd_relay), kbd_remote) = InternalPipeTransport::pair(kbd_reporter.clone())
         .map_err(|e| format!("Failed to create keyboard transport: {e}"))?;
-    let keyboard_transport_slot: TransportSlot =
-        Arc::new(Mutex::new(Some((Box::new(kbd_local) as Box<dyn Transport>, kbd_relay, kbd_reporter))));
+    let keyboard_transport_slot: TransportSlot = Arc::new(Mutex::new(Some((
+        Box::new(kbd_local) as Box<dyn Transport>,
+        kbd_relay,
+        kbd_reporter,
+    ))));
 
     // Bounded to 2 (design doc §6): the device's own vsync composites at most `frame_rate_hz`
     // times per second, and the bridge task's wall-clock rate limiting (`display::run_display_bridge`)
@@ -213,7 +245,8 @@ async fn load_session(profile_dir: &Path, log_sender: LogSender) -> Result<(Emul
     // backlog starts shedding frames promptly (`LcdDisplay::push_frame`'s `try_send` never
     // blocks `tick()` either way).
     let (lcd_display_frame_tx, lcd_display_frame_rx) = mpsc::channel::<LcdDisplayFrame>(4);
-    let lcd_display_frame_slot: LcdDisplayFrameSlot = Arc::new(Mutex::new(Some(lcd_display_frame_tx)));
+    let lcd_display_frame_slot: LcdDisplayFrameSlot =
+        Arc::new(Mutex::new(Some(lcd_display_frame_tx)));
     let lcd_display_geometry_slot: LcdDisplayGeometrySlot = Arc::new(Mutex::new(None));
 
     // `log_sender` (built by the caller, see this function's doc comment) is shared by every
@@ -236,19 +269,33 @@ async fn load_session(profile_dir: &Path, log_sender: LogSender) -> Result<(Emul
     };
 
     let registry = DeviceRegistry::with_builtins();
-    let mut session = config.build_with_context(&registry, context).await
+    let mut session = config
+        .build_with_context(&registry, context)
+        .await
         .map_err(|e| format!("Failed to build emulator session: {e}"))?;
     session.cpu.set_log_sender(log_sender.clone());
 
-    let device_id = session.id_allocator.for_irq(DEBUGGER_IRQ)
+    let device_id = session
+        .id_allocator
+        .for_irq(DEBUGGER_IRQ)
         .map_err(|e| format!("Failed to build emulator session: {e}"))?;
 
     let ui_irq_source = IrqSource::from(device_id);
-    let display_geometry = display_geometry_slot.lock().unwrap().take().map(display::DisplayGeometryPayload::from);
-    let led_matrix_geometry =
-        led_matrix_geometry_slot.lock().unwrap().take().map(led_matrix::LedMatrixGeometryPayload::from);
-    let lcd_display_geometry =
-        lcd_display_geometry_slot.lock().unwrap().take().map(lcd_display::LcdDisplayGeometryPayload::from);
+    let display_geometry = display_geometry_slot
+        .lock()
+        .unwrap()
+        .take()
+        .map(display::DisplayGeometryPayload::from);
+    let led_matrix_geometry = led_matrix_geometry_slot
+        .lock()
+        .unwrap()
+        .take()
+        .map(led_matrix::LedMatrixGeometryPayload::from);
+    let lcd_display_geometry = lcd_display_geometry_slot
+        .lock()
+        .unwrap()
+        .take()
+        .map(lcd_display::LcdDisplayGeometryPayload::from);
     Ok((
         session,
         remote,
@@ -311,17 +358,41 @@ pub(crate) async fn load_or_reload_session(app: &AppHandle, profile_dir: &Path) 
     // leaking alongside the new session's.
     *app.state::<CpuState>().0.lock().unwrap() = None;
     *app.state::<terminal::TerminalTx>().0.lock().unwrap() = None;
-    app.state::<terminal::TerminalHistory>().0.lock().unwrap().clear();
-    *app.state::<display::DisplayGeometryState>().0.lock().unwrap() = None;
+    app.state::<terminal::TerminalHistory>()
+        .0
+        .lock()
+        .unwrap()
+        .clear();
+    *app.state::<display::DisplayGeometryState>()
+        .0
+        .lock()
+        .unwrap() = None;
     *app.state::<display::KeyboardTx>().0.lock().unwrap() = None;
-    *app.state::<led_matrix::LedMatrixGeometryState>().0.lock().unwrap() = None;
-    app.state::<led_matrix::LedMatrixFrameCache>().0.lock().unwrap().clear();
-    *app.state::<lcd_display::LcdDisplayGeometryState>().0.lock().unwrap() = None;
-    *app.state::<lcd_display::LcdDisplayFrameCache>().0.lock().unwrap() = None;
+    *app.state::<led_matrix::LedMatrixGeometryState>()
+        .0
+        .lock()
+        .unwrap() = None;
+    app.state::<led_matrix::LedMatrixFrameCache>()
+        .0
+        .lock()
+        .unwrap()
+        .clear();
+    *app.state::<lcd_display::LcdDisplayGeometryState>()
+        .0
+        .lock()
+        .unwrap() = None;
+    *app.state::<lcd_display::LcdDisplayFrameCache>()
+        .0
+        .lock()
+        .unwrap() = None;
 
     *app.state::<profile::ProfileDirState>().0.lock().unwrap() = profile_dir.to_path_buf();
 
-    let profile_name = profile_dir.file_name().and_then(|n| n.to_str()).unwrap_or("default").to_string();
+    let profile_name = profile_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("default")
+        .to_string();
     profile::set_main_window_title(app, &profile_name);
     recent::record_recent_profile(app, profile_dir);
 
@@ -360,22 +431,37 @@ pub(crate) async fn load_or_reload_session(app: &AppHandle, profile_dir: &Path) 
             *app.state::<display::KeyboardTx>().0.lock().unwrap() = Some(kbd_remote_tx);
 
             let frame_rate_hz = display_geometry.map(|g| g.frame_rate_hz);
-            *app.state::<display::DisplayGeometryState>().0.lock().unwrap() = display_geometry;
+            *app.state::<display::DisplayGeometryState>()
+                .0
+                .lock()
+                .unwrap() = display_geometry;
             let display_bridge_handle = app.clone();
             tauri::async_runtime::spawn(async move {
-                display::run_display_bridge(display_frame_rx, display_bridge_handle, frame_rate_hz).await;
+                display::run_display_bridge(display_frame_rx, display_bridge_handle, frame_rate_hz)
+                    .await;
             });
 
-            *app.state::<led_matrix::LedMatrixGeometryState>().0.lock().unwrap() = led_matrix_geometry;
+            *app.state::<led_matrix::LedMatrixGeometryState>()
+                .0
+                .lock()
+                .unwrap() = led_matrix_geometry;
             let led_matrix_bridge_handle = app.clone();
             tauri::async_runtime::spawn(async move {
-                led_matrix::run_led_matrix_bridge(led_matrix_frame_rx, led_matrix_bridge_handle).await;
+                led_matrix::run_led_matrix_bridge(led_matrix_frame_rx, led_matrix_bridge_handle)
+                    .await;
             });
 
-            *app.state::<lcd_display::LcdDisplayGeometryState>().0.lock().unwrap() = lcd_display_geometry;
+            *app.state::<lcd_display::LcdDisplayGeometryState>()
+                .0
+                .lock()
+                .unwrap() = lcd_display_geometry;
             let lcd_display_bridge_handle = app.clone();
             tauri::async_runtime::spawn(async move {
-                lcd_display::run_lcd_display_bridge(lcd_display_frame_rx, lcd_display_bridge_handle).await;
+                lcd_display::run_lcd_display_bridge(
+                    lcd_display_frame_rx,
+                    lcd_display_bridge_handle,
+                )
+                .await;
             });
 
             // Structured device/transport events now flow into the Log window via the
@@ -392,23 +478,33 @@ pub(crate) async fn load_or_reload_session(app: &AppHandle, profile_dir: &Path) 
             let variant = cpu.variant();
 
             if let Err(e) = cpu.reset() {
-                emit_status(app, SessionStatus {
-                    message: format!("CPU reset failed: {e}"),
-                    ok: false,
-                });
+                emit_status(
+                    app,
+                    SessionStatus {
+                        message: format!("CPU reset failed: {e}"),
+                        ok: false,
+                    },
+                );
                 return;
             }
 
             let initial_pc = cpu.registers().pc;
             let disasm = Disassembler::new(variant);
-            *app.state::<disassembly::DisassemblerState>().0.lock().unwrap() = Some(disasm);
+            *app.state::<disassembly::DisassemblerState>()
+                .0
+                .lock()
+                .unwrap() = Some(disasm);
 
             // Independent of session readiness: a bad watchpoints.emw is
             // reported inside the watchpoint panel, not via emit_status,
             // so it never blocks or fails the rest of the debugger.
             let symbol_table = cpu.bus().symbol_table().clone();
             let watch_data = match watchpoints::load_watchpoints_from(profile_dir, &symbol_table) {
-                Ok((evaluator, enabled)) => watchpoints::WatchData { evaluator, compile_error: None, enabled },
+                Ok((evaluator, enabled)) => watchpoints::WatchData {
+                    evaluator,
+                    compile_error: None,
+                    enabled,
+                },
                 Err(message) => {
                     eprintln!("watchpoints.emw: {message}");
                     watchpoints::WatchData {
@@ -421,7 +517,11 @@ pub(crate) async fn load_or_reload_session(app: &AppHandle, profile_dir: &Path) 
             // Install the loaded, enabled watchpoints into the CPU's own
             // evaluator too, so they actually halt execution in step()/run() —
             // not just show up in the panel's display snapshot.
-            if let Err(e) = watchpoints::sync_cpu_evaluator(&mut cpu, &watch_data.evaluator, &watch_data.enabled) {
+            if let Err(e) = watchpoints::sync_cpu_evaluator(
+                &mut cpu,
+                &watch_data.evaluator,
+                &watch_data.enabled,
+            ) {
                 eprintln!("Failed to install watchpoints for execution: {e}");
             }
             *app.state::<watchpoints::WatchState>().0.lock().unwrap() = watch_data;
@@ -434,7 +534,10 @@ pub(crate) async fn load_or_reload_session(app: &AppHandle, profile_dir: &Path) 
             let loaded_breakpoints = breakpoints::load_breakpoints_from(profile_dir);
             breakpoints::install_breakpoints(&mut cpu, &loaded_breakpoints);
             breakpoints::emit_loaded_breakpoints(app, &loaded_breakpoints, &symbol_table);
-            *app.state::<breakpoints::BreakpointState>().0.lock().unwrap() = loaded_breakpoints;
+            *app.state::<breakpoints::BreakpointState>()
+                .0
+                .lock()
+                .unwrap() = loaded_breakpoints;
 
             // The Symbols panel has no per-panel state of its own to reset —
             // it just re-fetches `get_symbols` on this broadcast.
@@ -450,20 +553,34 @@ pub(crate) async fn load_or_reload_session(app: &AppHandle, profile_dir: &Path) 
 
             // Reset the rest of the per-panel state that assumes one
             // long-lived session, so nothing from the previous profile lingers.
-            *app.state::<disassembly::SkipBreakpointPc>().0.lock().unwrap() = None;
+            *app.state::<disassembly::SkipBreakpointPc>()
+                .0
+                .lock()
+                .unwrap() = None;
             *app.state::<disassembly::LiveSnapshotRx>().0.lock().unwrap() = None;
-            *app.state::<registers::ChangedFlagsState>().0.lock().unwrap() = 0;
-            app.state::<memory::MemoryViewAddr>().0.store(0, Ordering::Relaxed);
-            app.state::<memory::MemoryViewSeq>().0.store(0, Ordering::Relaxed);
+            *app.state::<registers::ChangedFlagsState>()
+                .0
+                .lock()
+                .unwrap() = 0;
+            app.state::<memory::MemoryViewAddr>()
+                .0
+                .store(0, Ordering::Relaxed);
+            app.state::<memory::MemoryViewSeq>()
+                .0
+                .store(0, Ordering::Relaxed);
 
-            *app.state::<cpu_bus::CpuBusCache>().0.lock().unwrap() = cpu_bus::snapshot_cpu_bus(&cpu);
+            *app.state::<cpu_bus::CpuBusCache>().0.lock().unwrap() =
+                cpu_bus::snapshot_cpu_bus(&cpu);
             *app.state::<cpu_bus::UiIrqSourceState>().0.lock().unwrap() = Some(ui_irq_source);
             *app.state::<CpuState>().0.lock().unwrap() = Some(cpu);
 
-            emit_status(app, SessionStatus {
-                message: "Emulator session ready".to_string(),
-                ok: true,
-            });
+            emit_status(
+                app,
+                SessionStatus {
+                    message: "Emulator session ready".to_string(),
+                    ok: true,
+                },
+            );
 
             let bridge_handle = app.clone();
             tauri::async_runtime::spawn(async move {
@@ -500,7 +617,12 @@ pub(crate) async fn load_or_reload_session(app: &AppHandle, profile_dir: &Path) 
 /// the focus call is harmless if that ever changes.
 fn request_exit(app: &AppHandle) {
     persist_window_geometries(app);
-    let skip = app.state::<preferences::UiConfigState>().0.lock().unwrap().skip_exit_confirmation;
+    let skip = app
+        .state::<preferences::UiConfigState>()
+        .0
+        .lock()
+        .unwrap()
+        .skip_exit_confirmation;
     if skip {
         app.exit(0);
         return;
@@ -519,35 +641,43 @@ fn request_exit(app: &AppHandle) {
 fn persist_window_geometries(app: &AppHandle) {
     let state = app.state::<preferences::UiConfigState>();
     if let Some(main_window) = app.get_webview_window(MAIN_WINDOW_LABEL)
-        && let Err(e) = preferences::save_window_geometry(&main_window, &state, |c, g| c.main_window_geometry = Some(g))
+        && let Err(e) = preferences::save_window_geometry(&main_window, &state, |c, g| {
+            c.main_window_geometry = Some(g)
+        })
     {
         eprintln!("Failed to save main window geometry: {e}");
     }
     if let Some(terminal_window) = app.get_webview_window(terminal::TERMINAL_DETACHED_WINDOW_LABEL)
         && terminal_window.is_visible().unwrap_or(false)
-        && let Err(e) =
-            preferences::save_window_geometry(&terminal_window, &state, |c, g| c.terminal_window_geometry = Some(g))
+        && let Err(e) = preferences::save_window_geometry(&terminal_window, &state, |c, g| {
+            c.terminal_window_geometry = Some(g)
+        })
     {
         eprintln!("Failed to save terminal window geometry: {e}");
     }
     if let Some(display_window) = app.get_webview_window(display::DISPLAY_DETACHED_WINDOW_LABEL)
         && display_window.is_visible().unwrap_or(false)
-        && let Err(e) =
-            preferences::save_window_geometry(&display_window, &state, |c, g| c.display_window_geometry = Some(g))
+        && let Err(e) = preferences::save_window_geometry(&display_window, &state, |c, g| {
+            c.display_window_geometry = Some(g)
+        })
     {
         eprintln!("Failed to save display window geometry: {e}");
     }
-    if let Some(led_matrix_window) = app.get_webview_window(led_matrix::LED_MATRIX_DETACHED_WINDOW_LABEL)
+    if let Some(led_matrix_window) =
+        app.get_webview_window(led_matrix::LED_MATRIX_DETACHED_WINDOW_LABEL)
         && led_matrix_window.is_visible().unwrap_or(false)
-        && let Err(e) = preferences::save_window_geometry(
-            &led_matrix_window, &state, |c, g| c.led_matrix_window_geometry = Some(g))
+        && let Err(e) = preferences::save_window_geometry(&led_matrix_window, &state, |c, g| {
+            c.led_matrix_window_geometry = Some(g)
+        })
     {
         eprintln!("Failed to save LED matrix window geometry: {e}");
     }
-    if let Some(lcd_display_window) = app.get_webview_window(lcd_display::LCD_DISPLAY_DETACHED_WINDOW_LABEL)
+    if let Some(lcd_display_window) =
+        app.get_webview_window(lcd_display::LCD_DISPLAY_DETACHED_WINDOW_LABEL)
         && lcd_display_window.is_visible().unwrap_or(false)
-        && let Err(e) = preferences::save_window_geometry(
-            &lcd_display_window, &state, |c, g| c.lcd_display_window_geometry = Some(g))
+        && let Err(e) = preferences::save_window_geometry(&lcd_display_window, &state, |c, g| {
+            c.lcd_display_window_geometry = Some(g)
+        })
     {
         eprintln!("Failed to save LCD display window geometry: {e}");
     }
@@ -585,11 +715,22 @@ fn get_session_status(state: State<SessionStatusState>) -> Option<SessionStatus>
 /// (address entry), so it isn't scoped to either panel module.
 #[tauri::command]
 fn resolve_symbol(name: String, cpu_state: State<CpuState>) -> Option<u16> {
-    cpu_state.0.lock().unwrap().as_ref()?.bus().symbol_table().address_for(&name)
+    cpu_state
+        .0
+        .lock()
+        .unwrap()
+        .as_ref()?
+        .bus()
+        .symbol_table()
+        .address_for(&name)
 }
 
 fn emit_status(app: &AppHandle, status: SessionStatus) {
-    app.state::<SessionStatusState>().0.lock().unwrap().replace(status.clone());
+    app.state::<SessionStatusState>()
+        .0
+        .lock()
+        .unwrap()
+        .replace(status.clone());
     let _ = app.emit("session-status", status);
 }
 
@@ -598,15 +739,19 @@ pub fn run() {
     let cli = profile::CliArgs::parse();
     let config_dir = profile::config_dir().expect("Failed to resolve debugger config directory");
     let recent_profiles = recent::load_and_prune_recent(&config_dir);
-    let (profile_dir, profile_name) = profile::resolve_startup_profile(cli.profile.as_deref(), &recent_profiles)
-        .expect("Failed to prepare profile directory");
+    let (profile_dir, profile_name) =
+        profile::resolve_startup_profile(cli.profile.as_deref(), &recent_profiles)
+            .expect("Failed to prepare profile directory");
     // `--restore-layout` (issue #398) skips loading the persisted arrangement
     // entirely rather than deleting `layout.json` up front: `DockLayoutData::default()`
     // is exactly what a brand-new profile starts with, and `DockLayout.tsx`'s own
     // "nothing persisted" fallback (`restoreLayout`) already rebuilds the default
     // arrangement and re-persists it, which is what actually overwrites the stale file.
-    let dock_layout =
-        if cli.restore_layout { layout::DockLayoutData::default() } else { layout::load_dock_layout_from(&config_dir) };
+    let dock_layout = if cli.restore_layout {
+        layout::DockLayoutData::default()
+    } else {
+        layout::load_dock_layout_from(&config_dir)
+    };
     let terminal_was_detached = dock_layout.terminal_detached;
     let display_was_detached = dock_layout.display_detached;
     let led_matrix_was_detached = dock_layout.led_matrix_detached;
@@ -628,15 +773,23 @@ pub fn run() {
         .manage(SessionStatusState(Mutex::new(None)))
         .manage(terminal::TerminalHistory::default())
         .manage(terminal::TerminalTx(Mutex::new(None)))
-        .manage(terminal::TerminalTargetWindow(Mutex::new(MAIN_WINDOW_LABEL.to_string())))
+        .manage(terminal::TerminalTargetWindow(Mutex::new(
+            MAIN_WINDOW_LABEL.to_string(),
+        )))
         .manage(terminal::TerminalScaleFactorOverride(cli.scale_factor))
         .manage(display::KeyboardTx(Mutex::new(None)))
-        .manage(display::DisplayTargetWindow(Mutex::new(MAIN_WINDOW_LABEL.to_string())))
+        .manage(display::DisplayTargetWindow(Mutex::new(
+            MAIN_WINDOW_LABEL.to_string(),
+        )))
         .manage(display::DisplayGeometryState::default())
-        .manage(led_matrix::LedMatrixTargetWindow(Mutex::new(MAIN_WINDOW_LABEL.to_string())))
+        .manage(led_matrix::LedMatrixTargetWindow(Mutex::new(
+            MAIN_WINDOW_LABEL.to_string(),
+        )))
         .manage(led_matrix::LedMatrixGeometryState::default())
         .manage(led_matrix::LedMatrixFrameCache::default())
-        .manage(lcd_display::LcdDisplayTargetWindow(Mutex::new(MAIN_WINDOW_LABEL.to_string())))
+        .manage(lcd_display::LcdDisplayTargetWindow(Mutex::new(
+            MAIN_WINDOW_LABEL.to_string(),
+        )))
         .manage(lcd_display::LcdDisplayGeometryState::default())
         .manage(lcd_display::LcdDisplayFrameCache::default())
         .manage(CpuState(Mutex::new(None)))
@@ -645,7 +798,9 @@ pub fn run() {
         .manage(registers::ChangedFlagsState(Mutex::new(0)))
         .manage(disassembly::RunStopperState(Mutex::new(None)))
         .manage(disassembly::SkipBreakpointPc(Mutex::new(None)))
-        .manage(breakpoints::BreakpointState(Mutex::new(std::collections::BTreeMap::new())))
+        .manage(breakpoints::BreakpointState(Mutex::new(
+            std::collections::BTreeMap::new(),
+        )))
         .manage(disassembly::LiveSnapshotRx(Mutex::new(None)))
         .manage(memory::MemoryViewAddr(Arc::new(AtomicU16::new(0))))
         .manage(memory::MemoryViewSeq(AtomicU64::new(0)))
@@ -657,17 +812,23 @@ pub fn run() {
             cpu_stopped: false,
             cpu_waiting: false,
         })))
-        .manage(preferences::UiConfigState(Mutex::new(preferences::load_ui_config_from(&config_dir))))
+        .manage(preferences::UiConfigState(Mutex::new(
+            preferences::load_ui_config_from(&config_dir),
+        )))
         .manage(layout::LayoutState(Mutex::new(dock_layout)))
         .manage(profile::ProfileDirState(Mutex::new(profile_dir.clone())))
         .manage(recent::RecentProfilesState(Mutex::new(recent_profiles)))
-        .manage(watchpoints::WatchState(Mutex::new(watchpoints::WatchData {
-            evaluator: emma65::watch::WatchEvaluator::new(),
-            compile_error: None,
-            enabled: Vec::new(),
-        })))
+        .manage(watchpoints::WatchState(Mutex::new(
+            watchpoints::WatchData {
+                evaluator: emma65::watch::WatchEvaluator::new(),
+                compile_error: None,
+                enabled: Vec::new(),
+            },
+        )))
         .manage(trace::TraceState(Mutex::new(trace::TraceData::new())))
-        .manage(logging::LogState(Mutex::new(std::collections::VecDeque::new())))
+        .manage(logging::LogState(Mutex::new(
+            std::collections::VecDeque::new(),
+        )))
         .on_menu_event(|app, event| {
             let state = app.state::<menu::WindowMenuState>();
             if event.id() == state.exit_item.id() {
@@ -692,14 +853,23 @@ pub fn run() {
                 about::emit_open_about_dialog(app);
             } else if event.id() == menu::GITHUB_ID {
                 let _ = app.opener().open_url(menu::GITHUB_REPO_URL, None::<&str>);
-            } else if let Some(path) = event.id().as_ref().strip_prefix(menu::OPEN_RECENT_ID_PREFIX) {
+            } else if let Some(path) = event
+                .id()
+                .as_ref()
+                .strip_prefix(menu::OPEN_RECENT_ID_PREFIX)
+            {
                 let app_handle = app.clone();
                 let path = std::path::PathBuf::from(path);
                 tauri::async_runtime::spawn(async move {
                     recent::open_recent_profile(app_handle, path).await;
                 });
             } else if event.id() == menu::TOGGLE_TERMINAL_ID {
-                let detached = app.state::<layout::LayoutState>().0.lock().unwrap().terminal_detached;
+                let detached = app
+                    .state::<layout::LayoutState>()
+                    .0
+                    .lock()
+                    .unwrap()
+                    .terminal_detached;
                 if detached {
                     terminal::reattach_terminal(app);
                 } else if let Err(e) = terminal::begin_terminal_detach(app) {
@@ -708,7 +878,12 @@ pub fn run() {
                     let _ = app.emit_to(MAIN_WINDOW_LABEL, "terminal-detach-requested", ());
                 }
             } else if event.id() == menu::TOGGLE_DISPLAY_ID {
-                let detached = app.state::<layout::LayoutState>().0.lock().unwrap().display_detached;
+                let detached = app
+                    .state::<layout::LayoutState>()
+                    .0
+                    .lock()
+                    .unwrap()
+                    .display_detached;
                 if detached {
                     display::reattach_display(app);
                 } else if let Err(e) = display::begin_display_detach(app) {
@@ -717,7 +892,12 @@ pub fn run() {
                     let _ = app.emit_to(MAIN_WINDOW_LABEL, "display-detach-requested", ());
                 }
             } else if event.id() == menu::TOGGLE_LED_MATRIX_ID {
-                let detached = app.state::<layout::LayoutState>().0.lock().unwrap().led_matrix_detached;
+                let detached = app
+                    .state::<layout::LayoutState>()
+                    .0
+                    .lock()
+                    .unwrap()
+                    .led_matrix_detached;
                 if detached {
                     led_matrix::reattach_led_matrix(app);
                 } else if let Err(e) = led_matrix::begin_led_matrix_detach(app) {
@@ -726,7 +906,12 @@ pub fn run() {
                     let _ = app.emit_to(MAIN_WINDOW_LABEL, "led-matrix-detach-requested", ());
                 }
             } else if event.id() == menu::TOGGLE_LCD_DISPLAY_ID {
-                let detached = app.state::<layout::LayoutState>().0.lock().unwrap().lcd_display_detached;
+                let detached = app
+                    .state::<layout::LayoutState>()
+                    .0
+                    .lock()
+                    .unwrap()
+                    .lcd_display_detached;
                 if detached {
                     lcd_display::reattach_lcd_display(app);
                 } else if let Err(e) = lcd_display::begin_lcd_display_detach(app) {
@@ -734,7 +919,9 @@ pub fn run() {
                 } else {
                     let _ = app.emit_to(MAIN_WINDOW_LABEL, "lcd-display-detach-requested", ());
                 }
-            } else if let Some(panel_id) = event.id().as_ref().strip_prefix(menu::VIEW_PANEL_ID_PREFIX) {
+            } else if let Some(panel_id) =
+                event.id().as_ref().strip_prefix(menu::VIEW_PANEL_ID_PREFIX)
+            {
                 // Terminal, Display, LED Matrix, and LCD Display are all special-cased: while any
                 // is detached to its own window, that window (not a dock panel) is the thing to
                 // reveal — asking the dock to add a panel that duplicates it would fight the
@@ -748,12 +935,18 @@ pub fn run() {
                     let layout_state = app.state::<layout::LayoutState>();
                     let detached = layout_state.0.lock().unwrap();
                     match panel_id {
-                        "terminal" if detached.terminal_detached => Some(terminal::TERMINAL_DETACHED_WINDOW_LABEL),
-                        "display" if detached.display_detached => Some(display::DISPLAY_DETACHED_WINDOW_LABEL),
-                        "led-matrix" if detached.led_matrix_detached =>
-                            Some(led_matrix::LED_MATRIX_DETACHED_WINDOW_LABEL),
-                        "lcd-display" if detached.lcd_display_detached =>
-                            Some(lcd_display::LCD_DISPLAY_DETACHED_WINDOW_LABEL),
+                        "terminal" if detached.terminal_detached => {
+                            Some(terminal::TERMINAL_DETACHED_WINDOW_LABEL)
+                        }
+                        "display" if detached.display_detached => {
+                            Some(display::DISPLAY_DETACHED_WINDOW_LABEL)
+                        }
+                        "led-matrix" if detached.led_matrix_detached => {
+                            Some(led_matrix::LED_MATRIX_DETACHED_WINDOW_LABEL)
+                        }
+                        "lcd-display" if detached.lcd_display_detached => {
+                            Some(lcd_display::LCD_DISPLAY_DETACHED_WINDOW_LABEL)
+                        }
                         _ => None,
                     }
                 };
@@ -780,10 +973,17 @@ pub fn run() {
                 // accelerator, this menu click, and the panel's own button
                 // all end up calling the exact same code.
                 let _ = app.emit_to(MAIN_WINDOW_LABEL, "reveal-panel", "run-controls");
-                let _ = app.emit_to(MAIN_WINDOW_LABEL, "run-menu-action", event.id().as_ref().to_string());
+                let _ = app.emit_to(
+                    MAIN_WINDOW_LABEL,
+                    "run-menu-action",
+                    event.id().as_ref().to_string(),
+                );
             } else if matches!(
                 event.id().as_ref(),
-                menu::LOAD_MEMORY_ID | menu::SAVE_MEMORY_ID | menu::EDIT_MEMORY_ID | menu::FILL_MEMORY_ID
+                menu::LOAD_MEMORY_ID
+                    | menu::SAVE_MEMORY_ID
+                    | menu::EDIT_MEMORY_ID
+                    | menu::FILL_MEMORY_ID
             ) {
                 // Same pattern as the Run menu above (issue #411): bring the
                 // Memory panel back if it's been dismissed, then dispatch the
@@ -791,7 +991,11 @@ pub fn run() {
                 // dialog-opening logic that used to live behind its own
                 // header buttons.
                 let _ = app.emit_to(MAIN_WINDOW_LABEL, "reveal-panel", "memory");
-                let _ = app.emit_to(MAIN_WINDOW_LABEL, "memory-menu-action", event.id().as_ref().to_string());
+                let _ = app.emit_to(
+                    MAIN_WINDOW_LABEL,
+                    "memory-menu-action",
+                    event.id().as_ref().to_string(),
+                );
             } else if matches!(
                 event.id().as_ref(),
                 menu::NEW_ASSEMBLER_ID
@@ -806,13 +1010,24 @@ pub fn run() {
                 // `AssemblerPanel.tsx`, which owns the actual file-dialog/
                 // dirty-tracking/assemble logic.
                 let _ = app.emit_to(MAIN_WINDOW_LABEL, "reveal-panel", "assembler");
-                let _ = app.emit_to(MAIN_WINDOW_LABEL, "assembler-menu-action", event.id().as_ref().to_string());
-            } else if matches!(event.id().as_ref(), menu::CUT_ID | menu::COPY_ID | menu::PASTE_ID) {
+                let _ = app.emit_to(
+                    MAIN_WINDOW_LABEL,
+                    "assembler-menu-action",
+                    event.id().as_ref().to_string(),
+                );
+            } else if matches!(
+                event.id().as_ref(),
+                menu::CUT_ID | menu::COPY_ID | menu::PASTE_ID
+            ) {
                 // No panel to reveal here (issue #435) — `EditMenuContext.tsx`
                 // acts against whatever is currently focused/selected in the
                 // main window, wherever that is, rather than a single owning
                 // panel like the Run/Memory menus dispatch to.
-                let _ = app.emit_to(MAIN_WINDOW_LABEL, "edit-menu-action", event.id().as_ref().to_string());
+                let _ = app.emit_to(
+                    MAIN_WINDOW_LABEL,
+                    "edit-menu-action",
+                    event.id().as_ref().to_string(),
+                );
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -934,7 +1149,12 @@ pub fn run() {
             // visible jump from the configured default size/position to the
             // restored one.
             if let Some(main_window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-                let geometry = app.state::<preferences::UiConfigState>().0.lock().unwrap().main_window_geometry;
+                let geometry = app
+                    .state::<preferences::UiConfigState>()
+                    .0
+                    .lock()
+                    .unwrap()
+                    .main_window_geometry;
                 if let Some(geometry) = geometry {
                     preferences::apply_window_geometry(&main_window, &geometry);
                 }

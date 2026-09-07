@@ -32,7 +32,10 @@ fn variant_from_byte(byte: u8) -> io::Result<CpuVariant> {
     match byte {
         VARIANT_CMOS_65C02 => Ok(CpuVariant::Cmos65C02),
         VARIANT_WDC_65C02 => Ok(CpuVariant::Wdc65C02),
-        tag => Err(io::Error::new(io::ErrorKind::InvalidData, format!("unknown CPU variant tag: {tag}"))),
+        tag => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("unknown CPU variant tag: {tag}"),
+        )),
     }
 }
 
@@ -116,11 +119,20 @@ impl TraceRecord {
                 pc: u16::from_le_bytes([buf[13], buf[14]]),
                 p: StatusRegister::from_byte(buf[15]),
             }),
-            TAG_READ => TraceKind::Read { addr: u16::from_le_bytes([buf[9], buf[10]]), value: buf[11] },
-            TAG_WRITE => TraceKind::Write { addr: u16::from_le_bytes([buf[9], buf[10]]), value: buf[11] },
+            TAG_READ => TraceKind::Read {
+                addr: u16::from_le_bytes([buf[9], buf[10]]),
+                value: buf[11],
+            },
+            TAG_WRITE => TraceKind::Write {
+                addr: u16::from_le_bytes([buf[9], buf[10]]),
+                value: buf[11],
+            },
             TAG_CYCLES => TraceKind::Cycles(buf[9]),
             tag => {
-                return Err(io::Error::new(io::ErrorKind::InvalidData, format!("unknown trace record tag: {tag}")));
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("unknown trace record tag: {tag}"),
+                ));
             }
         };
         Ok(TraceRecord { instr_id, kind })
@@ -203,7 +215,10 @@ impl<R: Read> BinaryTraceReader<R> {
         let mut header = [0u8; HEADER_LEN];
         reader.read_exact(&mut header)?;
         if header[0..4] != MAGIC {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "bad trace file magic"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "bad trace file magic",
+            ));
         }
         if header[4] != FORMAT_VERSION {
             return Err(io::Error::new(
@@ -242,7 +257,10 @@ impl<R: Read> Iterator for BinaryTraceReader<R> {
             match self.reader.read(&mut buf[read..]) {
                 Ok(0) if read == 0 => return None,
                 Ok(0) => {
-                    return Some(Err(io::Error::new(io::ErrorKind::UnexpectedEof, "partial trace record at EOF")));
+                    return Some(Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        "partial trace record at EOF",
+                    )));
                 }
                 Ok(n) => read += n,
                 Err(e) => return Some(Err(e)),
@@ -289,7 +307,8 @@ impl TraceCallback for ChannelTraceCallback {
         match self.policy {
             OverflowPolicy::DropOnFull => {
                 if self.tx.try_send(WriterMsg::Record(rec)).is_err() {
-                    self.dropped.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    self.dropped
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
             }
             OverflowPolicy::BlockOnFull => {
@@ -326,7 +345,11 @@ pub fn spawn_trace_writer<W: Write + Send + 'static>(
     writer: BinaryTraceWriter<W>,
     capacity: usize,
     policy: OverflowPolicy,
-) -> (ChannelTraceCallback, std::thread::JoinHandle<()>, std::sync::Arc<std::sync::atomic::AtomicU64>) {
+) -> (
+    ChannelTraceCallback,
+    std::thread::JoinHandle<()>,
+    std::sync::Arc<std::sync::atomic::AtomicU64>,
+) {
     let (tx, rx) = crossbeam_channel::bounded::<WriterMsg>(capacity);
     let dropped = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
 
@@ -346,7 +369,15 @@ pub fn spawn_trace_writer<W: Write + Send + 'static>(
         let _ = writer.flush();
     });
 
-    (ChannelTraceCallback { tx, policy, dropped: dropped.clone() }, handle, dropped)
+    (
+        ChannelTraceCallback {
+            tx,
+            policy,
+            dropped: dropped.clone(),
+        },
+        handle,
+        dropped,
+    )
 }
 
 /// Tracks the per-instruction correlation id and the not-yet-flushed register
@@ -361,7 +392,10 @@ pub(in crate::emulator) struct TraceState {
 
 impl TraceState {
     pub(in crate::emulator) fn new() -> Self {
-        Self { next_instr_id: 0, pending: None }
+        Self {
+            next_instr_id: 0,
+            pending: None,
+        }
     }
 
     /// Called once per `Cpu::step()`, before any register mutation for that
@@ -380,7 +414,10 @@ impl TraceState {
     /// Takes and returns the pending `Registers` snapshot for `instr_id`, if
     /// it hasn't already been flushed. Returns `None` (leaving any pending
     /// snapshot for a different id untouched) once already flushed.
-    pub(in crate::emulator) fn take_pending_registers(&mut self, instr_id: u64) -> Option<Registers> {
+    pub(in crate::emulator) fn take_pending_registers(
+        &mut self,
+        instr_id: u64,
+    ) -> Option<Registers> {
         match self.pending.take() {
             Some((id, regs)) if id == instr_id => Some(regs),
             other => {
@@ -404,14 +441,33 @@ mod tests {
     }
 
     fn sample_registers() -> Registers {
-        Registers { a: 0x11, x: 0x22, y: 0x33, s: 0xFD, pc: 0xC000, p: StatusRegister::UNUSED | StatusRegister::N }
+        Registers {
+            a: 0x11,
+            x: 0x22,
+            y: 0x33,
+            s: 0xFD,
+            pc: 0xC000,
+            p: StatusRegister::UNUSED | StatusRegister::N,
+        }
     }
 
     #[test]
     fn trace_record_fields() {
-        let rec = TraceRecord { instr_id: 42, kind: TraceKind::Read { addr: 0x0200, value: 0xAB } };
+        let rec = TraceRecord {
+            instr_id: 42,
+            kind: TraceKind::Read {
+                addr: 0x0200,
+                value: 0xAB,
+            },
+        };
         assert_eq!(rec.instr_id, 42);
-        assert_eq!(rec.kind, TraceKind::Read { addr: 0x0200, value: 0xAB });
+        assert_eq!(
+            rec.kind,
+            TraceKind::Read {
+                addr: 0x0200,
+                value: 0xAB
+            }
+        );
     }
 
     #[test]
@@ -419,9 +475,24 @@ mod tests {
         let buf = {
             let mut buf = Vec::new();
             let mut writer = BinaryTraceWriter::new(&mut buf, CpuVariant::Wdc65C02);
-            writer.record(TraceRecord { instr_id: 7, kind: TraceKind::Registers(sample_registers()) });
-            writer.record(TraceRecord { instr_id: 7, kind: TraceKind::Read { addr: 0x1234, value: 0xAB } });
-            writer.record(TraceRecord { instr_id: 8, kind: TraceKind::Write { addr: 0x5678, value: 0xCD } });
+            writer.record(TraceRecord {
+                instr_id: 7,
+                kind: TraceKind::Registers(sample_registers()),
+            });
+            writer.record(TraceRecord {
+                instr_id: 7,
+                kind: TraceKind::Read {
+                    addr: 0x1234,
+                    value: 0xAB,
+                },
+            });
+            writer.record(TraceRecord {
+                instr_id: 8,
+                kind: TraceKind::Write {
+                    addr: 0x5678,
+                    value: 0xCD,
+                },
+            });
             writer.flush().unwrap();
             drop(writer);
             buf
@@ -463,7 +534,10 @@ mod tests {
         let buf = {
             let mut buf = Vec::new();
             let mut writer = BinaryTraceWriter::new(&mut buf, CpuVariant::Wdc65C02);
-            writer.record(TraceRecord { instr_id: 9, kind: TraceKind::Cycles(4) });
+            writer.record(TraceRecord {
+                instr_id: 9,
+                kind: TraceKind::Cycles(4),
+            });
             writer.flush().unwrap();
             drop(writer);
             buf
@@ -481,7 +555,10 @@ mod tests {
         let buf = {
             let mut buf = Vec::new();
             let mut writer = BinaryTraceWriter::new(&mut buf, CpuVariant::Wdc65C02);
-            writer.record(TraceRecord { instr_id: 5, kind: TraceKind::Cycles(7) });
+            writer.record(TraceRecord {
+                instr_id: 5,
+                kind: TraceKind::Cycles(7),
+            });
             writer.flush().unwrap();
             drop(writer);
             buf
@@ -489,14 +566,32 @@ mod tests {
 
         let reader = BinaryTraceReader::new(buf.as_slice()).unwrap();
         let records: Vec<TraceRecord> = reader.collect::<io::Result<Vec<_>>>().unwrap();
-        assert_eq!(records, vec![TraceRecord { instr_id: 5, kind: TraceKind::Cycles(7) }]);
+        assert_eq!(
+            records,
+            vec![TraceRecord {
+                instr_id: 5,
+                kind: TraceKind::Cycles(7)
+            }]
+        );
     }
 
     #[test]
     fn capturing_callback_receives_records() {
         let mut cb = CapturingCallback(Vec::new());
-        cb.record(TraceRecord { instr_id: 1, kind: TraceKind::Write { addr: 0x0100, value: 0x42 } });
-        cb.record(TraceRecord { instr_id: 1, kind: TraceKind::Read { addr: 0x0101, value: 0x00 } });
+        cb.record(TraceRecord {
+            instr_id: 1,
+            kind: TraceKind::Write {
+                addr: 0x0100,
+                value: 0x42,
+            },
+        });
+        cb.record(TraceRecord {
+            instr_id: 1,
+            kind: TraceKind::Read {
+                addr: 0x0101,
+                value: 0x00,
+            },
+        });
         assert_eq!(cb.0.len(), 2);
         assert!(matches!(cb.0[0].kind, TraceKind::Write { .. }));
         assert!(matches!(cb.0[1].kind, TraceKind::Read { .. }));
@@ -530,9 +625,24 @@ mod tests {
         let buf = {
             let mut buf = Vec::new();
             let mut writer = BinaryTraceWriter::new(&mut buf, CpuVariant::Wdc65C02);
-            writer.record(TraceRecord { instr_id: 3, kind: TraceKind::Registers(sample_registers()) });
-            writer.record(TraceRecord { instr_id: 3, kind: TraceKind::Read { addr: 0x0300, value: 0x99 } });
-            writer.record(TraceRecord { instr_id: 4, kind: TraceKind::Write { addr: 0x0301, value: 0x77 } });
+            writer.record(TraceRecord {
+                instr_id: 3,
+                kind: TraceKind::Registers(sample_registers()),
+            });
+            writer.record(TraceRecord {
+                instr_id: 3,
+                kind: TraceKind::Read {
+                    addr: 0x0300,
+                    value: 0x99,
+                },
+            });
+            writer.record(TraceRecord {
+                instr_id: 4,
+                kind: TraceKind::Write {
+                    addr: 0x0301,
+                    value: 0x77,
+                },
+            });
             writer.flush().unwrap();
             drop(writer);
             buf
@@ -541,9 +651,33 @@ mod tests {
         let reader = BinaryTraceReader::new(buf.as_slice()).unwrap();
         let records: Vec<TraceRecord> = reader.collect::<io::Result<Vec<_>>>().unwrap();
         assert_eq!(records.len(), 3);
-        assert_eq!(records[0], TraceRecord { instr_id: 3, kind: TraceKind::Registers(sample_registers()) });
-        assert_eq!(records[1], TraceRecord { instr_id: 3, kind: TraceKind::Read { addr: 0x0300, value: 0x99 } });
-        assert_eq!(records[2], TraceRecord { instr_id: 4, kind: TraceKind::Write { addr: 0x0301, value: 0x77 } });
+        assert_eq!(
+            records[0],
+            TraceRecord {
+                instr_id: 3,
+                kind: TraceKind::Registers(sample_registers())
+            }
+        );
+        assert_eq!(
+            records[1],
+            TraceRecord {
+                instr_id: 3,
+                kind: TraceKind::Read {
+                    addr: 0x0300,
+                    value: 0x99
+                }
+            }
+        );
+        assert_eq!(
+            records[2],
+            TraceRecord {
+                instr_id: 4,
+                kind: TraceKind::Write {
+                    addr: 0x0301,
+                    value: 0x77
+                }
+            }
+        );
     }
 
     #[test]
@@ -577,7 +711,10 @@ mod tests {
             let mut buf = Vec::new();
             let mut writer = BinaryTraceWriter::new(&mut buf, CpuVariant::Wdc65C02);
             for i in 0..5u8 {
-                writer.record(TraceRecord { instr_id: i as u64, kind: TraceKind::Cycles(i) });
+                writer.record(TraceRecord {
+                    instr_id: i as u64,
+                    kind: TraceKind::Cycles(i),
+                });
             }
             writer.flush().unwrap();
             drop(writer);
@@ -587,10 +724,19 @@ mod tests {
         let mut reader = BinaryTraceReader::new(io::Cursor::new(buf)).unwrap();
         reader.seek_to_record(3).unwrap();
         let records: Vec<TraceRecord> = reader.collect::<io::Result<Vec<_>>>().unwrap();
-        assert_eq!(records, vec![
-            TraceRecord { instr_id: 3, kind: TraceKind::Cycles(3) },
-            TraceRecord { instr_id: 4, kind: TraceKind::Cycles(4) },
-        ]);
+        assert_eq!(
+            records,
+            vec![
+                TraceRecord {
+                    instr_id: 3,
+                    kind: TraceKind::Cycles(3)
+                },
+                TraceRecord {
+                    instr_id: 4,
+                    kind: TraceKind::Cycles(4)
+                },
+            ]
+        );
     }
 
     #[test]
@@ -598,7 +744,10 @@ mod tests {
         let buf = {
             let mut buf = Vec::new();
             let mut writer = BinaryTraceWriter::new(&mut buf, CpuVariant::Wdc65C02);
-            writer.record(TraceRecord { instr_id: 0, kind: TraceKind::Cycles(1) });
+            writer.record(TraceRecord {
+                instr_id: 0,
+                kind: TraceKind::Cycles(1),
+            });
             writer.flush().unwrap();
             drop(writer);
             buf
@@ -607,7 +756,13 @@ mod tests {
         let mut reader = BinaryTraceReader::new(io::Cursor::new(buf)).unwrap();
         reader.seek_to_record(0).unwrap();
         let records: Vec<TraceRecord> = reader.collect::<io::Result<Vec<_>>>().unwrap();
-        assert_eq!(records, vec![TraceRecord { instr_id: 0, kind: TraceKind::Cycles(1) }]);
+        assert_eq!(
+            records,
+            vec![TraceRecord {
+                instr_id: 0,
+                kind: TraceKind::Cycles(1)
+            }]
+        );
     }
 
     #[test]

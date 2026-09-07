@@ -7,7 +7,6 @@ pub struct Error {
 }
 
 impl Error {
-
     /// Creates an error instance.
     /// # Arguments
     /// * `line` - source line number where the error occurred
@@ -16,7 +15,9 @@ impl Error {
     ///
     pub fn from(line: usize, column: usize, message: &str) -> Self {
         Self {
-            line, column, message: String::from(message),
+            line,
+            column,
+            message: String::from(message),
         }
     }
 
@@ -31,16 +32,18 @@ impl Error {
     pub fn message(&self) -> &str {
         &self.message
     }
-
 }
 
 impl std::fmt::Display for Error {
-
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "at {line},{column}: {message}",
-               line=self.line, column=self.column, message=self.message)
+        write!(
+            f,
+            "at {line},{column}: {message}",
+            line = self.line,
+            column = self.column,
+            message = self.message
+        )
     }
-
 }
 
 impl std::error::Error for Error {}

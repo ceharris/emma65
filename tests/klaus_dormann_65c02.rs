@@ -1,7 +1,6 @@
 use emma65::emulator::cpu::StepResult;
 use emma65::emulator::{
-    AddressRange, Bus, ClockSpeed, CpuBuilder, CpuVariant, DeviceId, InvalidOpcodePolicy,
-    IoDevice,
+    AddressRange, Bus, ClockSpeed, CpuBuilder, CpuVariant, DeviceId, InvalidOpcodePolicy, IoDevice,
 };
 
 /// Maximum steps before declaring a test hung (well above any reasonable run count).
@@ -45,17 +44,25 @@ fn run_functional_test(rom_path: &str, start: u16, success_pc: u16) {
 
         match cpu.step(None, true) {
             StepResult::Executed(_) | StepResult::Waiting => {}
-            StepResult::Breakpoint(_) | StepResult::WatchTriggered { .. } | StepResult::WatchError { .. } => {
+            StepResult::Breakpoint(_)
+            | StepResult::WatchTriggered { .. }
+            | StepResult::WatchError { .. } => {
                 unreachable!("no breakpoints or watches configured")
             }
             StepResult::Reset => {
-                panic!("CPU reset at PC=${pc:04X} before reaching success address ${success_pc:04X}")
+                panic!(
+                    "CPU reset at PC=${pc:04X} before reaching success address ${success_pc:04X}"
+                )
             }
             StepResult::Stopped => {
-                panic!("CPU halted (STP) at PC=${pc:04X} before reaching success address ${success_pc:04X}")
+                panic!(
+                    "CPU halted (STP) at PC=${pc:04X} before reaching success address ${success_pc:04X}"
+                )
             }
             StepResult::Error(e) => {
-                panic!("CPU error at PC=${pc:04X}: {e} — test failed before reaching ${success_pc:04X}")
+                panic!(
+                    "CPU error at PC=${pc:04X}: {e} — test failed before reaching ${success_pc:04X}"
+                )
             }
         }
     }
@@ -83,12 +90,15 @@ struct FeedbackRegister {
 impl FeedbackRegister {
     fn new() -> Self {
         // Both bits start low (inactive); the test's init code precharges them to 0 anyway.
-        Self { last_value: 0x00, irq_asserted: false, nmi_pending: false }
+        Self {
+            last_value: 0x00,
+            irq_asserted: false,
+            nmi_pending: false,
+        }
     }
 }
 
 impl IoDevice for FeedbackRegister {
-
     fn read(&mut self, _address: u16) -> u8 {
         self.last_value
     }
@@ -145,11 +155,21 @@ fn run_interrupt_test(rom_path: &str, start: u16, success_pc: u16) {
     assert_eq!(image.len(), 65536, "ROM image must be exactly 64 KiB");
 
     let bus = Bus::config()
-        .ram_with_data(AddressRange::new(0x0000, 0xBFFB), image[0x0000..=0xBFFB].to_vec())
+        .ram_with_data(
+            AddressRange::new(0x0000, 0xBFFB),
+            image[0x0000..=0xBFFB].to_vec(),
+        )
         .expect("lower RAM")
-        .device(AddressRange::new(0xBFFC, 0xBFFC), DeviceId(1), Box::new(FeedbackRegister::new()))
+        .device(
+            AddressRange::new(0xBFFC, 0xBFFC),
+            DeviceId(1),
+            Box::new(FeedbackRegister::new()),
+        )
         .expect("feedback register")
-        .ram_with_data(AddressRange::new(0xBFFD, 0xFFFF), image[0xBFFD..=0xFFFF].to_vec())
+        .ram_with_data(
+            AddressRange::new(0xBFFD, 0xFFFF),
+            image[0xBFFD..=0xFFFF].to_vec(),
+        )
         .expect("upper RAM")
         .build();
 
@@ -170,17 +190,25 @@ fn run_interrupt_test(rom_path: &str, start: u16, success_pc: u16) {
 
         match cpu.step(None, true) {
             StepResult::Executed(_) | StepResult::Waiting => {}
-            StepResult::Breakpoint(_) | StepResult::WatchTriggered { .. } | StepResult::WatchError { .. } => {
+            StepResult::Breakpoint(_)
+            | StepResult::WatchTriggered { .. }
+            | StepResult::WatchError { .. } => {
                 unreachable!("no breakpoints or watches configured")
             }
             StepResult::Reset => {
-                panic!("CPU reset at PC=${pc:04X} before reaching success address ${success_pc:04X}")
+                panic!(
+                    "CPU reset at PC=${pc:04X} before reaching success address ${success_pc:04X}"
+                )
             }
             StepResult::Stopped => {
-                panic!("CPU halted (STP) at PC=${pc:04X} before reaching success address ${success_pc:04X}")
+                panic!(
+                    "CPU halted (STP) at PC=${pc:04X} before reaching success address ${success_pc:04X}"
+                )
             }
             StepResult::Error(e) => {
-                panic!("CPU error at PC=${pc:04X}: {e} — test failed before reaching ${success_pc:04X}")
+                panic!(
+                    "CPU error at PC=${pc:04X}: {e} — test failed before reaching ${success_pc:04X}"
+                )
             }
         }
     }
@@ -222,7 +250,9 @@ fn run_decimal_test(rom_path: &str, start: u16) {
     for _ in 0..MAX_STEPS {
         match cpu.step(None, true) {
             StepResult::Executed(_) | StepResult::Waiting => {}
-            StepResult::Breakpoint(_) | StepResult::WatchTriggered { .. } | StepResult::WatchError { .. } => {
+            StepResult::Breakpoint(_)
+            | StepResult::WatchTriggered { .. }
+            | StepResult::WatchError { .. } => {
                 unreachable!("no breakpoints or watches configured")
             }
             StepResult::Reset => {
@@ -231,7 +261,10 @@ fn run_decimal_test(rom_path: &str, start: u16) {
             }
             StepResult::Stopped => {
                 let error = cpu.bus().peek(0x000B).expect("ERROR byte readable");
-                assert_eq!(error, 0, "decimal mode test failed: ERROR=${error:02X} at $000B");
+                assert_eq!(
+                    error, 0,
+                    "decimal mode test failed: ERROR=${error:02X} at $000B"
+                );
                 return;
             }
             StepResult::Error(e) => {
@@ -251,7 +284,10 @@ fn run_decimal_test(rom_path: &str, start: u16) {
 #[test]
 fn base_6502_functional_test() {
     run_functional_test(
-        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/roms/6502_functional_test.bin"),
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/roms/6502_functional_test.bin"
+        ),
         0x0400,
         0x3469,
     );
@@ -264,7 +300,10 @@ fn base_6502_functional_test() {
 #[test]
 fn extended_65c02_functional_test() {
     run_functional_test(
-        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/roms/65C02_extended_opcodes_test.bin"),
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/roms/65C02_extended_opcodes_test.bin"
+        ),
         0x0400,
         0x24F1,
     );
@@ -277,7 +316,10 @@ fn extended_65c02_functional_test() {
 #[test]
 fn interrupt_test() {
     run_interrupt_test(
-        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/roms/6502_interrupt_test.bin"),
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/roms/6502_interrupt_test.bin"
+        ),
         0x0400,
         0x0719,
     );
@@ -290,7 +332,10 @@ fn interrupt_test() {
 #[test]
 fn decimal_mode_test() {
     run_decimal_test(
-        concat!(env!("CARGO_MANIFEST_DIR"), "/tests/roms/6502_decimal_test.bin"),
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/roms/6502_decimal_test.bin"
+        ),
         0x0200,
     );
 }

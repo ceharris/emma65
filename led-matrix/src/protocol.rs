@@ -65,19 +65,32 @@ pub struct Header {
 /// `display/src/protocol.rs::decode_header`.
 pub fn decode_header(bytes: &[u8]) -> Result<Header, String> {
     if bytes.len() != HEADER_LEN {
-        return Err(format!("header must be exactly {HEADER_LEN} bytes, got {}", bytes.len()));
+        return Err(format!(
+            "header must be exactly {HEADER_LEN} bytes, got {}",
+            bytes.len()
+        ));
     }
     if bytes[0..4] != MAGIC {
-        return Err(format!("bad magic {:?}, expected {:?}", &bytes[0..4], MAGIC));
+        return Err(format!(
+            "bad magic {:?}, expected {:?}",
+            &bytes[0..4],
+            MAGIC
+        ));
     }
     let version = bytes[4];
     if version != SUPPORTED_VERSION {
-        return Err(format!("unsupported protocol version {version}, expected {SUPPORTED_VERSION}"));
+        return Err(format!(
+            "unsupported protocol version {version}, expected {SUPPORTED_VERSION}"
+        ));
     }
     let matrix_count = bytes[5];
     let columns = bytes[6];
     let frame_rate_hz = u32::from_le_bytes(bytes[7..11].try_into().unwrap());
-    Ok(Header { matrix_count, columns, frame_rate_hz })
+    Ok(Header {
+        matrix_count,
+        columns,
+        frame_rate_hz,
+    })
 }
 
 /// A decoded post-header message (spec §5).
@@ -111,30 +124,48 @@ pub fn decode_message(tag: u8, body: &[u8]) -> Result<Message, String> {
     match tag {
         MSG_BLOCK => {
             if body.len() != BLOCK_BODY_LEN {
-                return Err(format!("block body must be exactly {BLOCK_BODY_LEN} bytes, got {}", body.len()));
+                return Err(format!(
+                    "block body must be exactly {BLOCK_BODY_LEN} bytes, got {}",
+                    body.len()
+                ));
             }
-            Ok(Message::Block { matrix_index: body[0], pixels: body[1..].to_vec() })
+            Ok(Message::Block {
+                matrix_index: body[0],
+                pixels: body[1..].to_vec(),
+            })
         }
         MSG_PALETTE => {
             if body.len() != PALETTE_BODY_LEN {
-                return Err(format!("palette body must be exactly {PALETTE_BODY_LEN} bytes, got {}", body.len()));
+                return Err(format!(
+                    "palette body must be exactly {PALETTE_BODY_LEN} bytes, got {}",
+                    body.len()
+                ));
             }
             let index = body[0];
             let packed = u16::from_le_bytes(body[1..3].try_into().unwrap());
             let r5 = ((packed >> 11) & 0x1F) as u8;
             let g6 = ((packed >> 5) & 0x3F) as u8;
             let b5 = (packed & 0x1F) as u8;
-            Ok(Message::Palette { index, color: Rgb565::new(r5, g6, b5) })
+            Ok(Message::Palette {
+                index,
+                color: Rgb565::new(r5, g6, b5),
+            })
         }
         MSG_POWER => {
             if body.len() != POWER_BODY_LEN {
-                return Err(format!("power body must be exactly {POWER_BODY_LEN} bytes, got {}", body.len()));
+                return Err(format!(
+                    "power body must be exactly {POWER_BODY_LEN} bytes, got {}",
+                    body.len()
+                ));
             }
             Ok(Message::Power { mask: body[0] })
         }
         MSG_BRIGHTNESS => {
             if body.len() != BRIGHTNESS_BODY_LEN {
-                return Err(format!("brightness body must be exactly {BRIGHTNESS_BODY_LEN} bytes, got {}", body.len()));
+                return Err(format!(
+                    "brightness body must be exactly {BRIGHTNESS_BODY_LEN} bytes, got {}",
+                    body.len()
+                ));
             }
             Ok(Message::Brightness { level: body[0] })
         }
@@ -206,7 +237,10 @@ mod tests {
         body.extend(std::iter::repeat_n(9u8, PIXELS_PER_MATRIX));
 
         match decode_message(MSG_BLOCK, &body).unwrap() {
-            Message::Block { matrix_index, pixels } => {
+            Message::Block {
+                matrix_index,
+                pixels,
+            } => {
                 assert_eq!(matrix_index, 7);
                 assert_eq!(pixels.len(), PIXELS_PER_MATRIX);
                 assert!(pixels.iter().all(|&p| p == 9));
@@ -229,7 +263,10 @@ mod tests {
         body.extend_from_slice(&packed.to_le_bytes());
 
         match decode_message(MSG_PALETTE, &body).unwrap() {
-            Message::Palette { index, color: decoded } => {
+            Message::Palette {
+                index,
+                color: decoded,
+            } => {
                 assert_eq!(index, 9);
                 assert_eq!(decoded, color);
             }

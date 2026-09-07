@@ -91,7 +91,10 @@ impl PipeTransport {
         F: FnOnce(io::Error) + Send + 'static,
     {
         if command.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "command must not be empty"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "command must not be empty",
+            ));
         }
         let mut child = Command::new(&command[0])
             .args(&command[1..])
@@ -100,9 +103,13 @@ impl PipeTransport {
             .stderr(Stdio::inherit())
             .spawn()?;
 
-        let stdin = child.stdin.take()
+        let stdin = child
+            .stdin
+            .take()
             .ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "child stdin unavailable"))?;
-        let stdout = child.stdout.take()
+        let stdout = child
+            .stdout
+            .take()
             .ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "child stdout unavailable"))?;
 
         let (in_tx, in_rx) = bounded::<u8>(capacity);
@@ -343,7 +350,9 @@ mod tests {
             &["cat".to_string()],
             TransportReporter::pending(None),
             move |e| *received_exit_clone.lock().unwrap() = Some(e.to_string()),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         transport.send(0x42);
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
@@ -365,11 +374,16 @@ mod tests {
             &["true".to_string()],
             TransportReporter::pending(None),
             move |_| *received_exit_clone.lock().unwrap() = true,
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         // Give the task time to detect child exit and call on_exit
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        assert!(*received_exit.lock().unwrap(), "on_exit should have been called");
+        assert!(
+            *received_exit.lock().unwrap(),
+            "on_exit should have been called"
+        );
     }
 
     #[tokio::test]
@@ -378,7 +392,9 @@ mod tests {
             &["true".to_string()],
             TransportReporter::pending(None),
             |_| {},
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         assert!(!transport.is_connected());
@@ -392,7 +408,9 @@ mod tests {
             &["cat".to_string()],
             TransportReporter::pending(None),
             |_| {},
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         transport.shutdown();
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
@@ -407,7 +425,9 @@ mod tests {
             &["true".to_string()],
             TransportReporter::pending(None),
             |_| {},
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         assert!(!transport.is_connected());
@@ -423,13 +443,14 @@ mod tests {
         let (sender, mut receiver) = device_event_channel();
         let reporter = TransportReporter::pending(Some(sender));
         reporter.bind("test-device-99");
-        let (mut transport, relay) = PipeTransport::spawn_with_capacity(
-            &["cat".to_string()],
-            reporter.clone(),
-            |_| {},
-            1,
-        ).await.unwrap();
-        assert!(matches!(receiver.try_recv(), Ok(DeviceEvent::TransportConnected { .. })));
+        let (mut transport, relay) =
+            PipeTransport::spawn_with_capacity(&["cat".to_string()], reporter.clone(), |_| {}, 1)
+                .await
+                .unwrap();
+        assert!(matches!(
+            receiver.try_recv(),
+            Ok(DeviceEvent::TransportConnected { .. })
+        ));
 
         // Capacity 1, two sends back-to-back with no `.await` in between —
         // the spawned Tokio task can't be scheduled to drain in between, so
@@ -456,7 +477,9 @@ mod tests {
             &["cat".to_string()],
             TransportReporter::pending(None),
             |_| {},
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         let payload: Vec<u8> = (0..200u16).map(|n| (n % 256) as u8).collect();
         assert!(transport.send_bytes(&payload));
@@ -475,7 +498,9 @@ mod tests {
             &["cat".to_string()],
             TransportReporter::pending(None),
             |_| {},
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         assert!(transport.send_bytes(&[]));
 
@@ -487,13 +512,14 @@ mod tests {
         let (sender, mut receiver) = device_event_channel();
         let reporter = TransportReporter::pending(Some(sender));
         reporter.bind("test-device-100");
-        let (mut transport, mut relay) = PipeTransport::spawn_with_capacity(
-            &["cat".to_string()],
-            reporter.clone(),
-            |_| {},
-            4,
-        ).await.unwrap();
-        assert!(matches!(receiver.try_recv(), Ok(DeviceEvent::TransportConnected { .. })));
+        let (mut transport, mut relay) =
+            PipeTransport::spawn_with_capacity(&["cat".to_string()], reporter.clone(), |_| {}, 4)
+                .await
+                .unwrap();
+        assert!(matches!(
+            receiver.try_recv(),
+            Ok(DeviceEvent::TransportConnected { .. })
+        ));
 
         // Ring capacity is 4; a 5-byte buffer can never fit, so the whole
         // buffer must be dropped — not the 4 bytes that would fit.
@@ -523,16 +549,23 @@ mod tests {
         let (sender, mut receiver) = device_event_channel();
         let reporter = TransportReporter::pending(Some(sender));
         reporter.bind("test-device-101");
-        let (transport, relay) = PipeTransport::spawn_with_capacity(
-            &["cat".to_string()],
-            reporter.clone(),
-            |_| {},
-            4,
-        ).await.unwrap();
-        assert!(matches!(receiver.try_recv(), Ok(DeviceEvent::TransportConnected { .. })));
+        let (transport, relay) =
+            PipeTransport::spawn_with_capacity(&["cat".to_string()], reporter.clone(), |_| {}, 4)
+                .await
+                .unwrap();
+        assert!(matches!(
+            receiver.try_recv(),
+            Ok(DeviceEvent::TransportConnected { .. })
+        ));
 
-        assert!(transport.has_outbound_capacity(4), "a buffer that exactly fits the ring must report capacity");
-        assert!(!transport.has_outbound_capacity(5), "a buffer larger than the ring can never fit");
+        assert!(
+            transport.has_outbound_capacity(4),
+            "a buffer that exactly fits the ring must report capacity"
+        );
+        assert!(
+            !transport.has_outbound_capacity(5),
+            "a buffer larger than the ring can never fit"
+        );
 
         // Checking capacity must never itself count as (or report) a drop, unlike an actual
         // failed `send_bytes` call (issue #587) -- there is nothing here for `report_counts` to
@@ -549,7 +582,9 @@ mod tests {
             &["cat".to_string()],
             TransportReporter::pending(None),
             |_| {},
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         transport.shutdown();
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;

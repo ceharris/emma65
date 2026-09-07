@@ -39,7 +39,10 @@ pub fn assemble(source: &str) -> Result<AssembledProgram, Vec<Error>> {
     for (name, address) in output.symbols {
         symbols.insert_tagged(name, address as u16, SymbolSource::Assembler);
     }
-    Ok(AssembledProgram { segments: output.segments, symbols })
+    Ok(AssembledProgram {
+        segments: output.segments,
+        symbols,
+    })
 }
 
 #[cfg(test)]
@@ -125,7 +128,10 @@ message:
         );
         assert_eq!(lines[0].raw_bytes, vec![0xA9, (message_addr & 0xFF) as u8]);
         assert_eq!(lines[1].raw_bytes, vec![0xA2, (message_addr >> 8) as u8]);
-        assert_eq!(lines[2].raw_bytes, vec![0x20, (print_addr & 0xFF) as u8, (print_addr >> 8) as u8]);
+        assert_eq!(
+            lines[2].raw_bytes,
+            vec![0x20, (print_addr & 0xFF) as u8, (print_addr >> 8) as u8]
+        );
         assert_eq!(lines[4].raw_bytes, vec![0xA5, 0x11]);
         assert_eq!(lines[5].addr, done_addr);
         assert_eq!(&segment.bytes[segment.bytes.len() - 3..], b"HI\0");
@@ -161,7 +167,10 @@ message:
             ".setcpu \"wdc65c02\"\n.org $8000\n.byte 1, \"AB\", 2\n.word $1234\n.res 2\nSTP\n",
         );
         let segment = &program.segments[0];
-        assert_eq!(segment.bytes, vec![1, b'A', b'B', 2, 0x34, 0x12, 0, 0, 0xDB]);
+        assert_eq!(
+            segment.bytes,
+            vec![1, b'A', b'B', 2, 0x34, 0x12, 0, 0, 0xDB]
+        );
     }
 
     #[test]
@@ -181,7 +190,10 @@ message:
     #[test]
     fn assemble_collects_multiple_errors_rather_than_stopping_at_first() {
         let errors = assemble(".org $8000\nLDA missing1\nLDA missing2\n").unwrap_err();
-        assert!(errors.len() >= 2, "expected at least 2 errors, got {errors:?}");
+        assert!(
+            errors.len() >= 2,
+            "expected at least 2 errors, got {errors:?}"
+        );
     }
 
     #[test]
@@ -218,7 +230,11 @@ LDA (zp)
             segment.origin.wrapping_add(segment.bytes.len() as u16),
             32,
         );
-        assert!(lines.iter().all(|l| l.mnemonic == Mnemonic::Lda && l.is_valid));
+        assert!(
+            lines
+                .iter()
+                .all(|l| l.mnemonic == Mnemonic::Lda && l.is_valid)
+        );
         assert_eq!(lines.len(), 9);
     }
 
@@ -268,7 +284,10 @@ LDA (zp)
             source.push_str(operand);
         }
         source.push('\n');
-        if matches!(mode, AddressingMode::Relative | AddressingMode::ZeroPageRelative) {
+        if matches!(
+            mode,
+            AddressingMode::Relative | AddressingMode::ZeroPageRelative
+        ) {
             source.push_str("target:\n");
         }
 
@@ -277,9 +296,11 @@ LDA (zp)
         });
         let segment = &program.segments[0];
         assert_eq!(
-            segment.bytes.len(), entry.byte_len as usize,
+            segment.bytes.len(),
+            entry.byte_len as usize,
             "{mnemonic} under {mode:?} ({variant:?}): expected {} bytes, got {}",
-            entry.byte_len, segment.bytes.len(),
+            entry.byte_len,
+            segment.bytes.len(),
         );
         // Several illegal opcodes alias `(Nop, Implied)` and a few other
         // modes (see `InstructionTable::new`'s doc comment) — which one the
@@ -296,9 +317,19 @@ LDA (zp)
         let bus = bus_for_segment(segment, &program.symbols);
         let end = segment.origin.wrapping_add(segment.bytes.len() as u16);
         let lines = disassembler.disassemble_range(&bus, segment.origin, end, 1);
-        assert_eq!(lines.len(), 1, "{mnemonic} under {mode:?} ({variant:?}): expected exactly one decoded line");
-        assert_eq!(lines[0].mnemonic, mnemonic, "{mnemonic} under {mode:?} ({variant:?}): mnemonic did not round-trip");
-        assert!(lines[0].is_valid, "{mnemonic} under {mode:?} ({variant:?}): disassembled line marked invalid");
+        assert_eq!(
+            lines.len(),
+            1,
+            "{mnemonic} under {mode:?} ({variant:?}): expected exactly one decoded line"
+        );
+        assert_eq!(
+            lines[0].mnemonic, mnemonic,
+            "{mnemonic} under {mode:?} ({variant:?}): mnemonic did not round-trip"
+        );
+        assert!(
+            lines[0].is_valid,
+            "{mnemonic} under {mode:?} ({variant:?}): disassembled line marked invalid"
+        );
     }
 
     /// Exhaustively assembles one instruction for every `(Mnemonic,
@@ -316,12 +347,16 @@ LDA (zp)
             // `(Nop, Implied)`, but which one "wins" doesn't matter here
             // since the opcode-byte check above is skipped for NOP).
             let mut combos: HashMap<(Mnemonic, AddressingMode), DecodedOp> = HashMap::new();
-            for entry in decode_table(variant).into_iter().filter(|e| e.is_valid && e.mnemonic != Mnemonic::Ill) {
+            for entry in decode_table(variant)
+                .into_iter()
+                .filter(|e| e.is_valid && e.mnemonic != Mnemonic::Ill)
+            {
                 combos.entry((entry.mnemonic, entry.mode)).or_insert(entry);
             }
             assert!(
                 combos.len() > 100,
-                "expected a substantial instruction set for {variant:?}, got {}", combos.len(),
+                "expected a substantial instruction set for {variant:?}, got {}",
+                combos.len(),
             );
 
             for ((mnemonic, mode), entry) in &combos {

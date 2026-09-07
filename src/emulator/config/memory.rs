@@ -30,7 +30,6 @@ pub struct MemoryAttributes {
     labels: Option<ExpandedPathBuf>,
 }
 
-
 impl MemoryAttributes {
     fn from_attributes(attributes: &HashMap<String, Value>) -> Result<Self, DeviceModuleError> {
         let attrs = Dict::from_iter(attributes.clone());
@@ -53,11 +52,14 @@ impl DeviceModule for RamModule {
         RAM_DEVICE_TYPE
     }
 
-    async fn instantiate(&self, bus_config: BusConfig, address: u16,
-                         attributes: &HashMap<String, Value>, _context: &InstantiationContext,
-                         _id_allocator: Arc<Mutex<DeviceIdAllocator>>)
-                         -> Result<BusConfig, DeviceModuleError> {
-
+    async fn instantiate(
+        &self,
+        bus_config: BusConfig,
+        address: u16,
+        attributes: &HashMap<String, Value>,
+        _context: &InstantiationContext,
+        _id_allocator: Arc<Mutex<DeviceIdAllocator>>,
+    ) -> Result<BusConfig, DeviceModuleError> {
         let config = MemoryAttributes::from_attributes(attributes)?;
         let range = AddressRange::new(address, address + (config.size - 1) as u16);
         let offset = config.offset.unwrap_or(0);
@@ -76,10 +78,12 @@ impl DeviceModule for RamModule {
             loader::load_image(&filename, &mut data, offset)
                 .await
                 .map_err(DeviceModuleError::Load)?;
-            bus_config.ram_with_data(range, data)
+            bus_config
+                .ram_with_data(range, data)
                 .map_err(DeviceModuleError::BusConfig)
         } else if let Some(fill) = config.fill {
-            bus_config.ram_with_fill(range, fill)
+            bus_config
+                .ram_with_fill(range, fill)
                 .map_err(DeviceModuleError::BusConfig)
         } else {
             bus_config.ram(range).map_err(DeviceModuleError::BusConfig)
@@ -92,11 +96,14 @@ impl DeviceModule for RomModule {
         ROM_DEVICE_TYPE
     }
 
-    async fn instantiate(&self, bus_config: BusConfig, address: u16,
-                         attributes: &HashMap<String, Value>, 
-                         _context: &InstantiationContext, 
-                         _id_allocator: Arc<Mutex<DeviceIdAllocator>>)
-                         -> Result<BusConfig, DeviceModuleError> {
+    async fn instantiate(
+        &self,
+        bus_config: BusConfig,
+        address: u16,
+        attributes: &HashMap<String, Value>,
+        _context: &InstantiationContext,
+        _id_allocator: Arc<Mutex<DeviceIdAllocator>>,
+    ) -> Result<BusConfig, DeviceModuleError> {
         let config = MemoryAttributes::from_attributes(attributes)?;
         let range = AddressRange::new(address, address + (config.size - 1) as u16);
         let offset = config.offset.unwrap_or(0);
@@ -112,10 +119,12 @@ impl DeviceModule for RomModule {
 
         let mut data = make_buffer(config.size as usize, config.fill);
         if let Some(filename) = config.image {
-            loader::load_image(&filename, &mut data, offset).await.map_err(DeviceModuleError::Load)?;
+            loader::load_image(&filename, &mut data, offset)
+                .await
+                .map_err(DeviceModuleError::Load)?;
         }
-        bus_config.rom(range, data).map_err(DeviceModuleError::BusConfig)
+        bus_config
+            .rom(range, data)
+            .map_err(DeviceModuleError::BusConfig)
     }
-
 }
-

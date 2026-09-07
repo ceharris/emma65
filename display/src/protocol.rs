@@ -45,21 +45,36 @@ impl Header {
 /// rather than trying to synthesize a fallback.
 pub fn decode_header(bytes: &[u8]) -> Result<Header, String> {
     if bytes.len() != HEADER_LEN {
-        return Err(format!("header must be exactly {HEADER_LEN} bytes, got {}", bytes.len()));
+        return Err(format!(
+            "header must be exactly {HEADER_LEN} bytes, got {}",
+            bytes.len()
+        ));
     }
     if bytes[0..4] != MAGIC {
-        return Err(format!("bad magic {:?}, expected {:?}", &bytes[0..4], MAGIC));
+        return Err(format!(
+            "bad magic {:?}, expected {:?}",
+            &bytes[0..4],
+            MAGIC
+        ));
     }
     let version = bytes[4];
     if version != SUPPORTED_VERSION {
-        return Err(format!("unsupported protocol version {version}, expected {SUPPORTED_VERSION}"));
+        return Err(format!(
+            "unsupported protocol version {version}, expected {SUPPORTED_VERSION}"
+        ));
     }
     let columns = u32::from_le_bytes(bytes[5..9].try_into().unwrap());
     let rows = u32::from_le_bytes(bytes[9..13].try_into().unwrap());
     let frame_rate_hz = u32::from_le_bytes(bytes[13..17].try_into().unwrap());
     let palette_len = u16::from_le_bytes(bytes[17..19].try_into().unwrap());
     let font = Font::from_bytes(&bytes[19..19 + FONT_BYTES]).map_err(|e| e.to_string())?;
-    Ok(Header { columns, rows, frame_rate_hz, palette_len, font })
+    Ok(Header {
+        columns,
+        rows,
+        frame_rate_hz,
+        palette_len,
+        font,
+    })
 }
 
 /// Decoded frame contents (spec §5): char RAM, color RAM, and the current palette.
@@ -82,14 +97,23 @@ pub fn decode_frame(bytes: &[u8], columns: u32, rows: u32) -> Frame {
         .iter()
         .map(|c| Rgb24::new(c[0], c[1], c[2]))
         .collect();
-    Frame { char_ram, color_ram, palette }
+    Frame {
+        char_ram,
+        color_ram,
+        palette,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn sample_header_bytes(columns: u32, rows: u32, frame_rate_hz: u32, palette_len: u16) -> Vec<u8> {
+    fn sample_header_bytes(
+        columns: u32,
+        rows: u32,
+        frame_rate_hz: u32,
+        palette_len: u16,
+    ) -> Vec<u8> {
         let mut buf = Vec::with_capacity(HEADER_LEN);
         buf.extend_from_slice(&MAGIC);
         buf.push(SUPPORTED_VERSION);
@@ -114,7 +138,8 @@ mod tests {
 
     #[test]
     fn decode_header_rejects_wrong_length() {
-        let err = decode_header(&sample_header_bytes(40, 25, 60, 16)[..HEADER_LEN - 1]).unwrap_err();
+        let err =
+            decode_header(&sample_header_bytes(40, 25, 60, 16)[..HEADER_LEN - 1]).unwrap_err();
         assert!(err.contains("exactly"));
     }
 
@@ -146,6 +171,9 @@ mod tests {
         let frame = decode_frame(&frame_bytes, 2, 1);
         assert_eq!(frame.char_ram, vec![0x41, 0x42]);
         assert_eq!(frame.color_ram, vec![1, 2]);
-        assert_eq!(frame.palette, vec![Rgb24::new(10, 20, 30), Rgb24::new(40, 50, 60)]);
+        assert_eq!(
+            frame.palette,
+            vec![Rgb24::new(10, 20, 30), Rgb24::new(40, 50, 60)]
+        );
     }
 }

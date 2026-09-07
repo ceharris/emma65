@@ -41,7 +41,10 @@ pub fn enter_raw_mode(keep_isig: bool) -> Option<RawModeGuard> {
     let original = unsafe {
         let mut t = std::mem::zeroed::<libc::termios>();
         if libc::tcgetattr(io::stdin().as_raw_fd(), &mut t) != 0 {
-            eprintln!("warning: failed to read terminal mode: {}", io::Error::last_os_error());
+            eprintln!(
+                "warning: failed to read terminal mode: {}",
+                io::Error::last_os_error()
+            );
             return None;
         }
         t
@@ -53,7 +56,10 @@ pub fn enter_raw_mode(keep_isig: bool) -> Option<RawModeGuard> {
             raw.c_lflag |= libc::ISIG;
         }
         if libc::tcsetattr(io::stdin().as_raw_fd(), libc::TCSANOW, &raw) != 0 {
-            eprintln!("warning: failed to set terminal to raw mode: {}", io::Error::last_os_error());
+            eprintln!(
+                "warning: failed to set terminal to raw mode: {}",
+                io::Error::last_os_error()
+            );
             return None;
         }
     }

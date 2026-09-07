@@ -18,7 +18,13 @@ const VERSION: u8 = 1;
 
 /// Builds the one-time header sent immediately on attach (spec §4): magic, version, grid
 /// dimensions, vsync cadence, palette length, then the raw font bytes.
-pub fn encode_header(columns: u32, rows: u32, frame_rate_hz: u32, palette_len: u16, font: &Font) -> Vec<u8> {
+pub fn encode_header(
+    columns: u32,
+    rows: u32,
+    frame_rate_hz: u32,
+    palette_len: u16,
+    font: &Font,
+) -> Vec<u8> {
     let font_bytes = font.as_bytes();
     let mut buf = Vec::with_capacity(4 + 1 + 4 + 4 + 4 + 2 + font_bytes.len());
     buf.extend_from_slice(&MAGIC);
@@ -47,8 +53,8 @@ pub fn encode_frame(char_ram: &[u8], color_ram: &[u8], palette: &[Rgb24]) -> Vec
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::font::FONT_BYTES;
+    use super::*;
 
     #[test]
     fn header_layout_matches_spec() {

@@ -44,7 +44,11 @@ pub struct FontError {
 
 impl fmt::Display for FontError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "font data must be exactly {FONT_BYTES} bytes ({GLYPH_COUNT} glyphs of {GLYPH_BYTES} bytes each), got {}", self.actual_len)
+        write!(
+            f,
+            "font data must be exactly {FONT_BYTES} bytes ({GLYPH_COUNT} glyphs of {GLYPH_BYTES} bytes each), got {}",
+            self.actual_len
+        )
     }
 }
 
@@ -59,15 +63,21 @@ pub struct Font {
 impl Font {
     /// Builds a font from raw bytes. `data` must be exactly [`FONT_BYTES`] long.
     pub fn from_bytes(data: &[u8]) -> Result<Self, FontError> {
-        let array: [u8; FONT_BYTES] = data.try_into().map_err(|_| FontError { actual_len: data.len() })?;
-        Ok(Self { data: Box::new(array) })
+        let array: [u8; FONT_BYTES] = data.try_into().map_err(|_| FontError {
+            actual_len: data.len(),
+        })?;
+        Ok(Self {
+            data: Box::new(array),
+        })
     }
 
     /// Returns the 8 row bytes for `glyph_index` (one of the 256 possible character-RAM byte
     /// values).
     pub fn glyph(&self, glyph_index: u8) -> &[u8; GLYPH_BYTES] {
         let start = glyph_index as usize * GLYPH_BYTES;
-        self.data[start..start + GLYPH_BYTES].try_into().expect("glyph slice is always GLYPH_BYTES long")
+        self.data[start..start + GLYPH_BYTES]
+            .try_into()
+            .expect("glyph slice is always GLYPH_BYTES long")
     }
 
     /// Returns the raw, `FONT_BYTES`-long bitmap data (all 256 glyphs, concatenated) -- used to

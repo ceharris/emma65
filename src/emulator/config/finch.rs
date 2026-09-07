@@ -18,9 +18,9 @@ pub struct FinchModule;
 /// Configuration attributes for the Finch bank-switched MMU module.
 #[derive(Deserialize)]
 pub struct FinchAttributes {
-    #[serde(rename = "bank-registers", alias="banks")]
+    #[serde(rename = "bank-registers", alias = "banks")]
     bank_register_address: u16,
-    #[serde(rename = "control-register", alias="ctrl")]
+    #[serde(rename = "control-register", alias = "ctrl")]
     control_register_address: u16,
     #[serde(rename = "write-policy", skip_serializing_if = "Option::is_none")]
     write_policy: Option<WritePolicySpec>,
@@ -41,13 +41,18 @@ impl FinchAttributes {
 }
 
 impl DeviceModule for FinchModule {
+    fn name(&self) -> &'static str {
+        DEVICE_NAME
+    }
 
-    fn name(&self) -> &'static str { DEVICE_NAME }
-
-    async fn instantiate(&self, bus_config: BusConfig, _address: u16,
-                         attributes: &HashMap<String, Value>, 
-                         context: &InstantiationContext, 
-                         id_allocator: Arc<Mutex<DeviceIdAllocator>>) -> Result<BusConfig, DeviceModuleError> {
+    async fn instantiate(
+        &self,
+        bus_config: BusConfig,
+        _address: u16,
+        attributes: &HashMap<String, Value>,
+        context: &InstantiationContext,
+        id_allocator: Arc<Mutex<DeviceIdAllocator>>,
+    ) -> Result<BusConfig, DeviceModuleError> {
         let config = FinchAttributes::from_attributes(attributes)?;
         let device_id = id_allocator.lock().unwrap().next_available();
         let offset = finch::ROM_START as isize + config.offset.unwrap_or(0);
@@ -62,9 +67,16 @@ impl DeviceModule for FinchModule {
         };
 
         let mut data = super::memory::make_buffer(finch::MEMORY_SIZE, config.fill);
-        loader::load_image(&config.image, &mut data, offset).await.map_err(DeviceModuleError::Load)?;
+        loader::load_image(&config.image, &mut data, offset)
+            .await
+            .map_err(DeviceModuleError::Load)?;
         let device = {
-            let mut dev = Finch::with_data(DEVICE_NAME, config.bank_register_address, config.control_register_address, data);
+            let mut dev = Finch::with_data(
+                DEVICE_NAME,
+                config.bank_register_address,
+                config.control_register_address,
+                data,
+            );
             if let Some(write_policy) = config.write_policy {
                 dev.set_write_policy(write_policy.to_rom_write_policy());
             }
@@ -77,8 +89,8 @@ impl DeviceModule for FinchModule {
             dev
         };
 
-        bus_config.device(AddressRange::new(0, 0xFFFF), device_id, Box::new(device))
+        bus_config
+            .device(AddressRange::new(0, 0xFFFF), device_id, Box::new(device))
             .map_err(DeviceModuleError::BusConfig)
     }
 }
-

@@ -80,7 +80,10 @@ pub fn assemble(source: &str) -> Result<AssembledOutput, Vec<Error>> {
     assemble_with_pass_limit(source, DEFAULT_MAX_PASSES)
 }
 
-fn assemble_with_pass_limit(source: &str, max_passes: usize) -> Result<AssembledOutput, Vec<Error>> {
+fn assemble_with_pass_limit(
+    source: &str,
+    max_passes: usize,
+) -> Result<AssembledOutput, Vec<Error>> {
     let statements = parse_program(source).map_err(|e| vec![e])?;
     check_duplicate_symbols(&statements)?;
 
@@ -134,7 +137,11 @@ fn check_duplicate_symbols(statements: &[(Statement, Location)]) -> Result<(), V
             }
         }
     }
-    if errors.is_empty() { Ok(()) } else { Err(errors) }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }
 
 /// Detects segment address ranges that overlap, or two segments sharing the
@@ -158,7 +165,11 @@ fn check_overlaps(segments: &[Segment]) -> Result<(), Vec<Error>> {
             }
         }
     }
-    if errors.is_empty() { Ok(()) } else { Err(errors) }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }
 
 /// Walks every statement once, in order, updating `symbols` and `sizes` in
@@ -207,7 +218,10 @@ fn run_pass<'a>(
             },
             Statement::Directive(Directive::Org(expr)) => match evaluate(expr, symbols) {
                 Ok(Some(value)) => {
-                    segments.push(Segment { origin: value as u16, bytes: Vec::new() });
+                    segments.push(Segment {
+                        origin: value as u16,
+                        bytes: Vec::new(),
+                    });
                     current = Some(segments.len() - 1);
                 }
                 Ok(None) => errors.push(Error::from(
@@ -251,7 +265,9 @@ fn run_pass<'a>(
                 Some(seg) => {
                     for expr in exprs {
                         match evaluate(expr, symbols) {
-                            Ok(Some(value)) => segments[seg].bytes.extend((value as u16).to_le_bytes()),
+                            Ok(Some(value)) => {
+                                segments[seg].bytes.extend((value as u16).to_le_bytes())
+                            }
                             Ok(None) => {
                                 if final_pass {
                                     errors.push(undefined_symbol_error(location));
@@ -292,7 +308,8 @@ fn run_pass<'a>(
                                     if final_pass {
                                         errors.push(undefined_symbol_error(location));
                                     }
-                                    let new_len = segments[seg].bytes.len() + encoded.byte_len as usize;
+                                    let new_len =
+                                        segments[seg].bytes.len() + encoded.byte_len as usize;
                                     segments[seg].bytes.resize(new_len, 0);
                                 }
                             }
@@ -304,7 +321,11 @@ fn run_pass<'a>(
         }
     }
 
-    if errors.is_empty() { Ok(segments) } else { Err(errors) }
+    if errors.is_empty() {
+        Ok(segments)
+    } else {
+        Err(errors)
+    }
 }
 
 fn undefined_symbol_error(location: Location) -> Error {
@@ -312,7 +333,11 @@ fn undefined_symbol_error(location: Location) -> Error {
 }
 
 fn no_active_segment_error(location: Location, what: &str) -> Error {
-    Error::from(location.line, location.column, &format!("{what} used before any '.org' directive"))
+    Error::from(
+        location.line,
+        location.column,
+        &format!("{what} used before any '.org' directive"),
+    )
 }
 
 #[cfg(test)]
@@ -385,8 +410,20 @@ mod tests {
     fn assemble_multiple_non_overlapping_segments() {
         let output = assemble_ok(".org $8000\nLDA #1\n.org $9000\nLDA #2\n");
         assert_eq!(output.segments.len(), 2);
-        assert_eq!(output.segments[0], Segment { origin: 0x8000, bytes: vec![0xA9, 0x01] });
-        assert_eq!(output.segments[1], Segment { origin: 0x9000, bytes: vec![0xA9, 0x02] });
+        assert_eq!(
+            output.segments[0],
+            Segment {
+                origin: 0x8000,
+                bytes: vec![0xA9, 0x01]
+            }
+        );
+        assert_eq!(
+            output.segments[1],
+            Segment {
+                origin: 0x9000,
+                bytes: vec![0xA9, 0x02]
+            }
+        );
     }
 
     #[test]
@@ -404,31 +441,51 @@ mod tests {
     #[test]
     fn assemble_byte_before_org_error() {
         let errors = assemble_err(".byte 1\n");
-        assert!(errors.iter().any(|e| e.message().contains("before any '.org'")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.message().contains("before any '.org'"))
+        );
     }
 
     #[test]
     fn assemble_duplicate_label_error() {
         let errors = assemble_err(".org $8000\nfoo:\nfoo:\n");
-        assert!(errors.iter().any(|e| e.message().contains("already defined")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.message().contains("already defined"))
+        );
     }
 
     #[test]
     fn assemble_undefined_symbol_error() {
         let errors = assemble_err(".org $8000\nLDA missing\n");
-        assert!(errors.iter().any(|e| e.message().contains("undefined symbol")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.message().contains("undefined symbol"))
+        );
     }
 
     #[test]
     fn assemble_res_forward_reference_error() {
         let errors = assemble_err(".org $8000\n.res forward\nforward = 4\n");
-        assert!(errors.iter().any(|e| e.message().contains("forward reference")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.message().contains("forward reference"))
+        );
     }
 
     #[test]
     fn assemble_org_forward_reference_error() {
         let errors = assemble_err(".org forward\nforward = $8000\n");
-        assert!(errors.iter().any(|e| e.message().contains("forward reference")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.message().contains("forward reference"))
+        );
     }
 
     #[test]
@@ -438,7 +495,11 @@ mod tests {
         // than silently emitting the wrong (unconverged) bytes.
         let errors = assemble_with_pass_limit(".org $0200\nLDA forward\nforward = $10\n", 1)
             .expect_err("expected non-convergence error");
-        assert!(errors.iter().any(|e| e.message().contains("did not converge")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.message().contains("did not converge"))
+        );
     }
 
     #[test]
@@ -474,6 +535,10 @@ mod tests {
     #[test]
     fn assemble_setcpu_unknown_variant_error() {
         let errors = assemble_err(".setcpu \"6809\"\n");
-        assert!(errors.iter().any(|e| e.message().contains("unknown CPU variant")));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.message().contains("unknown CPU variant"))
+        );
     }
 }

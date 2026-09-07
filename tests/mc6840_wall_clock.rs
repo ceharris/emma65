@@ -21,7 +21,8 @@ use emma65::assembler::assemble;
 use emma65::emulator::cpu::StepResult;
 use emma65::emulator::device::Mc6840;
 use emma65::emulator::{
-    AddressRange, Bus, ClockSpeed, CpuBuilder, CpuVariant, DeviceId, InvalidOpcodePolicy, IoDevice, run,
+    AddressRange, Bus, ClockSpeed, CpuBuilder, CpuVariant, DeviceId, InvalidOpcodePolicy, IoDevice,
+    run,
 };
 
 /// A 1-byte memory-mapped device that records a wall-clock timestamp every
@@ -40,12 +41,18 @@ impl InstrumentPort {
 }
 
 impl IoDevice for InstrumentPort {
-    fn read(&mut self, _address: u16) -> u8 { 0 }
+    fn read(&mut self, _address: u16) -> u8 {
+        0
+    }
     fn write(&mut self, _address: u16, _value: u8) {
         self.log.lock().unwrap().push(Instant::now());
     }
-    fn peek(&self, _address: u16) -> u8 { 0 }
-    fn identity_address(&self) -> u16 { self.address }
+    fn peek(&self, _address: u16) -> u8 {
+        0
+    }
+    fn identity_address(&self) -> u16 {
+        self.address
+    }
 }
 
 /// Realistic clock speed matching the emulator's default profile (see
@@ -118,10 +125,22 @@ fn build_cpu(source: &str, port_log: Arc<Mutex<Vec<Instant>>>) -> emma65::emulat
     let port = InstrumentPort::new(0xE010, port_log);
 
     let bus = Bus::config()
-        .ram_with_fill(AddressRange::new(0x0000, 0xDFFF), 0).unwrap()
-        .device(AddressRange::new(0xE000, 0xE007), DeviceId(1), Box::new(ptm)).unwrap()
-        .device(AddressRange::new(0xE010, 0xE010), DeviceId(2), Box::new(port)).unwrap()
-        .ram_with_fill(AddressRange::new(0xE011, 0xFFFF), 0).unwrap()
+        .ram_with_fill(AddressRange::new(0x0000, 0xDFFF), 0)
+        .unwrap()
+        .device(
+            AddressRange::new(0xE000, 0xE007),
+            DeviceId(1),
+            Box::new(ptm),
+        )
+        .unwrap()
+        .device(
+            AddressRange::new(0xE010, 0xE010),
+            DeviceId(2),
+            Box::new(port),
+        )
+        .unwrap()
+        .ram_with_fill(AddressRange::new(0xE011, 0xFFFF), 0)
+        .unwrap()
         .build();
 
     let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
@@ -133,7 +152,9 @@ fn build_cpu(source: &str, port_log: Arc<Mutex<Vec<Instant>>>) -> emma65::emulat
 
     for segment in &program.segments {
         for (i, &b) in segment.bytes.iter().enumerate() {
-            cpu.bus_mut().write(segment.origin.wrapping_add(i as u16), b).unwrap();
+            cpu.bus_mut()
+                .write(segment.origin.wrapping_add(i as u16), b)
+                .unwrap();
         }
     }
     let start = program.segments[0].origin;
@@ -224,7 +245,8 @@ async fn timer1_continuous_period_matches_wall_clock() {
     const LATCH: u16 = 60_000;
     const PERIODS: u8 = 6;
 
-    let expected_period = Duration::from_secs_f64(LATCH as f64 / clock_speed().hz_value().unwrap() as f64);
+    let expected_period =
+        Duration::from_secs_f64(LATCH as f64 / clock_speed().hz_value().unwrap() as f64);
 
     let cr_setup = "\
   LDA #$01          ; CR2 bit 0: route offset-0 writes to CR1 instead of CR3; T2 left idle
@@ -240,7 +262,11 @@ async fn timer1_continuous_period_matches_wall_clock() {
     run_to_stop(cpu, generous_timeout(expected_period, PERIODS)).await;
 
     let timestamps = log.lock().unwrap().clone();
-    assert_eq!(timestamps.len(), PERIODS as usize + 1, "expected 1 start marker + {PERIODS} period markers");
+    assert_eq!(
+        timestamps.len(),
+        PERIODS as usize + 1,
+        "expected 1 start marker + {PERIODS} period markers"
+    );
     let periods = individual_periods(&timestamps);
     assert_average_period_matches(&periods, expected_period, 0.25);
     assert_periods_are_consistent(&periods, expected_period, 0.35);
@@ -257,7 +283,8 @@ async fn timer2_continuous_period_stable_over_sustained_run() {
     const LATCH: u16 = 20_000;
     const PERIODS: u8 = 200;
 
-    let expected_period = Duration::from_secs_f64(LATCH as f64 / clock_speed().hz_value().unwrap() as f64);
+    let expected_period =
+        Duration::from_secs_f64(LATCH as f64 / clock_speed().hz_value().unwrap() as f64);
 
     let cr_setup = "\
   LDA #$42          ; CR2: T2 continuous, immediate init, IRQ enabled, internal clock
@@ -271,7 +298,11 @@ async fn timer2_continuous_period_stable_over_sustained_run() {
     run_to_stop(cpu, generous_timeout(expected_period, PERIODS)).await;
 
     let timestamps = log.lock().unwrap().clone();
-    assert_eq!(timestamps.len(), PERIODS as usize + 1, "expected 1 start marker + {PERIODS} period markers");
+    assert_eq!(
+        timestamps.len(),
+        PERIODS as usize + 1,
+        "expected 1 start marker + {PERIODS} period markers"
+    );
     let periods = individual_periods(&timestamps);
     // Tighter than the short baseline tests: 200 samples average out
     // scheduling noise well, so a real systematic drift stands out clearly.
@@ -301,8 +332,9 @@ async fn timer3_prescaled_period_matches_wall_clock_despite_cr3_rewrites() {
     const PERIODS: u8 = 6;
     const CR3: u8 = 0x43; // prescale=1, internal clock=1, mode=continuous/immediate-init, IRQ enable=1
 
-    let expected_period =
-        Duration::from_secs_f64((LATCH as u64 * 8) as f64 / clock_speed().hz_value().unwrap() as f64);
+    let expected_period = Duration::from_secs_f64(
+        (LATCH as u64 * 8) as f64 / clock_speed().hz_value().unwrap() as f64,
+    );
 
     let cr_setup = format!(
         "\
@@ -324,7 +356,11 @@ async fn timer3_prescaled_period_matches_wall_clock_despite_cr3_rewrites() {
     run_to_stop(cpu, generous_timeout(expected_period, PERIODS)).await;
 
     let timestamps = log.lock().unwrap().clone();
-    assert_eq!(timestamps.len(), PERIODS as usize + 1, "expected 1 start marker + {PERIODS} period markers");
+    assert_eq!(
+        timestamps.len(),
+        PERIODS as usize + 1,
+        "expected 1 start marker + {PERIODS} period markers"
+    );
     let periods = individual_periods(&timestamps);
     assert_average_period_matches(&periods, expected_period, 0.25);
     assert_periods_are_consistent(&periods, expected_period, 0.40);

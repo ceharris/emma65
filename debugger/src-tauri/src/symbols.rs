@@ -39,8 +39,14 @@ fn format_source(source: &SymbolSource) -> (String, Option<String>) {
         SymbolSource::User => ("User".to_string(), None),
         SymbolSource::Assembler => ("Assembler".to_string(), None),
         SymbolSource::File(path) => {
-            let basename = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string());
-            (format!("File: {basename}"), Some(path.display().to_string()))
+            let basename = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.display().to_string());
+            (
+                format!("File: {basename}"),
+                Some(path.display().to_string()),
+            )
         }
     }
 }
@@ -50,7 +56,11 @@ fn format_source(source: &SymbolSource) -> (String, Option<String>) {
 /// `names_for` if more than one source defines it at the same address —
 /// that's still just "the same name", not an alias of itself).
 fn aliases_for(table: &SymbolTable, name: &str, address: u16) -> Vec<String> {
-    let mut aliases: Vec<String> = table.names_for(address).filter(|&n| n != name).map(String::from).collect();
+    let mut aliases: Vec<String> = table
+        .names_for(address)
+        .filter(|&n| n != name)
+        .map(String::from)
+        .collect();
     aliases.sort();
     aliases.dedup();
     aliases
@@ -63,7 +73,13 @@ fn symbol_rows(table: &SymbolTable) -> Vec<SymbolRow> {
         .iter()
         .map(|(name, source, address)| {
             let (source, source_path) = format_source(source);
-            SymbolRow { name: name.to_string(), address, source, source_path, aliases: aliases_for(table, name, address) }
+            SymbolRow {
+                name: name.to_string(),
+                address,
+                source,
+                source_path,
+                aliases: aliases_for(table, name, address),
+            }
         })
         .collect()
 }
@@ -96,13 +112,16 @@ mod tests {
         let mut table = SymbolTable::default();
         table.insert("foo".to_string(), 0x1000);
         let rows = symbol_rows(&table);
-        assert_eq!(rows, vec![SymbolRow {
-            name: "foo".to_string(),
-            address: 0x1000,
-            source: "User".to_string(),
-            source_path: None,
-            aliases: vec![],
-        }]);
+        assert_eq!(
+            rows,
+            vec![SymbolRow {
+                name: "foo".to_string(),
+                address: 0x1000,
+                source: "User".to_string(),
+                source_path: None,
+                aliases: vec![],
+            }]
+        );
     }
 
     #[test]

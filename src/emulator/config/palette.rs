@@ -51,10 +51,14 @@ pub enum PaletteError {
 impl fmt::Display for PaletteError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PaletteError::InvalidCount { actual } =>
-                write!(f, "palette must contain exactly {SMALL_PALETTE_ENTRIES} or {LARGE_PALETTE_ENTRIES} colors, got {actual}"),
-            PaletteError::InvalidEntry { line, text } =>
-                write!(f, "invalid color on line {line}: {text:?} (expected 6 hex digits, optionally prefixed with '#')"),
+            PaletteError::InvalidCount { actual } => write!(
+                f,
+                "palette must contain exactly {SMALL_PALETTE_ENTRIES} or {LARGE_PALETTE_ENTRIES} colors, got {actual}"
+            ),
+            PaletteError::InvalidEntry { line, text } => write!(
+                f,
+                "invalid color on line {line}: {text:?} (expected 6 hex digits, optionally prefixed with '#')"
+            ),
         }
     }
 }
@@ -85,12 +89,16 @@ pub fn parse(text: &str) -> Result<Vec<Rgb24>, PaletteError> {
         if line.is_empty() {
             continue;
         }
-        let color = parse_color(line)
-            .ok_or_else(|| PaletteError::InvalidEntry { line: i + 1, text: line.to_string() })?;
+        let color = parse_color(line).ok_or_else(|| PaletteError::InvalidEntry {
+            line: i + 1,
+            text: line.to_string(),
+        })?;
         colors.push(color);
     }
     if !ALLOWED_ENTRY_COUNTS.contains(&colors.len()) {
-        return Err(PaletteError::InvalidCount { actual: colors.len() });
+        return Err(PaletteError::InvalidCount {
+            actual: colors.len(),
+        });
     }
     Ok(colors)
 }
@@ -126,15 +134,24 @@ mod tests {
 
     #[test]
     fn rejects_empty_input() {
-        assert_eq!(parse("").unwrap_err(), PaletteError::InvalidCount { actual: 0 });
-        assert_eq!(parse("\n\n  \n").unwrap_err(), PaletteError::InvalidCount { actual: 0 });
+        assert_eq!(
+            parse("").unwrap_err(),
+            PaletteError::InvalidCount { actual: 0 }
+        );
+        assert_eq!(
+            parse("\n\n  \n").unwrap_err(),
+            PaletteError::InvalidCount { actual: 0 }
+        );
     }
 
     #[test]
     fn rejects_counts_other_than_16_or_256() {
         for count in [1, 3, 15, 17, 200, 255, 257] {
             let text = "000000\n".repeat(count);
-            assert_eq!(parse(&text).unwrap_err(), PaletteError::InvalidCount { actual: count });
+            assert_eq!(
+                parse(&text).unwrap_err(),
+                PaletteError::InvalidCount { actual: count }
+            );
         }
     }
 

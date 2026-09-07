@@ -122,7 +122,10 @@ fn parse_line<'a>(
 }
 
 fn is_symbol_assign_form(parser: &Parser) -> bool {
-    if !matches!(parser.peek().map(|t| t.token_type()), Some(TokenType::Symbol(_))) {
+    if !matches!(
+        parser.peek().map(|t| t.token_type()),
+        Some(TokenType::Symbol(_))
+    ) {
         return false;
     }
     match parser.peek_at(1).map(|t| t.token_type()) {
@@ -133,8 +136,13 @@ fn is_symbol_assign_form(parser: &Parser) -> bool {
 }
 
 fn is_label_form(parser: &Parser) -> bool {
-    matches!(parser.peek().map(|t| t.token_type()), Some(TokenType::Symbol(_)))
-        && matches!(parser.peek_at(1).map(|t| t.token_type()), Some(TokenType::Colon))
+    matches!(
+        parser.peek().map(|t| t.token_type()),
+        Some(TokenType::Symbol(_))
+    ) && matches!(
+        parser.peek_at(1).map(|t| t.token_type()),
+        Some(TokenType::Colon)
+    )
 }
 
 fn symbol_name(token: &Token) -> String {
@@ -161,7 +169,9 @@ fn parse_symbol_assign<'a>(parser: &mut Parser<'a>) -> Result<(Statement<'a>, Lo
     Ok((Statement::SymbolAssign(name, expr), location))
 }
 
-fn parse_directive_statement<'a>(parser: &mut Parser<'a>) -> Result<(Statement<'a>, Location), Error> {
+fn parse_directive_statement<'a>(
+    parser: &mut Parser<'a>,
+) -> Result<(Statement<'a>, Location), Error> {
     let token = parser.advance().unwrap();
     let location = token.location;
     let name = match token.token_type() {
@@ -188,7 +198,10 @@ fn parse_directive_statement<'a>(parser: &mut Parser<'a>) -> Result<(Statement<'
 /// Parses `.setcpu`'s quoted string argument and maps it to a [`CpuVariant`],
 /// accepting the aliases `"65c02"`/`"c02"` for [`CpuVariant::Cmos65C02`] and
 /// `"wdc65c02"`/`"w65c02"` for [`CpuVariant::Wdc65C02`], case-insensitively.
-fn parse_cpu_variant(parser: &mut Parser, directive_location: Location) -> Result<CpuVariant, Error> {
+fn parse_cpu_variant(
+    parser: &mut Parser,
+    directive_location: Location,
+) -> Result<CpuVariant, Error> {
     match parser.peek().cloned() {
         Some(token) => match token.token_type() {
             TokenType::String(s) => {
@@ -265,10 +278,16 @@ fn parse_instruction<'a>(
     let location = token.location;
     let name = symbol_name(&token);
     let mnemonic = mnemonic_from_str(&name).ok_or_else(|| {
-        Error::from(location.line, location.column, &format!("unknown mnemonic '{name}'"))
+        Error::from(
+            location.line,
+            location.column,
+            &format!("unknown mnemonic '{name}'"),
+        )
     })?;
     let accumulator_supported = table.get(mnemonic, AddressingMode::Accumulator).is_some();
-    let zero_page_relative_supported = table.get(mnemonic, AddressingMode::ZeroPageRelative).is_some();
+    let zero_page_relative_supported = table
+        .get(mnemonic, AddressingMode::ZeroPageRelative)
+        .is_some();
     let operand = parse_operand(parser, accumulator_supported, zero_page_relative_supported)?;
     Ok((Statement::Instruction(mnemonic, operand), location))
 }
@@ -294,13 +313,21 @@ fn expect_end_of_line(parser: &mut Parser) -> Result<(), Error> {
         Ok(())
     } else {
         let token = parser.peek().unwrap();
-        Err(Error::from(token.location.line, token.location.column, "expected end of line"))
+        Err(Error::from(
+            token.location.line,
+            token.location.column,
+            "expected end of line",
+        ))
     }
 }
 
 fn unexpected_token_error(parser: &Parser) -> Error {
     match parser.peek() {
-        Some(token) => Error::from(token.location.line, token.location.column, "unexpected token"),
+        Some(token) => Error::from(
+            token.location.line,
+            token.location.column,
+            "unexpected token",
+        ),
         None => Error::from(0, 0, "unexpected end of input"),
     }
 }
@@ -356,7 +383,10 @@ mod tests {
         let statements = parse_line_source("here: .byte 1\n", &t).unwrap();
         assert_eq!(statements.len(), 2);
         assert_eq!(statements[0].0, Statement::Label(String::from("here")));
-        assert!(matches!(&statements[1].0, Statement::Directive(Directive::Byte(_))));
+        assert!(matches!(
+            &statements[1].0,
+            Statement::Directive(Directive::Byte(_))
+        ));
     }
 
     #[test]
@@ -438,7 +468,10 @@ mod tests {
         let t = table();
         let statements = parse_line_source("NOP\n", &t).unwrap();
         assert_eq!(statements.len(), 1);
-        assert_eq!(statements[0].0, Statement::Instruction(Mnemonic::Nop, OperandSyntax::None));
+        assert_eq!(
+            statements[0].0,
+            Statement::Instruction(Mnemonic::Nop, OperandSyntax::None)
+        );
     }
 
     #[test]
@@ -446,7 +479,13 @@ mod tests {
         let t = table();
         let result = parse_line_source("FROB #1\n", &t);
         assert!(result.is_err());
-        assert!(result.err().unwrap().to_string().contains("unknown mnemonic"));
+        assert!(
+            result
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("unknown mnemonic")
+        );
     }
 
     #[test]
@@ -454,7 +493,13 @@ mod tests {
         let t = table();
         let result = parse_line_source(".bogus 1\n", &t);
         assert!(result.is_err());
-        assert!(result.err().unwrap().to_string().contains("unknown directive"));
+        assert!(
+            result
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("unknown directive")
+        );
     }
 
     #[test]
@@ -462,7 +507,13 @@ mod tests {
         let t = table();
         let result = parse_line_source("LDA #1 extra\n", &t);
         assert!(result.is_err());
-        assert!(result.err().unwrap().to_string().contains("expected end of line"));
+        assert!(
+            result
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("expected end of line")
+        );
     }
 
     #[test]
@@ -470,15 +521,24 @@ mod tests {
         let statements = parse_program("start:\n  LDA #1\n  STA $10\n").unwrap();
         assert_eq!(statements.len(), 3);
         assert_eq!(statements[0].0, Statement::Label(String::from("start")));
-        assert!(matches!(&statements[1].0, Statement::Instruction(Mnemonic::Lda, _)));
-        assert!(matches!(&statements[2].0, Statement::Instruction(Mnemonic::Sta, _)));
+        assert!(matches!(
+            &statements[1].0,
+            Statement::Instruction(Mnemonic::Lda, _)
+        ));
+        assert!(matches!(
+            &statements[2].0,
+            Statement::Instruction(Mnemonic::Sta, _)
+        ));
     }
 
     #[test]
     fn parse_program_skips_blank_lines_and_comments() {
         let statements = parse_program("\n; a comment\nNOP\n\n").unwrap();
         assert_eq!(statements.len(), 1);
-        assert_eq!(statements[0].0, Statement::Instruction(Mnemonic::Nop, OperandSyntax::None));
+        assert_eq!(
+            statements[0].0,
+            Statement::Instruction(Mnemonic::Nop, OperandSyntax::None)
+        );
     }
 
     #[test]
@@ -492,7 +552,10 @@ mod tests {
         ] {
             let source = format!(".setcpu \"{text}\"\n");
             let statements = parse_line_source(&source, &t).unwrap();
-            assert_eq!(statements[0].0, Statement::Directive(Directive::SetCpu(expected)));
+            assert_eq!(
+                statements[0].0,
+                Statement::Directive(Directive::SetCpu(expected))
+            );
         }
     }
 
@@ -501,7 +564,13 @@ mod tests {
         let t = table();
         let result = parse_line_source(".setcpu \"6809\"\n", &t);
         assert!(result.is_err());
-        assert!(result.err().unwrap().to_string().contains("unknown CPU variant"));
+        assert!(
+            result
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("unknown CPU variant")
+        );
     }
 
     #[test]
@@ -509,7 +578,13 @@ mod tests {
         let t = table();
         let result = parse_line_source(".setcpu wdc65c02\n", &t);
         assert!(result.is_err());
-        assert!(result.err().unwrap().to_string().contains("expected a quoted CPU variant string"));
+        assert!(
+            result
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("expected a quoted CPU variant string")
+        );
     }
 
     #[test]

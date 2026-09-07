@@ -44,7 +44,12 @@ fn read_exact_or_eof<R: Read>(reader: &mut R, buf: &mut [u8]) -> io::Result<bool
     while filled < buf.len() {
         match reader.read(&mut buf[filled..]) {
             Ok(0) if filled == 0 => return Ok(false),
-            Ok(0) => return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "stream closed mid-message")),
+            Ok(0) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "stream closed mid-message",
+                ));
+            }
             Ok(n) => filled += n,
             Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
             Err(e) => return Err(e),
@@ -58,7 +63,10 @@ fn read_exact_or_eof<R: Read>(reader: &mut R, buf: &mut [u8]) -> io::Result<bool
 fn read_header<R: Read>(reader: &mut R) -> io::Result<Header> {
     let mut buf = vec![0u8; protocol::HEADER_LEN];
     if !read_exact_or_eof(reader, &mut buf)? {
-        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "stream closed before sending a header"));
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            "stream closed before sending a header",
+        ));
     }
     protocol::decode_header(&buf).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
@@ -103,15 +111,20 @@ fn spawn_frame_reader(frame_len: usize, columns: u32, rows: u32) -> mpsc::Receiv
 fn keystroke_byte(event: &Event) -> Option<u8> {
     match event {
         Event::TextInput { text, .. } => text.bytes().next().filter(u8::is_ascii),
-        Event::KeyDown { keycode: Some(keycode), keymod, .. }
-            if keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD) =>
-        {
+        Event::KeyDown {
+            keycode: Some(keycode),
+            keymod,
+            ..
+        } if keymod.intersects(Mod::LCTRLMOD | Mod::RCTRLMOD) => {
             match keycode.into_i32() {
                 code @ 97..=122 => Some((code - 97 + 1) as u8), // Ctrl+A..Z -> 0x01..0x1a
                 _ => None,
             }
         }
-        Event::KeyDown { keycode: Some(keycode), .. } => match *keycode {
+        Event::KeyDown {
+            keycode: Some(keycode),
+            ..
+        } => match *keycode {
             Keycode::RETURN => Some(0x0d),
             Keycode::BACKSPACE => Some(0x08),
             Keycode::TAB => Some(0x09),
@@ -140,7 +153,9 @@ fn main() {
     let rx = spawn_frame_reader(frame_len, header.columns, header.rows);
 
     let sdl_context = sdl2::init().expect("SDL2 init failed");
-    let video = sdl_context.video().expect("SDL2 video subsystem init failed");
+    let video = sdl_context
+        .video()
+        .expect("SDL2 video subsystem init failed");
     let window = video
         .window(
             &format!("emma65 display - {}x{}", header.columns, header.rows),
@@ -154,14 +169,21 @@ fn main() {
 
     video.text_input().start();
 
-    let mut canvas = window.into_canvas().build().expect("failed to create SDL2 canvas");
-    canvas.set_logical_size(pixel_width, pixel_height).expect("failed to set logical render size");
+    let mut canvas = window
+        .into_canvas()
+        .build()
+        .expect("failed to create SDL2 canvas");
+    canvas
+        .set_logical_size(pixel_width, pixel_height)
+        .expect("failed to set logical render size");
     let texture_creator = canvas.texture_creator();
     let mut texture = texture_creator
         .create_texture_streaming(PixelFormatEnum::RGBA32, pixel_width, pixel_height)
         .expect("failed to create SDL2 texture");
 
-    let mut event_pump = sdl_context.event_pump().expect("failed to obtain SDL2 event pump");
+    let mut event_pump = sdl_context
+        .event_pump()
+        .expect("failed to obtain SDL2 event pump");
     let pitch = (pixel_width * 4) as usize;
     let mut stdout = io::stdout();
 
@@ -180,10 +202,21 @@ fn main() {
 
         match rx.recv_timeout(Duration::from_millis(10)) {
             Ok(frame) => {
-                let pixels = composite(&frame.char_ram, &frame.color_ram, header.columns, header.rows, &frame.palette, &header.font);
-                texture.update(None, &pixels, pitch).expect("failed to update SDL2 texture");
+                let pixels = composite(
+                    &frame.char_ram,
+                    &frame.color_ram,
+                    header.columns,
+                    header.rows,
+                    &frame.palette,
+                    &header.font,
+                );
+                texture
+                    .update(None, &pixels, pitch)
+                    .expect("failed to update SDL2 texture");
                 canvas.clear();
-                canvas.copy(&texture, None, None).expect("failed to blit SDL2 texture");
+                canvas
+                    .copy(&texture, None, None)
+                    .expect("failed to blit SDL2 texture");
                 canvas.present();
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}

@@ -28,7 +28,10 @@ mod tests {
     use figment::providers::{Format, Toml};
 
     fn temp_dest(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("emma65-default-config-test-{name}-{:?}", std::thread::current().id()));
+        let dir = std::env::temp_dir().join(format!(
+            "emma65-default-config-test-{name}-{:?}",
+            std::thread::current().id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }
@@ -42,7 +45,10 @@ mod tests {
         assert_eq!(std::fs::read(dest.join("program.bin")).unwrap(), ROM_IMAGE);
         assert_eq!(std::fs::read(dest.join("program.lbl")).unwrap(), LABELS);
         let rendered = std::fs::read_to_string(&toml_path).unwrap();
-        assert!(!rendered.contains("{{"), "rendered TOML must have no leftover template tokens: {rendered}");
+        assert!(
+            !rendered.contains("{{"),
+            "rendered TOML must have no leftover template tokens: {rendered}"
+        );
 
         let _ = std::fs::remove_dir_all(&dest);
     }
@@ -72,8 +78,14 @@ mod tests {
         let toml_path = materialize_config(&dest).unwrap();
         let rendered = std::fs::read_to_string(&toml_path).unwrap();
         let dest_name = dest.file_name().unwrap().to_str().unwrap();
-        assert!(rendered.contains(&format!("~/{dest_name}/program.bin")), "expected tilde-shorthand path: {rendered}");
-        assert!(rendered.contains(&format!("~/{dest_name}/program.lbl")), "expected tilde-shorthand path: {rendered}");
+        assert!(
+            rendered.contains(&format!("~/{dest_name}/program.bin")),
+            "expected tilde-shorthand path: {rendered}"
+        );
+        assert!(
+            rendered.contains(&format!("~/{dest_name}/program.lbl")),
+            "expected tilde-shorthand path: {rendered}"
+        );
 
         let _ = std::fs::remove_dir_all(&dest);
     }
@@ -87,8 +99,14 @@ mod tests {
 
         let toml_path = materialize_config(&dest).unwrap();
         let rendered = std::fs::read_to_string(&toml_path).unwrap();
-        assert!(rendered.contains(&format!("\"{}\"", dest.join("program.bin").display())), "expected absolute path: {rendered}");
-        assert!(rendered.contains(&format!("\"{}\"", dest.join("program.lbl").display())), "expected absolute path: {rendered}");
+        assert!(
+            rendered.contains(&format!("\"{}\"", dest.join("program.bin").display())),
+            "expected absolute path: {rendered}"
+        );
+        assert!(
+            rendered.contains(&format!("\"{}\"", dest.join("program.lbl").display())),
+            "expected absolute path: {rendered}"
+        );
 
         let _ = std::fs::remove_dir_all(&dest);
     }

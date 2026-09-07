@@ -1,6 +1,5 @@
 use super::expr::{BinaryOperatorType, Expr, ExprType, FetchWidth, Operand, UnaryOperatorType};
 
-
 /// An opcode produced by the "byte code" compiler.
 ///
 /// An expression consisting of these byte codes can be executed by the evaluator.
@@ -109,7 +108,11 @@ fn traverse(expr: &Expr, signed: bool, code: &mut Vec<OpCode>) {
     match expr.expr_type() {
         ExprType::Number(n) => code.push(OpCode::PushImmediate(*n)),
         ExprType::Flag(n) => code.push(OpCode::FetchFlag(*n)),
-        ExprType::Register(n) => code.push(if signed { OpCode::FetchRegisterSigned(*n) } else { OpCode::FetchRegister(*n) }),
+        ExprType::Register(n) => code.push(if signed {
+            OpCode::FetchRegisterSigned(*n)
+        } else {
+            OpCode::FetchRegister(*n)
+        }),
         ExprType::Variable(id) => code.push(OpCode::PushVariable(*id)),
         ExprType::Assign(id, rhs) => {
             traverse(rhs, expr.is_signed(), code);
@@ -123,17 +126,19 @@ fn traverse(expr: &Expr, signed: bool, code: &mut Vec<OpCode>) {
                 UnaryOperatorType::Negate => code.push(OpCode::Negate),
                 UnaryOperatorType::LogicalNot => code.push(OpCode::LogicalNot),
                 UnaryOperatorType::BitwiseNot => code.push(OpCode::BitwiseNot),
-                UnaryOperatorType::Fetch(width) => if signed {
-                    match width {
-                        FetchWidth::Byte => code.push(OpCode::FetchByteSigned),
-                        FetchWidth::Word => code.push(OpCode::FetchWordSigned),
-                        FetchWidth::DWord => code.push(OpCode::FetchDWordSigned),
-                    }
-                } else {
-                    match width {
-                        FetchWidth::Byte => code.push(OpCode::FetchByte),
-                        FetchWidth::Word => code.push(OpCode::FetchWord),
-                        FetchWidth::DWord => code.push(OpCode::FetchDWord),
+                UnaryOperatorType::Fetch(width) => {
+                    if signed {
+                        match width {
+                            FetchWidth::Byte => code.push(OpCode::FetchByteSigned),
+                            FetchWidth::Word => code.push(OpCode::FetchWordSigned),
+                            FetchWidth::DWord => code.push(OpCode::FetchDWordSigned),
+                        }
+                    } else {
+                        match width {
+                            FetchWidth::Byte => code.push(OpCode::FetchByte),
+                            FetchWidth::Word => code.push(OpCode::FetchWord),
+                            FetchWidth::DWord => code.push(OpCode::FetchDWord),
+                        }
                     }
                 }
             }
@@ -153,18 +158,45 @@ fn traverse(expr: &Expr, signed: bool, code: &mut Vec<OpCode>) {
                 BinaryOperatorType::LeftShift => code.push(OpCode::LeftShift),
                 BinaryOperatorType::Equal => code.push(OpCode::Equal),
                 BinaryOperatorType::NotEqual => code.push(OpCode::NotEqual),
-                BinaryOperatorType::Divide => code.push(if expr.is_signed() { OpCode::DivideSigned } else { OpCode::Divide }),
-                BinaryOperatorType::Remainder => code.push(if expr.is_signed() { OpCode::RemainderSigned } else { OpCode::Remainder}),
-                BinaryOperatorType::RightShift => code.push(if expr.is_signed() { OpCode::RightShiftSigned } else { OpCode::RightShift }),
-                BinaryOperatorType::GreaterThan => code.push(if expr.is_signed() { OpCode::GreaterThanSigned } else { OpCode::GreaterThan }),
-                BinaryOperatorType::GreaterOrEqual => code.push(if expr.is_signed() { OpCode::GreaterOrEqualSigned } else { OpCode::GreaterOrEqual }),
-                BinaryOperatorType::LessThan => code.push(if expr.is_signed() { OpCode::LessThanSigned } else { OpCode::LessThan }),
-                BinaryOperatorType::LessOrEqual => code.push(if expr.is_signed() { OpCode::LessOrEqualSigned } else { OpCode::LessOrEqual }),
+                BinaryOperatorType::Divide => code.push(if expr.is_signed() {
+                    OpCode::DivideSigned
+                } else {
+                    OpCode::Divide
+                }),
+                BinaryOperatorType::Remainder => code.push(if expr.is_signed() {
+                    OpCode::RemainderSigned
+                } else {
+                    OpCode::Remainder
+                }),
+                BinaryOperatorType::RightShift => code.push(if expr.is_signed() {
+                    OpCode::RightShiftSigned
+                } else {
+                    OpCode::RightShift
+                }),
+                BinaryOperatorType::GreaterThan => code.push(if expr.is_signed() {
+                    OpCode::GreaterThanSigned
+                } else {
+                    OpCode::GreaterThan
+                }),
+                BinaryOperatorType::GreaterOrEqual => code.push(if expr.is_signed() {
+                    OpCode::GreaterOrEqualSigned
+                } else {
+                    OpCode::GreaterOrEqual
+                }),
+                BinaryOperatorType::LessThan => code.push(if expr.is_signed() {
+                    OpCode::LessThanSigned
+                } else {
+                    OpCode::LessThan
+                }),
+                BinaryOperatorType::LessOrEqual => code.push(if expr.is_signed() {
+                    OpCode::LessOrEqualSigned
+                } else {
+                    OpCode::LessOrEqual
+                }),
             }
-        },
+        }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -197,7 +229,10 @@ mod tests {
 
     fn expr_for_source(source_text: &str) -> Expr<'_> {
         let mut vars = super::super::variables::Variables::new();
-        Parser::from(register_mapper, flag_mapper, symbol_mapper).parse(source_text, &mut vars).unwrap().unwrap()
+        Parser::from(register_mapper, flag_mapper, symbol_mapper)
+            .parse(source_text, &mut vars)
+            .unwrap()
+            .unwrap()
     }
 
     #[test]
@@ -599,8 +634,14 @@ mod tests {
         assert_eq!(code[12], OpCode::LogicalAnd);
     }
 
-    fn expr_for_source_with_vars<'a>(source_text: &'a str, vars: &mut super::super::variables::Variables) -> super::super::expr::Expr<'a> {
-        Parser::from(register_mapper, flag_mapper, symbol_mapper).parse(source_text, vars).unwrap().unwrap()
+    fn expr_for_source_with_vars<'a>(
+        source_text: &'a str,
+        vars: &mut super::super::variables::Variables,
+    ) -> super::super::expr::Expr<'a> {
+        Parser::from(register_mapper, flag_mapper, symbol_mapper)
+            .parse(source_text, vars)
+            .unwrap()
+            .unwrap()
     }
 
     #[test]
@@ -635,5 +676,4 @@ mod tests {
         assert_eq!(code[0], OpCode::FetchRegister(0));
         assert_eq!(code[1], OpCode::AssignAndPushVariable(id));
     }
-
 }

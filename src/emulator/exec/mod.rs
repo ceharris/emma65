@@ -3,7 +3,10 @@
 use crate::emulator::bus::IrqSource;
 use crate::emulator::cpu::opcodes::DecodedOp;
 use crate::emulator::cpu::{Cpu, Registers, StepResult};
-use std::sync::{Arc, atomic::{AtomicU16, Ordering}};
+use std::sync::{
+    Arc,
+    atomic::{AtomicU16, Ordering},
+};
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -40,7 +43,12 @@ pub struct CpuLiveSnapshot {
 /// `mem_addr` is the address currently displayed in the memory panel; it is
 /// paragraph-aligned (`& 0xfff0`) before the read so the stored page always
 /// starts on a paragraph boundary.
-fn build_live_snapshot(cpu: &Cpu, mem_addr: u16, start_cycles: u64, start_timestamp: Instant) -> CpuLiveSnapshot {
+fn build_live_snapshot(
+    cpu: &Cpu,
+    mem_addr: u16,
+    start_cycles: u64,
+    start_timestamp: Instant,
+) -> CpuLiveSnapshot {
     let mut stack_page = vec![0u8; 256];
     let _ = cpu.bus().peek_range(0x0100, &mut stack_page);
     let memory_page_addr = mem_addr & 0xfff0;
@@ -126,18 +134,25 @@ pub struct ClockSpeed {
 impl ClockSpeed {
     /// Creates a clock speed from a frequency in MHz (e.g. `1.8432` for 1.8432 MHz).
     pub fn mhz(mhz: f64) -> Self {
-        Self { hz: (mhz * 1_000_000.0).round() as u64 }
+        Self {
+            hz: (mhz * 1_000_000.0).round() as u64,
+        }
     }
 
     /// Creates a clock speed from a frequency in Hz.
     pub fn hz(hz: u64) -> Self {
-        assert!(hz > 0, "hz must be non-zero; use ClockSpeed::unlimited() for no throttling");
+        assert!(
+            hz > 0,
+            "hz must be non-zero; use ClockSpeed::unlimited() for no throttling"
+        );
         Self { hz }
     }
 
     /// Creates an unlimited clock speed, disabling throttling in free-running mode.
     pub fn unlimited() -> Self {
-        Self { hz: UNLIMITED_SENTINEL }
+        Self {
+            hz: UNLIMITED_SENTINEL,
+        }
     }
 
     /// Returns `true` if this clock speed has no throttling limit.
@@ -147,7 +162,11 @@ impl ClockSpeed {
 
     /// Returns the clock frequency in Hz, or `None` if unlimited.
     pub fn hz_value(&self) -> Option<u64> {
-        if self.is_unlimited() { None } else { Some(self.hz) }
+        if self.is_unlimited() {
+            None
+        } else {
+            Some(self.hz)
+        }
     }
 }
 
@@ -165,7 +184,11 @@ pub struct RunStopper {
 impl RunStopper {
     /// Creates a `(stopper, stop_receiver, command_receiver)` triple for use
     /// with [`step_over_subroutine`] and [`step_return`].
-    pub fn channel() -> (Self, watch::Receiver<bool>, mpsc::UnboundedReceiver<InterruptCommand>) {
+    pub fn channel() -> (
+        Self,
+        watch::Receiver<bool>,
+        mpsc::UnboundedReceiver<InterruptCommand>,
+    ) {
         let (stop_tx, stop_rx) = watch::channel(false);
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
         (Self { stop_tx, cmd_tx }, stop_rx, cmd_rx)
@@ -247,7 +270,10 @@ impl RunHandle {
     /// The stopper can be cloned and stored independently; calling any of its
     /// methods on any clone affects this run.
     pub fn stopper(&self) -> RunStopper {
-        RunStopper { stop_tx: self.stop_tx.clone(), cmd_tx: self.cmd_tx.clone() }
+        RunStopper {
+            stop_tx: self.stop_tx.clone(),
+            cmd_tx: self.cmd_tx.clone(),
+        }
     }
 
     /// Signals the CPU thread to stop after the current instruction.
@@ -262,13 +288,17 @@ impl RunHandle {
     /// If execution was stopped via [`stop`](RunHandle::stop), the result is
     /// `StepResult::Executed` for the last instruction that completed normally.
     pub async fn wait(self) -> StepResult {
-        self.result_rx.await.expect("CPU thread exited without sending result")
+        self.result_rx
+            .await
+            .expect("CPU thread exited without sending result")
     }
 
     /// Signals the CPU thread to stop and awaits the CPU being returned.
     pub async fn take_cpu(self) -> Cpu {
         self.stop();
-        self.cpu_rx.await.expect("CPU thread exited without returning CPU")
+        self.cpu_rx
+            .await
+            .expect("CPU thread exited without returning CPU")
     }
 
     /// Awaits both the final [`StepResult`] and the CPU without sending a stop
@@ -277,8 +307,14 @@ impl RunHandle {
     /// Use a [`RunStopper`] obtained from [`stopper`](RunHandle::stopper) to
     /// trigger a stop externally before awaiting here.
     pub async fn take_cpu_with_result(self) -> (StepResult, Cpu) {
-        let result = self.result_rx.await.expect("CPU thread exited without sending result");
-        let cpu = self.cpu_rx.await.expect("CPU thread exited without returning CPU");
+        let result = self
+            .result_rx
+            .await
+            .expect("CPU thread exited without sending result");
+        let cpu = self
+            .cpu_rx
+            .await
+            .expect("CPU thread exited without returning CPU");
         (result, cpu)
     }
 
@@ -298,7 +334,7 @@ impl RunHandle {
 /// Fetches, decodes, and executes one instruction. Returns the step result.
 ///
 /// Halts before executing if PC matches a breakpoint or a watch expression triggers.
-/// Use [`step_over_breakpoint`] to advance past the breakpoint at the current PC without 
+/// Use [`step_over_breakpoint`] to advance past the breakpoint at the current PC without
 /// disabling it.
 pub fn step_into(cpu: &mut Cpu) -> StepResult {
     let result = cpu.step(None, true);
@@ -371,7 +407,9 @@ pub fn step_over_subroutine(
     // function itself returns.
     let result = loop {
         if *stop_rx.borrow() {
-            if !already_set { cpu.remove_breakpoint(target); }
+            if !already_set {
+                cpu.remove_breakpoint(target);
+            }
             cpu.flush_trace();
             return None;
         }
@@ -384,7 +422,12 @@ pub fn step_over_subroutine(
         };
         steps += 1;
         if let Some(tx) = live_tx.filter(|_| steps.is_multiple_of(BATCH_SIZE)) {
-            let _ = tx.send(Some(build_live_snapshot(cpu, mem_view_addr.load(Ordering::Relaxed), start_cycles, start_timestamp)));
+            let _ = tx.send(Some(build_live_snapshot(
+                cpu,
+                mem_view_addr.load(Ordering::Relaxed),
+                start_cycles,
+                start_timestamp,
+            )));
         }
         match res {
             StepResult::Executed(op) => {
@@ -472,12 +515,15 @@ pub fn step_return(
         };
         steps += 1;
         if let Some(tx) = live_tx.filter(|_| steps.is_multiple_of(BATCH_SIZE)) {
-            let _ = tx.send(Some(build_live_snapshot(cpu, mem_view_addr.load(Ordering::Relaxed), start_cycles, start_timestamp)));
+            let _ = tx.send(Some(build_live_snapshot(
+                cpu,
+                mem_view_addr.load(Ordering::Relaxed),
+                start_cycles,
+                start_timestamp,
+            )));
         }
         match res {
-            StepResult::Executed(op)
-                if (cpu.registers().s.wrapping_sub(initial_s) as i8) > 0 =>
-            {
+            StepResult::Executed(op) if (cpu.registers().s.wrapping_sub(initial_s) as i8) > 0 => {
                 cpu.flush_trace();
                 return Some(StepResult::Executed(op));
             }
@@ -525,7 +571,12 @@ pub fn run(cpu: Cpu) -> RunHandle {
 /// on every WAI/STP would defeat the point of pressing Run. WAI resumes
 /// transparently (execution just continues); STP still halts the loop once
 /// serviced, via [`StepResult::Reset`], same as a manually-triggered reset.
-pub fn run_from(cpu: Cpu, skip_pc: Option<u16>, mem_view_addr: Arc<AtomicU16>, park_on_stall: bool) -> RunHandle {
+pub fn run_from(
+    cpu: Cpu,
+    skip_pc: Option<u16>,
+    mem_view_addr: Arc<AtomicU16>,
+    park_on_stall: bool,
+) -> RunHandle {
     let (stop_tx, stop_rx) = watch::channel(false);
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
     let (result_tx, result_rx) = oneshot::channel();
@@ -533,10 +584,26 @@ pub fn run_from(cpu: Cpu, skip_pc: Option<u16>, mem_view_addr: Arc<AtomicU16>, p
     let (live_tx, live_rx) = watch::channel(None);
 
     std::thread::spawn(move || {
-        run_loop(cpu, skip_pc, mem_view_addr, stop_rx, cmd_rx, live_tx, result_tx, cpu_tx, park_on_stall);
+        run_loop(
+            cpu,
+            skip_pc,
+            mem_view_addr,
+            stop_rx,
+            cmd_rx,
+            live_tx,
+            result_tx,
+            cpu_tx,
+            park_on_stall,
+        );
     });
 
-    RunHandle { stop_tx, cmd_tx, result_rx, cpu_rx, live_rx }
+    RunHandle {
+        stop_tx,
+        cmd_tx,
+        result_rx,
+        cpu_rx,
+        live_rx,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -593,7 +660,11 @@ fn run_loop(
         // Publish a live snapshot after each batch so the frontend can display
         // current state without stopping the CPU.
         let snapshot = build_live_snapshot(
-            &cpu, mem_view_addr.load(Ordering::Relaxed), start_cycles, start_timestamp);
+            &cpu,
+            mem_view_addr.load(Ordering::Relaxed),
+            start_cycles,
+            start_timestamp,
+        );
         let _ = live_tx.send(Some(snapshot));
 
         if parked {
@@ -606,8 +677,7 @@ fn run_loop(
 
         if let Some(hz) = hz {
             let elapsed_ns = start_timestamp.elapsed().as_nanos() as u64;
-            let expected_cycles =
-                (elapsed_ns as u128 * hz as u128 / 1_000_000_000) as u64;
+            let expected_cycles = (elapsed_ns as u128 * hz as u128 / 1_000_000_000) as u64;
             let actual_cycles = cpu.cycles() - start_cycles;
             if actual_cycles > expected_cycles {
                 let excess = actual_cycles - expected_cycles;
@@ -688,8 +758,8 @@ mod tests {
         bus.write(RESET_VECTOR, (NOP_ADDR & 0xFF) as u8).unwrap();
         bus.write(RESET_VECTOR + 1, (NOP_ADDR >> 8) as u8).unwrap();
         // NOP at NOP_ADDR; BRA -2 loops back to NOP_ADDR forever
-        bus.write(NOP_ADDR, 0xEA).unwrap();       // NOP
-        bus.write(NOP_ADDR + 1, 0x80).unwrap();   // BRA
+        bus.write(NOP_ADDR, 0xEA).unwrap(); // NOP
+        bus.write(NOP_ADDR + 1, 0x80).unwrap(); // BRA
         bus.write(NOP_ADDR + 2, 0xFD_u8).unwrap(); // offset -3 → back to NOP_ADDR
         let mut cpu = CpuBuilder::new(CpuVariant::Wdc65C02)
             .clock_speed(speed)
@@ -728,10 +798,9 @@ mod tests {
         let mut cpu = make_cpu_with_speed(ClockSpeed::unlimited());
         let mut compiler = WatchCompiler::new(map_register_name, map_flag_name, |_| None);
         // PC == NOP_ADDR triggers immediately on the first watch evaluation.
-        let wp = compiler.compile(
-            &format!("PC == ${:X}", NOP_ADDR),
-            cpu.evaluator_mut(),
-        ).unwrap();
+        let wp = compiler
+            .compile(&format!("PC == ${:X}", NOP_ADDR), cpu.evaluator_mut())
+            .unwrap();
         cpu.evaluator_mut().add(wp);
         let handle = run(cpu);
         let result = handle.wait().await;
@@ -752,8 +821,12 @@ mod tests {
         let wall_elapsed = wall_start.elapsed();
         // cycles / 2_000_000 should be ≤ wall_elapsed; allow 2× slack for CI jitter.
         let max_expected_cycles = wall_elapsed.as_micros() as u64 * 4; // 2 cycles/µs × 2 slack
-        assert!(cpu.cycles() <= max_expected_cycles,
-            "throttled CPU ran too fast: {} cycles in {:?}", cpu.cycles(), wall_elapsed);
+        assert!(
+            cpu.cycles() <= max_expected_cycles,
+            "throttled CPU ran too fast: {} cycles in {:?}",
+            cpu.cycles(),
+            wall_elapsed
+        );
     }
 
     #[tokio::test]
@@ -773,9 +846,12 @@ mod tests {
         tokio::time::sleep(target_wall).await;
         let cpu_throttled = handle_throttled.take_cpu().await;
 
-        assert!(cpu_unlimited.cycles() > cpu_throttled.cycles(),
+        assert!(
+            cpu_unlimited.cycles() > cpu_throttled.cycles(),
             "unlimited ({} cycles) should exceed throttled ({} cycles)",
-            cpu_unlimited.cycles(), cpu_throttled.cycles());
+            cpu_unlimited.cycles(),
+            cpu_throttled.cycles()
+        );
     }
 
     #[tokio::test]
@@ -790,8 +866,14 @@ mod tests {
         let handle = run_from(cpu, Some(0x0200), no_mem(), false);
         let (result, cpu) = handle.take_cpu_with_result().await;
 
-        assert!(matches!(result, StepResult::Stopped), "expected Stopped result");
-        assert!(cpu.registers().pc > 0x0200, "PC should have advanced past the breakpoint");
+        assert!(
+            matches!(result, StepResult::Stopped),
+            "expected Stopped result"
+        );
+        assert!(
+            cpu.registers().pc > 0x0200,
+            "PC should have advanced past the breakpoint"
+        );
         // Breakpoint must still be present after the run.
         assert!(cpu.breakpoints().contains(&0x0200));
     }
@@ -823,7 +905,10 @@ mod tests {
         write(&mut cpu, 0x0200, &[0xDB]); // STP
         let handle = run(cpu);
         let (result, cpu) = handle.take_cpu_with_result().await;
-        assert!(matches!(result, StepResult::Stopped), "expected Stopped result");
+        assert!(
+            matches!(result, StepResult::Stopped),
+            "expected Stopped result"
+        );
         assert!(cpu.is_stopped());
     }
 
@@ -843,7 +928,11 @@ mod tests {
         stopper.assert_irq(IrqSource(0));
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         let cpu = handle.take_cpu().await;
-        assert_eq!(read_marker(&cpu), 0x42, "IRQ ISR should have run after waking from WAI");
+        assert_eq!(
+            read_marker(&cpu),
+            0x42,
+            "IRQ ISR should have run after waking from WAI"
+        );
         assert!(!cpu.is_waiting());
     }
 
@@ -871,7 +960,10 @@ mod tests {
         write(&mut cpu, 0x0200, &[0xCB]); // WAI
         let handle = run(cpu);
         let (result, cpu) = handle.take_cpu_with_result().await;
-        assert!(matches!(result, StepResult::Waiting), "expected Waiting result");
+        assert!(
+            matches!(result, StepResult::Waiting),
+            "expected Waiting result"
+        );
         assert!(cpu.is_waiting());
     }
 
@@ -885,7 +977,10 @@ mod tests {
         let handle = run(cpu);
         let (result, cpu) = handle.take_cpu_with_result().await;
 
-        assert!(matches!(result, StepResult::Breakpoint(0x0200)), "expected Breakpoint");
+        assert!(
+            matches!(result, StepResult::Breakpoint(0x0200)),
+            "expected Breakpoint"
+        );
         assert_eq!(cpu.registers().pc, 0x0200);
     }
 
@@ -944,7 +1039,11 @@ mod tests {
         stopper.assert_irq(IrqSource(0));
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         let cpu = handle.take_cpu().await;
-        assert_eq!(read_marker(&cpu), 0x42, "IRQ ISR should have run while free-running");
+        assert_eq!(
+            read_marker(&cpu),
+            0x42,
+            "IRQ ISR should have run while free-running"
+        );
     }
 
     #[tokio::test]
@@ -961,8 +1060,15 @@ mod tests {
         // would have re-entered the ISR many times.
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         let cpu = handle.take_cpu().await;
-        assert_eq!(read_marker(&cpu), 1, "pulsed IRQ should service exactly once");
-        assert!(!cpu.interrupts().irq_active(), "pulsed IRQ source should have auto-released");
+        assert_eq!(
+            read_marker(&cpu),
+            1,
+            "pulsed IRQ should service exactly once"
+        );
+        assert!(
+            !cpu.interrupts().irq_active(),
+            "pulsed IRQ source should have auto-released"
+        );
     }
 
     #[tokio::test]
@@ -976,7 +1082,11 @@ mod tests {
         stopper.trigger_nmi();
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         let cpu = handle.take_cpu().await;
-        assert_eq!(read_marker(&cpu), 0x99, "NMI ISR should have run while free-running");
+        assert_eq!(
+            read_marker(&cpu),
+            0x99,
+            "NMI ISR should have run while free-running"
+        );
     }
 
     #[tokio::test]
@@ -1002,7 +1112,8 @@ mod tests {
         write(&mut cpu, 0x0300, &[0xEA, 0xEA, 0x60]); // NOP, NOP, RTS
         let (stopper, stop_rx, mut cmd_rx) = RunStopper::channel();
         stopper.assert_irq(IrqSource(5));
-        let result = step_over_subroutine(&mut cpu, &stop_rx, &mut cmd_rx, None, &no_mem()).unwrap();
+        let result =
+            step_over_subroutine(&mut cpu, &stop_rx, &mut cmd_rx, None, &no_mem()).unwrap();
         assert!(matches!(result, StepResult::Executed(_)));
         assert!(cpu.interrupts().irq_active());
     }
@@ -1072,7 +1183,8 @@ mod tests {
         // NOP at $0200; step_over should execute it and advance PC by 1.
         let mut cpu = make_cpu_at(0x0200);
         write(&mut cpu, 0x0200, &[0xEA]); // NOP
-        let result = step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
+        let result =
+            step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
         assert!(matches!(result, StepResult::Executed(_)));
         assert_eq!(cpu.registers().pc, 0x0201);
     }
@@ -1083,8 +1195,9 @@ mod tests {
         // step_over should return with PC at $0203 (instruction after JSR).
         let mut cpu = make_cpu_at(0x0200);
         write(&mut cpu, 0x0200, &[0x20, 0x00, 0x03]); // JSR $0300
-        write(&mut cpu, 0x0300, &[0xEA, 0x60]);        // NOP, RTS
-        let result = step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
+        write(&mut cpu, 0x0300, &[0xEA, 0x60]); // NOP, RTS
+        let result =
+            step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
         assert!(matches!(result, StepResult::Executed(_)));
         assert_eq!(cpu.registers().pc, 0x0203);
     }
@@ -1096,9 +1209,10 @@ mod tests {
         let mut cpu = make_cpu_at(0x0200);
         write(&mut cpu, 0x0200, &[0x20, 0x00, 0x03]); // JSR $0300
         write(&mut cpu, 0x0300, &[0x20, 0x00, 0x04]); // JSR $0400
-        write(&mut cpu, 0x0303, &[0x60]);               // RTS
-        write(&mut cpu, 0x0400, &[0x60]);               // RTS
-        let result = step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
+        write(&mut cpu, 0x0303, &[0x60]); // RTS
+        write(&mut cpu, 0x0400, &[0x60]); // RTS
+        let result =
+            step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
         assert!(matches!(result, StepResult::Executed(_)));
         assert_eq!(cpu.registers().pc, 0x0203);
     }
@@ -1108,9 +1222,10 @@ mod tests {
         // A breakpoint inside the subroutine interrupts step_over.
         let mut cpu = make_cpu_at(0x0200);
         write(&mut cpu, 0x0200, &[0x20, 0x00, 0x03]); // JSR $0300
-        write(&mut cpu, 0x0300, &[0xEA, 0x60]);        // NOP, RTS
+        write(&mut cpu, 0x0300, &[0xEA, 0x60]); // NOP, RTS
         cpu.add_breakpoint(0x0300);
-        let result = step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
+        let result =
+            step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
         assert!(matches!(result, StepResult::Breakpoint(0x0300)));
         assert_eq!(cpu.registers().pc, 0x0300);
     }
@@ -1121,9 +1236,10 @@ mod tests {
         // not remove it and must surface it as Breakpoint, not Executed.
         let mut cpu = make_cpu_at(0x0200);
         write(&mut cpu, 0x0200, &[0x20, 0x00, 0x03]); // JSR $0300
-        write(&mut cpu, 0x0300, &[0xEA, 0x60]);        // NOP, RTS
+        write(&mut cpu, 0x0300, &[0xEA, 0x60]); // NOP, RTS
         cpu.add_breakpoint(0x0203);
-        let result = step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
+        let result =
+            step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
         // Must surface as Breakpoint since caller owns it.
         assert!(matches!(result, StepResult::Breakpoint(0x0203)));
         // Breakpoint must still be present after step_over returns.
@@ -1135,8 +1251,9 @@ mod tests {
         // Subroutine executes STP before returning.
         let mut cpu = make_cpu_at(0x0200);
         write(&mut cpu, 0x0200, &[0x20, 0x00, 0x03]); // JSR $0300
-        write(&mut cpu, 0x0300, &[0xDB]);               // STP
-        let result = step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
+        write(&mut cpu, 0x0300, &[0xDB]); // STP
+        let result =
+            step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
         assert!(matches!(result, StepResult::Stopped));
     }
 
@@ -1161,9 +1278,13 @@ mod tests {
         let mut cpu = make_cpu_at(0x0200);
         // Push P, PC lo, PC hi so RTI returns to $0300.
         let s = cpu.registers().s;
-        cpu.bus_mut().write(0x0100 | s as u16, 0x03).unwrap();          // PC hi
-        cpu.bus_mut().write(0x0100 | s.wrapping_sub(1) as u16, 0x00).unwrap(); // PC lo
-        cpu.bus_mut().write(0x0100 | s.wrapping_sub(2) as u16, 0x24).unwrap(); // P
+        cpu.bus_mut().write(0x0100 | s as u16, 0x03).unwrap(); // PC hi
+        cpu.bus_mut()
+            .write(0x0100 | s.wrapping_sub(1) as u16, 0x00)
+            .unwrap(); // PC lo
+        cpu.bus_mut()
+            .write(0x0100 | s.wrapping_sub(2) as u16, 0x24)
+            .unwrap(); // P
         cpu.registers_mut().s = s.wrapping_sub(3);
         write(&mut cpu, 0x0200, &[0x40]); // RTI
         let result = step_return(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
@@ -1188,7 +1309,7 @@ mod tests {
         // RTS pops lo then hi: stack[S+1]=lo=$02, stack[S+2]=hi=$02; RTS adds 1 → PC=$0203.
         cpu.bus_mut().write(0x0102, 0x02).unwrap(); // PC hi
         cpu.bus_mut().write(0x0101, 0x02).unwrap(); // PC lo
-        cpu.registers_mut().s = 0x00;               // so S+1=0x01, S+2=0x02
+        cpu.registers_mut().s = 0x00; // so S+1=0x01, S+2=0x02
         // initial_s for step_return will be 0x00; after RTS, S = 0x02 (wrapped).
         // (0x02_u8.wrapping_sub(0x00) as i8) = 2 > 0 ✓
         let result = step_return(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
@@ -1211,7 +1332,7 @@ mod tests {
     fn step_return_halts_on_stp() {
         let mut cpu = make_cpu_at(0x0200);
         write(&mut cpu, 0x0200, &[0x20, 0x00, 0x03]); // JSR $0300
-        write(&mut cpu, 0x0300, &[0xDB]);               // STP before RTS
+        write(&mut cpu, 0x0300, &[0xDB]); // STP before RTS
         step_into(&mut cpu); // JSR
         let result = step_return(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
         assert!(matches!(result, StepResult::Stopped));
@@ -1223,8 +1344,8 @@ mod tests {
         let mut cpu = make_cpu_at(0x0200);
         write(&mut cpu, 0x0200, &[0x20, 0x00, 0x03]); // JSR $0300
         write(&mut cpu, 0x0300, &[0x20, 0x00, 0x04]); // JSR $0400
-        write(&mut cpu, 0x0303, &[0x60]);               // RTS (outer)
-        write(&mut cpu, 0x0400, &[0xEA, 0x60]);        // NOP, RTS (inner)
+        write(&mut cpu, 0x0303, &[0x60]); // RTS (outer)
+        write(&mut cpu, 0x0400, &[0xEA, 0x60]); // NOP, RTS (inner)
         step_into(&mut cpu); // JSR $0300
         step_into(&mut cpu); // JSR $0400 — now inside inner subroutine
         let s_inside = cpu.registers().s;
@@ -1294,7 +1415,8 @@ mod tests {
         let mut cpu = make_cpu_at(0x0200);
         write(&mut cpu, 0x0200, &[0xEA]); // NOP
         cpu.add_breakpoint(0x0200);
-        let result = step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
+        let result =
+            step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
         assert!(matches!(result, StepResult::Executed(_)));
         assert_eq!(cpu.registers().pc, 0x0201);
         assert!(cpu.breakpoints().contains(&0x0200));
@@ -1307,10 +1429,11 @@ mod tests {
         let mut cpu = make_cpu_at(0x0200);
         // JSR $0300; NOP at $0203 (return target); RTS at $0300
         write(&mut cpu, 0x0200, &[0x20, 0x00, 0x03]); // JSR $0300
-        write(&mut cpu, 0x0203, &[0xEA]);              // NOP
-        write(&mut cpu, 0x0300, &[0x60]);              // RTS
+        write(&mut cpu, 0x0203, &[0xEA]); // NOP
+        write(&mut cpu, 0x0300, &[0x60]); // RTS
         cpu.add_breakpoint(0x0200);
-        let result = step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
+        let result =
+            step_over_subroutine(&mut cpu, &no_stop(), &mut no_cmd(), None, &no_mem()).unwrap();
         assert!(matches!(result, StepResult::Executed(_)));
         assert_eq!(cpu.registers().pc, 0x0203);
         assert!(cpu.breakpoints().contains(&0x0200));
@@ -1325,8 +1448,8 @@ mod tests {
         let mut cpu = make_cpu_at(0x0200);
         // JSR $0300; NOP at $0203 (return site); RTS at $0300
         write(&mut cpu, 0x0200, &[0x20, 0x00, 0x03]); // JSR $0300
-        write(&mut cpu, 0x0203, &[0xEA]);              // NOP
-        write(&mut cpu, 0x0300, &[0x60]);              // RTS
+        write(&mut cpu, 0x0203, &[0xEA]); // NOP
+        write(&mut cpu, 0x0300, &[0x60]); // RTS
         // Execute the JSR so we are inside the subroutine with the return address
         // already on the stack. PC is now $0300.
         let r = step_into(&mut cpu);

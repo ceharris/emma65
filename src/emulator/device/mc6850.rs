@@ -101,10 +101,18 @@ impl Mc6850 {
 
     fn status(&self) -> u8 {
         let mut s = 0u8;
-        if self.rdrf { s |= 0x01; }
-        if self.tdre { s |= 0x02; }
-        if self.overrun { s |= 0x20; }
-        if self.irq_active() { s |= 0x80; }
+        if self.rdrf {
+            s |= 0x01;
+        }
+        if self.tdre {
+            s |= 0x02;
+        }
+        if self.overrun {
+            s |= 0x20;
+        }
+        if self.irq_active() {
+            s |= 0x80;
+        }
         s
     }
 
@@ -126,7 +134,6 @@ impl Mc6850 {
 }
 
 impl IoDevice for Mc6850 {
-
     fn read(&mut self, address: u16) -> u8 {
         match address - self.address {
             0 => self.status(),
@@ -195,7 +202,13 @@ impl IoDevice for Mc6850 {
         self.transport = transport;
         self.relay = relay;
         self.log_sender = log_sender;
-        log_msg!(self.log_sender, LogLevel::Info, LogCategory::Device, "{} reset", self.identity());
+        log_msg!(
+            self.log_sender,
+            LogLevel::Info,
+            LogCategory::Device,
+            "{} reset",
+            self.identity()
+        );
     }
 
     fn irq_active(&self) -> bool {
@@ -215,7 +228,6 @@ impl IoDevice for Mc6850 {
             transport.shutdown();
         }
     }
-
 }
 
 #[cfg(test)]
@@ -451,5 +463,4 @@ mod tests {
         assert_eq!(received.category, LogCategory::Device);
         assert_eq!(received.message, format!("{DEVICE_NAME}@0xc000 reset"));
     }
-
 }

@@ -52,6 +52,9 @@ jobs:
           # for every subsequent PR.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
+      - name: Format check
+        run: cargo fmt --all -- --check
+
       - name: Build
         run: cargo build -p emma65
 

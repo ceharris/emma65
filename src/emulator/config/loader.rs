@@ -17,7 +17,11 @@ pub enum LoadError {
     /// File/record extends beyond the bounds of the target memory space.
     OutOfBounds { address: usize, size: usize },
     /// Record checksum does not match the expected value
-    ChecksumMismatch { address: usize, actual: u8, expected: u8 },
+    ChecksumMismatch {
+        address: usize,
+        actual: u8,
+        expected: u8,
+    },
     /// Binary file size does not match the size of the target memory space.
     SizeMismatch { actual: usize, expected: usize },
     /// I/O error while loading a file.
@@ -27,18 +31,23 @@ pub enum LoadError {
 impl Display for LoadError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            LoadError::UnknownFormat(e) =>
-                write!(f, "unknown format: {e}"),
-            LoadError::Format(e) =>
-                write!(f, "format error: {e}"),
-            LoadError::OutOfBounds { address, size } =>
-                write!(f, "out of bounds error at {address} size {size}"),
-            LoadError::ChecksumMismatch { address, expected, actual } =>
-                write!(f, "checksum mismatch error at {address} expected {expected} actual {actual}"),
-            LoadError::SizeMismatch { actual, expected, } =>
-                write!(f, "size mismatch; expected {expected} actual {actual}"),
-            LoadError::Io(e) =>
-                write!(f, "I/O error: {e}"),
+            LoadError::UnknownFormat(e) => write!(f, "unknown format: {e}"),
+            LoadError::Format(e) => write!(f, "format error: {e}"),
+            LoadError::OutOfBounds { address, size } => {
+                write!(f, "out of bounds error at {address} size {size}")
+            }
+            LoadError::ChecksumMismatch {
+                address,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "checksum mismatch error at {address} expected {expected} actual {actual}"
+            ),
+            LoadError::SizeMismatch { actual, expected } => {
+                write!(f, "size mismatch; expected {expected} actual {actual}")
+            }
+            LoadError::Io(e) => write!(f, "I/O error: {e}"),
         }
     }
 }
@@ -59,7 +68,8 @@ impl LoadFormat {
         let extension = path.extension();
         if extension.is_none() {
             return Err(LoadError::UnknownFormat(
-                "Cannot deduce format; hint: add a known suffix to the filename".to_string()));
+                "Cannot deduce format; hint: add a known suffix to the filename".to_string(),
+            ));
         }
 
         let extension = extension.unwrap();
@@ -68,9 +78,13 @@ impl LoadFormat {
             Some("hex") | Some("ihx") | Some("ihex") => Ok(Self::IntelHex),
             Some("s19") | Some("srec") => Ok(Self::MotorolaSrec),
             Some("bin") | Some("rom") => Ok(Self::Image),
-            Some(_) => Err(LoadError::UnknownFormat(
-                format!("Filename suffix '{}' not recognized", suffix.unwrap()))),
-            None => Err(LoadError::UnknownFormat("Filename suffix cannot be decoded".to_string())),
+            Some(_) => Err(LoadError::UnknownFormat(format!(
+                "Filename suffix '{}' not recognized",
+                suffix.unwrap()
+            ))),
+            None => Err(LoadError::UnknownFormat(
+                "Filename suffix cannot be decoded".to_string(),
+            )),
         }
     }
 }
@@ -87,7 +101,6 @@ impl Display for LoadFormat {
 
 /// An abstraction for addressable memory of byte width.
 pub trait LoadTarget {
-
     /// Returns an error result if the given data length is not the correct fit for this target.
     fn check_fit(&self, data_len: usize) -> Result<(), LoadError>;
 
@@ -98,7 +111,6 @@ pub trait LoadTarget {
     /// Writes a slice `data` into the target at the given `offset`.
     /// Result is `LoadError::SizeMismatch` if `offset + len(data) >= len(target)`
     fn write_slice(&mut self, offset: usize, data: &[u8]) -> Result<(), LoadError>;
-
 }
 
 struct SliceLoadTarget<'a> {
@@ -107,21 +119,21 @@ struct SliceLoadTarget<'a> {
 }
 
 impl<'a> SliceLoadTarget<'a> {
-
     fn new(dest: &'a mut [u8], bias: isize) -> Self {
         Self { dest, bias }
     }
-
 }
 
 impl<'a> LoadTarget for SliceLoadTarget<'a> {
-
     fn check_fit(&self, data_len: usize) -> Result<(), LoadError> {
         let effective_len = self.dest.len().wrapping_sub_signed(self.bias);
         if effective_len == data_len {
             Ok(())
         } else {
-            Err(LoadError::SizeMismatch { actual: data_len, expected: effective_len })
+            Err(LoadError::SizeMismatch {
+                actual: data_len,
+                expected: effective_len,
+            })
         }
     }
 
@@ -150,7 +162,6 @@ impl<'a> LoadTarget for SliceLoadTarget<'a> {
             })
         }
     }
-
 }
 
 /// Loads a memory segment of length N with the contents of a file.
@@ -175,8 +186,11 @@ impl<'a> LoadTarget for SliceLoadTarget<'a> {
 /// biased by the specified `bias`. The biased address and length of each record must be within the
 /// bounds of `mem`. Overlapping records are not detected.
 //
-pub async fn load_image(path: &Path, mem: &mut [u8], bias: isize)
-                        -> Result<Option<u16>, LoadError> {
+pub async fn load_image(
+    path: &Path,
+    mem: &mut [u8],
+    bias: isize,
+) -> Result<Option<u16>, LoadError> {
     let format = LoadFormat::from_path_suffix(path)?;
     let bias = match format {
         LoadFormat::Image => bias,
@@ -195,8 +209,11 @@ pub async fn load_image(path: &Path, mem: &mut [u8], bias: isize)
 /// * `format` - format of the data
 /// * `target` - target into which `data` will be written
 ///
-pub fn load_target(data: &[u8], format: LoadFormat, target: &mut dyn LoadTarget)
-        -> Result<Option<u16>, LoadError> {
+pub fn load_target(
+    data: &[u8],
+    format: LoadFormat,
+    target: &mut dyn LoadTarget,
+) -> Result<Option<u16>, LoadError> {
     match format {
         LoadFormat::Image => load_binary(data, target),
         LoadFormat::IntelHex => load_intel_hex(data, target),
@@ -205,9 +222,8 @@ pub fn load_target(data: &[u8], format: LoadFormat, target: &mut dyn LoadTarget)
 }
 
 struct HexRecord<'a> {
-    data: &'a[u8],
+    data: &'a [u8],
 }
-
 
 fn load_intel_hex(data: &[u8], target: &mut dyn LoadTarget) -> Result<Option<u16>, LoadError> {
     const IHEX_DATA: u8 = 0;
@@ -232,18 +248,23 @@ fn load_intel_hex(data: &[u8], target: &mut dyn LoadTarget) -> Result<Option<u16
         match rec_type {
             IHEX_DATA => {
                 parse_hex_data(&mut record, rec_len, addr, target, &mut checksum)?;
-            },
+            }
             IHEX_EOF => {
                 eof = true;
-            },
+            }
             IHEX_START => {
                 let upper_word = parse_hex_u16(&mut record)?;
                 checksum.add_u16(upper_word);
                 let lower_word = parse_hex_u16(&mut record)?;
                 checksum.add_u16(lower_word);
                 start_addr = Some(lower_word);
-            },
-            _ => return Err(LoadError::Format(format!("Unsupported record type {}", rec_type))),
+            }
+            _ => {
+                return Err(LoadError::Format(format!(
+                    "Unsupported record type {}",
+                    rec_type
+                )));
+            }
         }
         let expected_ck = (!checksum.sum()).wrapping_add(1);
         let actual_ck = parse_hex_u8(&mut record)?;
@@ -252,8 +273,8 @@ fn load_intel_hex(data: &[u8], target: &mut dyn LoadTarget) -> Result<Option<u16
             return Err(LoadError::ChecksumMismatch {
                 address: addr as usize,
                 expected: expected_ck,
-                actual: actual_ck
-            })
+                actual: actual_ck,
+            });
         }
         consume_to_next_record(&mut record)?;
     }
@@ -292,7 +313,12 @@ fn load_motorola_srec(data: &[u8], target: &mut dyn LoadTarget) -> Result<Option
                 eof = true;
             }
             SREC_COUNT => (),
-            _ => return Err(LoadError::Format(format!("Unsupported record type '{}'", rec_type))),
+            _ => {
+                return Err(LoadError::Format(format!(
+                    "Unsupported record type '{}'",
+                    rec_type
+                )));
+            }
         }
         let expected_ck = !checksum.sum();
         let actual_ck = parse_hex_u8(&mut record)?;
@@ -300,8 +326,8 @@ fn load_motorola_srec(data: &[u8], target: &mut dyn LoadTarget) -> Result<Option
             return Err(LoadError::ChecksumMismatch {
                 address: addr as usize,
                 expected: expected_ck,
-                actual: actual_ck
-            })
+                actual: actual_ck,
+            });
         }
         consume_to_next_record(&mut record)?;
     }
@@ -316,11 +342,11 @@ fn load_binary(data: &[u8], target: &mut dyn LoadTarget) -> Result<Option<u16>, 
 
 fn parse_hex_data(
     record: &mut HexRecord,
-    data_len: u8, addr: u16,
+    data_len: u8,
+    addr: u16,
     target: &mut dyn LoadTarget,
     checksum: &mut Checksum,
-    ) -> Result<(), LoadError> {
-
+) -> Result<(), LoadError> {
     for i in 0..data_len {
         let b = parse_hex_u8(record)?;
         let index = addr as usize + (i as usize);
@@ -336,7 +362,9 @@ fn parse_hex_u16(record: &mut HexRecord) -> Result<u16, LoadError> {
         let lo = parse_hex_u8(record)?;
         Ok((hi as u16) << 8 | lo as u16)
     } else {
-        Err(LoadError::Format("Expected hexadecimal digit, but reached end-of-file".to_string()))
+        Err(LoadError::Format(
+            "Expected hexadecimal digit, but reached end-of-file".to_string(),
+        ))
     }
 }
 
@@ -347,7 +375,9 @@ fn parse_hex_u8(record: &mut HexRecord) -> Result<u8, LoadError> {
         record.data = &record.data[2..];
         Ok(hi << 4 | lo)
     } else {
-        Err(LoadError::Format("Expected hexadecimal digit, but reached end-of-file".to_string()))
+        Err(LoadError::Format(
+            "Expected hexadecimal digit, but reached end-of-file".to_string(),
+        ))
     }
 }
 
@@ -356,7 +386,9 @@ fn parse_hex_digit(digit: u8) -> Result<u8, LoadError> {
         b'0'..=b'9' => Ok(digit - b'0'),
         b'A'..=b'F' => Ok(digit - b'A' + 10),
         b'a'..=b'f' => Ok(digit - b'a' + 10),
-        _ => Err(LoadError::Format(format!("Expected hexadecimal digit, but got {digit}"))),
+        _ => Err(LoadError::Format(format!(
+            "Expected hexadecimal digit, but got {digit}"
+        ))),
     }
 }
 
@@ -369,7 +401,7 @@ fn consume_preamble(data: &[u8], sentinel: u8) -> &[u8] {
         while index < data.len() && data[index] != b'\n' {
             index += 1;
         }
-        index += 1;  // skip the newline
+        index += 1; // skip the newline
         // skip trailing ASCII NUL
         while index < data.len() && data[index] == b'\0' {
             index += 1;
@@ -385,7 +417,9 @@ fn parse_srec_type(record: &mut HexRecord) -> Result<u8, LoadError> {
         record.data = &record.data[1..];
         Ok(rec_type)
     } else {
-        Err(LoadError::Format("Expected record type, but got end-of-file".to_string()))
+        Err(LoadError::Format(
+            "Expected record type, but got end-of-file".to_string(),
+        ))
     }
 }
 
@@ -395,10 +429,19 @@ fn consume_sentinel(record: &mut HexRecord, sentinel: u8) -> Result<(), LoadErro
             record.data = &record.data[1..];
             Ok(())
         } else {
-            Err(LoadError::Format(format!("Expected sentinel '{}', but got '{}'", sentinel as char, record.data[0] as char)))
+            Err(LoadError::Format(format!(
+                "Expected sentinel '{}', but got '{}'",
+                sentinel as char, record.data[0] as char
+            )))
         }
     } else {
-        Err(LoadError::Format(format!("Expected sentinel '{}', but got end-of-file", sentinel as char).to_string()))
+        Err(LoadError::Format(
+            format!(
+                "Expected sentinel '{}', but got end-of-file",
+                sentinel as char
+            )
+            .to_string(),
+        ))
     }
 }
 
@@ -410,12 +453,15 @@ fn consume_to_next_record(record: &mut HexRecord) -> Result<(), LoadError> {
     while index < record.data.len() && record.data[index] != b'\n' {
         let b = record.data[index];
         if b > b' ' {
-            return Err(LoadError::Format(format!("Unexpected character '{}' following record ", b as char)));
+            return Err(LoadError::Format(format!(
+                "Unexpected character '{}' following record ",
+                b as char
+            )));
         }
         index += 1;
     }
     if index < record.data.len() {
-        index += 1;  // skip newline
+        index += 1; // skip newline
         // skip trailing ASCII NULs
         while index < record.data.len() && record.data[index] == b'\0' {
             index += 1;
@@ -427,7 +473,11 @@ fn consume_to_next_record(record: &mut HexRecord) -> Result<(), LoadError> {
     Ok(())
 }
 
-fn consume_data(record: &mut HexRecord, data_len: u8, checksum: &mut Checksum) -> Result<(), LoadError> {
+fn consume_data(
+    record: &mut HexRecord,
+    data_len: u8,
+    checksum: &mut Checksum,
+) -> Result<(), LoadError> {
     for _ in 0..data_len {
         let b = parse_hex_u8(record)?;
         checksum.add_u8(b);
@@ -436,11 +486,10 @@ fn consume_data(record: &mut HexRecord, data_len: u8, checksum: &mut Checksum) -
 }
 
 struct Checksum {
-     sum: u8,
+    sum: u8,
 }
 
 impl Checksum {
-
     fn new() -> Self {
         Checksum { sum: 0 }
     }
@@ -481,13 +530,14 @@ S5030003F9
 S9030000FC
 ";
 
-    const BIN_EXAMPLE: [u8; 8] = [0x00u8, 0xffu8, 0x55u8, 0xaau8, 0xdeu8, 0xadu8, 0xbeu8, 0xefu8];
-
+    const BIN_EXAMPLE: [u8; 8] = [
+        0x00u8, 0xffu8, 0x55u8, 0xaau8, 0xdeu8, 0xadu8, 0xbeu8, 0xefu8,
+    ];
 
     impl<'a> HexRecord<'a> {
         fn from(data: &'a str) -> Self {
             HexRecord {
-                data: data.as_bytes()
+                data: data.as_bytes(),
             }
         }
     }
@@ -545,7 +595,13 @@ S9030000FC
         let mut mem: [u8; 16] = [0; 16];
         let mut target = SliceLoadTarget::new(&mut mem, 0);
         let err = load_target(hex_data, LoadFormat::IntelHex, &mut target).unwrap_err();
-        assert!(matches!(err, LoadError::OutOfBounds { address: _, size: _ }));
+        assert!(matches!(
+            err,
+            LoadError::OutOfBounds {
+                address: _,
+                size: _
+            }
+        ));
     }
 
     #[test]
@@ -563,8 +619,10 @@ S9030000FC
         let mut mem: [u8; 0] = [];
         let mut target = SliceLoadTarget::new(&mut mem, -0x100);
         let err = load_target(hex_data, LoadFormat::IntelHex, &mut target).unwrap_err();
-        assert!(matches!(err, LoadError::ChecksumMismatch { actual: a_ck, expected: e_ck, address: addr}
-            if a_ck== 0xfeu8 && e_ck == 0xffu8 && addr == 0x0000));
+        assert!(
+            matches!(err, LoadError::ChecksumMismatch { actual: a_ck, expected: e_ck, address: addr}
+            if a_ck== 0xfeu8 && e_ck == 0xffu8 && addr == 0x0000)
+        );
     }
 
     #[test]
@@ -635,11 +693,18 @@ S9030000FC
 
     #[test]
     fn load_motorola_srec_when_inconsistent_offset() {
-        let hex_data = "S11F00007C0802A6900100049421FFF07C6C1B787C8C23783C6000003863000026\n".as_bytes();
+        let hex_data =
+            "S11F00007C0802A6900100049421FFF07C6C1B787C8C23783C6000003863000026\n".as_bytes();
         let mut mem: [u8; 16] = [0; 16];
         let mut target = SliceLoadTarget::new(&mut mem, 0);
         let err = load_target(hex_data, LoadFormat::MotorolaSrec, &mut target).unwrap_err();
-        assert!(matches!(err, LoadError::OutOfBounds { address: _, size: _ }));
+        assert!(matches!(
+            err,
+            LoadError::OutOfBounds {
+                address: _,
+                size: _
+            }
+        ));
     }
 
     #[test]
@@ -667,8 +732,10 @@ S9030000FC
         let mut mem: [u8; 0] = [];
         let mut target = SliceLoadTarget::new(&mut mem, -0x100);
         let err = load_target(hex_data, LoadFormat::MotorolaSrec, &mut target).unwrap_err();
-        assert!(matches!(err, LoadError::ChecksumMismatch { actual: a_ck, expected: e_ck, address: addr}
-            if a_ck== 0xfdu8 && e_ck == 0xfcu8 && addr == 0x0000));
+        assert!(
+            matches!(err, LoadError::ChecksumMismatch { actual: a_ck, expected: e_ck, address: addr}
+            if a_ck== 0xfdu8 && e_ck == 0xfcu8 && addr == 0x0000)
+        );
     }
     #[test]
     fn load_binary_success() {
@@ -677,12 +744,19 @@ S9030000FC
         let mut target = SliceLoadTarget::new(&mut mem, 0);
         let start_addr = load_target(&bin_data, LoadFormat::Image, &mut target).unwrap();
         assert!(start_addr.is_none());
-        assert_eq!(mem[0x0..0x8], vec![0x00u8, 0xffu8, 0x55u8, 0xaau8, 0xdeu8, 0xadu8, 0xbeu8, 0xefu8]);
+        assert_eq!(
+            mem[0x0..0x8],
+            vec![
+                0x00u8, 0xffu8, 0x55u8, 0xaau8, 0xdeu8, 0xadu8, 0xbeu8, 0xefu8
+            ]
+        );
     }
 
     #[test]
     fn load_binary_when_size_mismatch() {
-        let bin_data: [u8; 8] = [0x00u8, 0xffu8, 0x55u8, 0xaau8, 0xdeu8, 0xadu8, 0xbeu8, 0xefu8];
+        let bin_data: [u8; 8] = [
+            0x00u8, 0xffu8, 0x55u8, 0xaau8, 0xdeu8, 0xadu8, 0xbeu8, 0xefu8,
+        ];
         let mut mem: [u8; 0] = [];
         let mut target = SliceLoadTarget::new(&mut mem, 0);
         let err = load_target(&bin_data, LoadFormat::Image, &mut target).unwrap_err();
@@ -807,7 +881,9 @@ S9030000FC
     }
 
     async fn validate_load_ihex(path: &NamedTempFile, data: &str) {
-        tokio::fs::write(&path.path(), data.as_bytes()).await.unwrap();
+        tokio::fs::write(&path.path(), data.as_bytes())
+            .await
+            .unwrap();
         let mut mem: [u8; 1024] = [0; 1024];
         let start_addr = load_image(path.path(), &mut mem, 0x100).await.unwrap();
         assert!(start_addr.is_none());
@@ -815,24 +891,26 @@ S9030000FC
 
     #[tokio::test]
     async fn load_image_with_hex() {
-        let path  = tempfile::Builder::new().suffix(".hex").tempfile().unwrap();
+        let path = tempfile::Builder::new().suffix(".hex").tempfile().unwrap();
         validate_load_ihex(&path, IHEX_EXAMPLE).await;
     }
 
     #[tokio::test]
     async fn load_image_with_ihx() {
-        let path  = tempfile::Builder::new().suffix(".ihx").tempfile().unwrap();
+        let path = tempfile::Builder::new().suffix(".ihx").tempfile().unwrap();
         validate_load_ihex(&path, IHEX_EXAMPLE).await;
     }
 
     #[tokio::test]
     async fn load_image_with_ihex() {
-        let path  = tempfile::Builder::new().suffix(".ihex").tempfile().unwrap();
+        let path = tempfile::Builder::new().suffix(".ihex").tempfile().unwrap();
         validate_load_ihex(&path, IHEX_EXAMPLE).await;
     }
 
     async fn validate_load_srec(path: &NamedTempFile, data: &str) {
-        tokio::fs::write(&path.path(), data.as_bytes()).await.unwrap();
+        tokio::fs::write(&path.path(), data.as_bytes())
+            .await
+            .unwrap();
         let mut mem: [u8; 1024] = [0; 1024];
         let start_addr = load_image(path.path(), &mut mem, 0).await.unwrap();
         assert!(matches!(start_addr, Some(0)));
@@ -840,13 +918,13 @@ S9030000FC
 
     #[tokio::test]
     async fn load_image_with_s19() {
-        let path  = tempfile::Builder::new().suffix(".s19").tempfile().unwrap();
+        let path = tempfile::Builder::new().suffix(".s19").tempfile().unwrap();
         validate_load_srec(&path, SREC_EXAMPLE).await;
     }
 
     #[tokio::test]
     async fn load_image_with_srec() {
-        let path  = tempfile::Builder::new().suffix(".srec").tempfile().unwrap();
+        let path = tempfile::Builder::new().suffix(".srec").tempfile().unwrap();
         validate_load_srec(&path, SREC_EXAMPLE).await;
     }
 
@@ -859,19 +937,19 @@ S9030000FC
 
     #[tokio::test]
     async fn load_image_with_bin() {
-        let path  = tempfile::Builder::new().suffix(".bin").tempfile().unwrap();
+        let path = tempfile::Builder::new().suffix(".bin").tempfile().unwrap();
         validate_load_bin(&path, &BIN_EXAMPLE).await;
     }
 
     #[tokio::test]
     async fn load_image_with_rom() {
-        let path  = tempfile::Builder::new().suffix(".rom").tempfile().unwrap();
+        let path = tempfile::Builder::new().suffix(".rom").tempfile().unwrap();
         validate_load_bin(&path, &BIN_EXAMPLE).await;
     }
 
     #[tokio::test]
     async fn load_image_with_unrecognized_extension() {
-        let path  = tempfile::Builder::new().suffix(".foo").tempfile().unwrap();
+        let path = tempfile::Builder::new().suffix(".foo").tempfile().unwrap();
         let mut mem: [u8; 0] = [];
         let err = load_image(path.path(), &mut mem, 0).await.unwrap_err();
         assert!(matches!(err, LoadError::UnknownFormat(message) if message.contains("foo")));
@@ -879,7 +957,7 @@ S9030000FC
 
     #[tokio::test]
     async fn load_image_with_non_existent_file() {
-        let path  = tempfile::Builder::new().suffix(".bin").tempfile().unwrap();
+        let path = tempfile::Builder::new().suffix(".bin").tempfile().unwrap();
         tokio::fs::remove_file(&path).await.unwrap();
         let mut mem: [u8; 0] = [];
         let err = load_image(path.path(), &mut mem, 0).await.unwrap_err();
@@ -888,29 +966,53 @@ S9030000FC
 
     #[test]
     fn load_format_from_path_suffix_image() {
-        assert_eq!(LoadFormat::from_path_suffix(Path::new("file.bin")).unwrap(), LoadFormat::Image);
-        assert_eq!(LoadFormat::from_path_suffix(Path::new("file.rom")).unwrap(), LoadFormat::Image);
+        assert_eq!(
+            LoadFormat::from_path_suffix(Path::new("file.bin")).unwrap(),
+            LoadFormat::Image
+        );
+        assert_eq!(
+            LoadFormat::from_path_suffix(Path::new("file.rom")).unwrap(),
+            LoadFormat::Image
+        );
     }
 
     #[test]
     fn load_format_from_path_suffix_intel_hex() {
-        assert_eq!(LoadFormat::from_path_suffix(Path::new("file.hex")).unwrap(), LoadFormat::IntelHex);
-        assert_eq!(LoadFormat::from_path_suffix(Path::new("file.ihx")).unwrap(), LoadFormat::IntelHex);
-        assert_eq!(LoadFormat::from_path_suffix(Path::new("file.ihex")).unwrap(), LoadFormat::IntelHex);
+        assert_eq!(
+            LoadFormat::from_path_suffix(Path::new("file.hex")).unwrap(),
+            LoadFormat::IntelHex
+        );
+        assert_eq!(
+            LoadFormat::from_path_suffix(Path::new("file.ihx")).unwrap(),
+            LoadFormat::IntelHex
+        );
+        assert_eq!(
+            LoadFormat::from_path_suffix(Path::new("file.ihex")).unwrap(),
+            LoadFormat::IntelHex
+        );
     }
 
     #[test]
     fn load_format_from_path_suffix_motorola_srec() {
-        assert_eq!(LoadFormat::from_path_suffix(Path::new("file.s19")).unwrap(), LoadFormat::MotorolaSrec);
-        assert_eq!(LoadFormat::from_path_suffix(Path::new("file.srec")).unwrap(), LoadFormat::MotorolaSrec);
+        assert_eq!(
+            LoadFormat::from_path_suffix(Path::new("file.s19")).unwrap(),
+            LoadFormat::MotorolaSrec
+        );
+        assert_eq!(
+            LoadFormat::from_path_suffix(Path::new("file.srec")).unwrap(),
+            LoadFormat::MotorolaSrec
+        );
     }
 
     #[test]
     fn load_format_from_path_suffix_unknown() {
-        assert!(matches!(LoadFormat::from_path_suffix(Path::new("no_suffix")).unwrap_err(),
-            LoadError::UnknownFormat(format) if format.contains("deduce")));
-        assert!(matches!(LoadFormat::from_path_suffix(Path::new("bad_suffix.foo")).unwrap_err(),
-            LoadError::UnknownFormat(format) if format.contains("not recognized")));
+        assert!(
+            matches!(LoadFormat::from_path_suffix(Path::new("no_suffix")).unwrap_err(),
+            LoadError::UnknownFormat(format) if format.contains("deduce"))
+        );
+        assert!(
+            matches!(LoadFormat::from_path_suffix(Path::new("bad_suffix.foo")).unwrap_err(),
+            LoadError::UnknownFormat(format) if format.contains("not recognized"))
+        );
     }
-
 }

@@ -75,8 +75,8 @@ impl PtyTransport {
         reporter: TransportReporter,
         capacity: usize,
     ) -> std::io::Result<(Self, ChannelRelay<u8>)> {
-        let OpenptyResult { master, slave } = openpty(None, None)
-            .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
+        let OpenptyResult { master, slave } =
+            openpty(None, None).map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
 
         // Put the slave into raw mode. Default termios is cooked (interactive
         // terminal) mode: ICANON line-buffers input until a newline, ECHO
@@ -85,18 +85,20 @@ impl PtyTransport {
         // ISIG turns control bytes into signals, and OPOST rewrites output
         // bytes (e.g. \n -> \r\n). None of that is appropriate for a raw
         // binary byte-stream transport.
-        let mut term = termios::tcgetattr(&slave)
-            .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
+        let mut term =
+            termios::tcgetattr(&slave).map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
         cfmakeraw(&mut term);
         termios::tcsetattr(&slave, SetArg::TCSANOW, &term)
             .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
 
-        let slave_path = unsafe {
-            tty_name(BorrowedFd::borrow_raw(slave.as_raw_fd()))
-        };
+        let slave_path = unsafe { tty_name(BorrowedFd::borrow_raw(slave.as_raw_fd())) };
 
         let symlink_path = if let (Some(link), Some(target)) = (symlink_path, &slave_path) {
-            if link.symlink_metadata().map(|m| m.file_type().is_symlink()).unwrap_or(false) {
+            if link
+                .symlink_metadata()
+                .map(|m| m.file_type().is_symlink())
+                .unwrap_or(false)
+            {
                 std::fs::remove_file(link)?;
             }
             std::os::unix::fs::symlink(target, link)?;
@@ -299,12 +301,19 @@ mod tests {
 
     #[tokio::test]
     async fn open_send_recv() {
-        let (transport, mut relay) = PtyTransport::open(None, TransportReporter::pending(None)).unwrap();
+        let (transport, mut relay) =
+            PtyTransport::open(None, TransportReporter::pending(None)).unwrap();
         assert!(transport.slave_path().is_some());
 
         let slave_path = transport.slave_path().unwrap().to_owned();
-        let slave_file = std::fs::OpenOptions::new().write(true).open(&slave_path).unwrap();
-        { let mut f = slave_file; f.write_all(&[0xBB]).unwrap(); }
+        let slave_file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&slave_path)
+            .unwrap();
+        {
+            let mut f = slave_file;
+            f.write_all(&[0xBB]).unwrap();
+        }
 
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         let mut got = Vec::new();
@@ -316,7 +325,8 @@ mod tests {
 
     #[tokio::test]
     async fn shutdown_marks_disconnected() {
-        let (mut transport, relay) = PtyTransport::open(None, TransportReporter::pending(None)).unwrap();
+        let (mut transport, relay) =
+            PtyTransport::open(None, TransportReporter::pending(None)).unwrap();
         transport.shutdown();
         assert!(!transport.is_connected());
 
@@ -325,7 +335,8 @@ mod tests {
 
     #[tokio::test]
     async fn send_before_any_external_attach_succeeds() {
-        let (mut transport, relay) = PtyTransport::open(None, TransportReporter::pending(None)).unwrap();
+        let (mut transport, relay) =
+            PtyTransport::open(None, TransportReporter::pending(None)).unwrap();
 
         // No external process connected yet; send must not panic or block.
         assert!(!transport.is_connected());
@@ -336,13 +347,20 @@ mod tests {
 
     #[tokio::test]
     async fn is_connected_reflects_client_state() {
-        let (transport, relay) = PtyTransport::open(None, TransportReporter::pending(None)).unwrap();
+        let (transport, relay) =
+            PtyTransport::open(None, TransportReporter::pending(None)).unwrap();
         let slave_path = transport.slave_path().unwrap().to_owned();
 
         assert!(!transport.is_connected());
 
-        let slave = std::fs::OpenOptions::new().write(true).open(&slave_path).unwrap();
-        { let mut f = slave; f.write_all(&[0x01]).unwrap(); }
+        let slave = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&slave_path)
+            .unwrap();
+        {
+            let mut f = slave;
+            f.write_all(&[0x01]).unwrap();
+        }
 
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         assert!(transport.is_connected());
@@ -355,7 +373,8 @@ mod tests {
         let link_path = PathBuf::from("/tmp/emma65_test_pty_link");
         let _ = std::fs::remove_file(&link_path);
 
-        let (transport, relay) = PtyTransport::open(Some(&link_path), TransportReporter::pending(None)).unwrap();
+        let (transport, relay) =
+            PtyTransport::open(Some(&link_path), TransportReporter::pending(None)).unwrap();
         assert!(link_path.exists());
 
         close(transport, relay);
@@ -364,7 +383,8 @@ mod tests {
 
     #[tokio::test]
     async fn initial_dump_reaches_client_that_attaches_later() {
-        let (mut transport, relay) = PtyTransport::open(None, TransportReporter::pending(None)).unwrap();
+        let (mut transport, relay) =
+            PtyTransport::open(None, TransportReporter::pending(None)).unwrap();
         let slave_path = transport.slave_path().unwrap().to_owned();
 
         // Give the spawned task a chance to run before checking for its
@@ -377,7 +397,10 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 
         // Now a reader attaches and should still see the buffered bytes.
-        let mut slave = std::fs::OpenOptions::new().read(true).open(&slave_path).unwrap();
+        let mut slave = std::fs::OpenOptions::new()
+            .read(true)
+            .open(&slave_path)
+            .unwrap();
         let mut buf = [0u8; 2];
         slave.read_exact(&mut buf).unwrap();
         assert_eq!(buf, [0xD0, 0xD1]);
@@ -387,7 +410,8 @@ mod tests {
 
     #[tokio::test]
     async fn send_is_not_echoed_back_as_received_data() {
-        let (mut transport, mut relay) = PtyTransport::open(None, TransportReporter::pending(None)).unwrap();
+        let (mut transport, mut relay) =
+            PtyTransport::open(None, TransportReporter::pending(None)).unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
 
         transport.send(0xAB);
@@ -406,7 +430,8 @@ mod tests {
         let (sender, mut receiver) = device_event_channel();
         let reporter = TransportReporter::pending(Some(sender));
         reporter.bind("test-device-99");
-        let (mut transport, relay) = PtyTransport::open_with_capacity(None, reporter.clone(), 1).unwrap();
+        let (mut transport, relay) =
+            PtyTransport::open_with_capacity(None, reporter.clone(), 1).unwrap();
 
         // Capacity 1, two sends back-to-back with no `.await` in between —
         // the spawned Tokio task can't be scheduled to drain in between, so
