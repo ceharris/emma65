@@ -21,4 +21,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     librsvg2-dev \
     libsdl2-dev \
     libsdl2-gfx-dev \
+    xdg-utils \
     && rm -rf /var/lib/apt/lists/*
