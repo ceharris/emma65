@@ -106,15 +106,25 @@ confirm it has been merged into `main`. Do not poll for merge status.
 **10. Confirm before tagging.** Once the user confirms the merge, `git fetch origin` and locate
 the merge commit on `main`. Before doing anything else, explicitly ask the user to confirm —
 state the exact tag name and the commit SHA it will point to. This is the one irreversible,
-public-facing step in the whole process: pushing the tag triggers a real GitHub Actions build and
-publishes a public GitHub Release.
+public-facing step in the whole process: dispatching the release build (next step) publishes a
+public GitHub Release.
 
-**11. Tag and push**, only after that confirmation:
+**11. Tag, push, and dispatch the build**, only after that confirmation:
 
 ```bash
 git tag -a <crate>-vX.Y.Z <merge-sha> -m "<crate> X.Y.Z"
 git push origin <crate>-vX.Y.Z
+gh workflow run release.yml --ref main -f tag=<crate>-vX.Y.Z
 ```
 
-Report the push and point the user at the triggered run (`gh run list --workflow=release.yml`).
-The skill's job ends here — it does not watch or interact with the release workflow itself.
+The tag always points at a commit that was already pushed to `main` (merging the version-bump PR
+in step 8), and GitHub Actions dedupes check-suites by commit SHA — so the tag push by itself
+never fires `release.yml`'s `on: push: tags:` trigger, even though the tag exists on GitHub and
+matches the trigger's glob pattern. The `gh workflow run` dispatch is what actually starts the
+build: it reads the workflow definition from `--ref main`, but pins every job's checkout to the
+tag itself, so the build is still produced from the tagged commit, not from whatever `main`'s tip
+happens to be at dispatch time.
+
+Report the push and dispatch, then poll `gh run list --workflow=release.yml --limit 1` (it can
+take a few seconds for the dispatched run to appear) and give the user the run URL. The skill's
+job ends here — it does not watch the run through to completion.
