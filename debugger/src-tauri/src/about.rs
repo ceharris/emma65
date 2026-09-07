@@ -35,8 +35,8 @@ fn build_info() -> Option<String> {
 fn build_info() -> Option<String> {
     Some(format!(
         "Build {} ({})",
-        env!("EMMA65_BUILD_GIT_HASH"),
-        env!("EMMA65_BUILD_DATE")
+        env!("DEBUGGER_BUILD_GIT_HASH"),
+        env!("DEBUGGER_BUILD_DATE")
     ))
 }
 
