@@ -70,7 +70,7 @@ behavior, if that's what you're looking for, include:
 Emma65 implements the full 65C02 interrupt model:
 
 - **RESET** — restores the CPU to its power-on state: every device on the
-  bus receives an `IoDevice::reset()` call, the stack pointer is set to
+  bus is reset to its own power-on state, the stack pointer is set to
   `$FF`, the status register to `I` (interrupts disabled, every other flag
   clear), the cumulative cycle counter is zeroed, and any `STP`/`WAI`-halted
   state is cleared. The program counter is then loaded from the reset vector
@@ -79,7 +79,8 @@ Emma65 implements the full 65C02 interrupt model:
   it as an on-demand control.
 - **NMI** — edge-triggered and latched: the first falling edge sets a pending
   flag that is consumed exactly once, with highest priority over simultaneous
-  IRQ. Any device can signal an NMI by implementing `IoDevice::take_nmi()`.
+  IRQ. Any device capable of signaling an NMI (for example a VIA's CA1 line)
+  can trigger one.
 - **IRQ** — level-triggered and multi-source: multiple devices can
   independently assert and release the IRQ line; the interrupt fires when any
   source is active and the I flag is clear. Each device's IRQ state is polled
@@ -109,9 +110,10 @@ so the boundary itself, not some margin below it, is the practical ceiling:
 | minimal (32K RAM, 32K ROM, console only) | ~85 MHz |
 
 (release build, on a mid-range 2023 laptop CPU — AMD Ryzen 5 7530U). Every
-polled device adds per-instruction overhead — its `tick()` runs on every
-`Cpu::step()` — so trimming the default complement down to just RAM, ROM, and
-a console more than doubled the ceiling here. Use these two points to
+polled device adds per-instruction overhead — it's given a chance to advance
+its own state after every single instruction — so trimming the default
+complement down to just RAM, ROM, and a console more than doubled the
+ceiling here. Use these two points to
 interpolate a rough expectation for your own configuration: more polled
 devices pulls the ceiling down toward the low end, a bare-bones setup pushes
 it toward the high end. The ceiling also depends on the host CPU and the
@@ -120,98 +122,61 @@ release and hits its own, much lower ceiling — so treat it as "however fast
 your configuration runs unthrottled on your machine in a `--release` build,"
 not a fixed number.
 
-```rust
-ClockSpeed::mhz(1.0)       // 1 MHz — Apple II speed
-ClockSpeed::mhz(1.8432)    // 1.8432 MHz — common UART baud-rate crystal
-ClockSpeed::mhz(2.0)       // 2 MHz — BBC Micro speed
-ClockSpeed::unlimited()    // Maximum throughput; no throttling
-```
+The target clock speed is set with the `clock-speed-hz` TOML/CLI setting (see
+[Running the Emulator](running-the-emulator.md)); some familiar reference
+points:
+
+| Setting | Speed |
+|---|---|
+| `clock-speed-hz = 1000000` | 1 MHz — Apple II speed |
+| `clock-speed-hz = 1843200` | 1.8432 MHz — common UART baud-rate crystal |
+| `clock-speed-hz = 2000000` | 2 MHz — BBC Micro speed |
+| omitted | Maximum throughput; no throttling |
 
 ### Memory and Bus Configuration
 
 The memory bus is organized around named address regions mapped into the
 16-bit address space. Regions can be RAM, ROM (write-protected), or I/O device
-windows. The bus uses a most-specific-wins overlap policy: a smaller region
-always shadows a larger one at the same addresses, which makes it easy to
-place a device register window inside a ROM region. Ambiguous overlaps (
-same-size regions at the same addresses) and ROM size mismatches are caught at
-build time.
+windows, configured via TOML or CLI flags (see
+[Running the Emulator](running-the-emulator.md)). The bus uses a
+most-specific-wins overlap policy: a smaller region always shadows a larger
+one at the same addresses, which makes it easy to place a device register
+window inside a ROM region. Ambiguous overlaps (same-size regions at the same
+addresses) and ROM size mismatches are caught when the configuration is
+loaded, before the program ever runs, and reported as a startup error rather
+than a silent misconfiguration.
 
-```rust
-let bus = Bus::config()
-    .ram(AddressRange::new(0x0000, 0x7FFF)) ?
-    .rom(AddressRange::new(0xC000, 0xFFFF), rom_data) ?
-    .device(AddressRange::new(0xDF00, 0xDF0F), DeviceId(1), Box::new(my_device)) ?
-    .build();
-```
-
-`.build()` resolves every one of the 65,536 possible addresses to its
-most-specific region exactly once, consulting `IoDevice::claims()` on each
-overlapping device candidate along the way to settle any conditional
-chip-select. That one-time resolution is cached in a flat lookup table, so
-every read or write the CPU subsequently performs is a single array index —
-no walking the configured regions and no re-consulting `claims()` at
-runtime — keeping bus access overhead effectively constant regardless of how
-many devices are configured, out of the way of maximum emulated CPU
-throughput.
-
-Bus errors (unmapped reads/writes, ROM write violations) are surfaced through
-`StepResult::Error` so the host application can decide how to respond.
+Address resolution is a one-time cost paid when the configuration loads, so
+reads and writes at runtime are effectively free regardless of how many
+devices are configured — bus overhead stays out of the way of maximum
+emulated CPU throughput. Bus errors (unmapped reads/writes, ROM write
+violations) are reported back to whichever tool is running the CPU (the
+`emma65` CLI, the debugger, or the tracer) so it can decide how to respond —
+typically by halting and reporting the error.
 
 ### Memory-Mapped I/O Devices
 
-Devices are mapped onto the bus with the same builder call used for RAM and
-ROM regions — `BusConfig::device(AddressRange, DeviceId, Box<dyn IoDevice>)`
-— so a device window is subject to the same build-time overlap checking. The
-built-in `ram`, `rom`, `console`, and other `type`s configurable from
-TOML/CLI (see [Running the Emulator](running-the-emulator.md)) are themselves
-just `DeviceModule` implementations that make this same call: each is
-registered by name in a `DeviceRegistry`, and `Config::build()` instantiates
-one per `[[devices]]` entry (or `--device` flag) as it walks the configured
-device list at startup. A custom device plugs into this exact same
-configuration surface — see
-[Adding a Custom Device Module](for-contributors.md#adding-a-custom-device-module) under For
-Contributors.
+The built-in `ram`, `rom`, `console`, and other device `type`s configurable
+from TOML/CLI (see [Running the Emulator](running-the-emulator.md)) share one
+configuration surface, so adding a new device type is a matter of plugging
+into that same surface — see
+[Adding a Custom Device Module](for-contributors.md#adding-a-custom-device-module)
+under For Contributors for how to build one.
 
-Custom devices implement the `IoDevice` trait. Only three methods are
-required:
-
-```rust
-/// Read and return a byte from the specified absolute `address`.
-fn read(&mut self, address: u16) -> u8;
-/// Write a byte to the specified absolute `address`.
-fn write(&mut self, address: u16, value: u8);
-/// Read and return a byte from the specified absolute `address` while
-/// inhibiting side effects; used by the debugger.
-fn peek(&self, address: u16) -> u8;
-```
-
-A handful of further methods, each with a no-op default, give a device the
-rest of what it needs to behave like real hardware:
-
-- **Timing** — `tick(cycles: u32)` is called once per instruction, right
-  after it completes, with the number of clock cycles that instruction
-  actually took. A device advances its own internal timers and counters by
-  exactly that many cycles, keeping it in lock-step with CPU time without
-  being invoked on every single cycle; `Via6522`'s two timers and
-  `Mc6840`'s three are both built on this.
-- **Interrupts** — `irq_active()` is polled after every instruction to
-  report whether the device is currently asserting the shared IRQ line, and
-  `take_nmi()` is called once per instruction to consume a pending NMI edge
-  (an implementation sets an internal flag on the triggering event and
-  clears it here). See [Interrupt Support](#interrupt-support) above for how
-  the CPU combines these signals from every device on the bus.
-- **Lifecycle and direct writes** — `reset()` restores hardware-reset state;
-  `patch()` writes a value while bypassing a device's own read-only
-  restrictions (used to load ROM images and by the debugger's Memory panel);
-  `shutdown()` signals an owned transport to begin closing down.
+A device has a small set of capabilities beyond plain memory: it can advance
+internal timers and counters in step with CPU time (a VIA's two timers and a
+PTM's three are both built on this), assert or release the shared IRQ line
+and signal an NMI, restore itself to a power-on state on reset, and — for
+devices that talk to the outside world — begin closing down its connection
+when the emulator shuts down. See [Interrupt Support](#interrupt-support)
+above for how the CPU combines IRQ/NMI signals from every device on the bus.
 
 ### Execution Tracing
 
 The CPU can record every register snapshot and bus read/write to a compact
-[binary trace format](appendix-trace-format.md) as it executes, via a
-pluggable `TraceCallback` — writing is offloaded to a background thread so
-recording does not slow down execution. Two tools consume these traces:
+[binary trace format](appendix-trace-format.md) as it executes — writing is
+offloaded to a background thread so recording does not slow down execution.
+Two tools consume these traces:
 
 - The `emma65` binary writes a trace directly to a file with `--trace-file`
 - The debugger's Trace window records and displays a scrolling, live view of

@@ -1,31 +1,32 @@
 # LED Matrix External Protocol
 
-Wire protocol [`LedMatrix`](io-devices.md#rgb-led-matrix-display-displaymatrix)
-(config type `display/matrix`) uses to stream its per-matrix pixel and
+Wire protocol the
+[RGB LED Matrix Display](io-devices.md#rgb-led-matrix-display-displaymatrix)
+device (config type `display/matrix`) uses to stream its per-matrix pixel and
 palette data to an external peripheral process — the bundled
 `emma65-led-matrix` binary, or a replacement for it — over an attached
-[`Transport`](io-devices.md#transport-options), when running the plain
-`emma65` CLI standalone. It's unrelated to the debugger's in-process
-`LedMatrixFrame`/`attach_frame_sink` push channel, which needs no wire
-protocol at all (same address space, same process), and unrelated to the
+[transport](io-devices.md#transport-options), when running the plain
+`emma65` CLI standalone. It's unrelated to how the debugger renders the same
+device in-process, which needs no wire protocol at all (same address space,
+same process), and unrelated to the
 [Character Display External Protocol](appendix-display-protocol.md) — a
-different device with different needs, most notably that `LedMatrix` swaps
-happen per-matrix rather than in lockstep across the whole device on a
-single vsync. Implemented in `src/emulator/device/led_matrix/protocol.rs`.
-See [Running the LED Matrix Peripheral](running-the-led-matrix-peripheral.md)
+different device with different needs, most notably that this device's
+matrices swap per-matrix rather than in lockstep across the whole device on a
+single vsync. See
+[Running the LED Matrix Peripheral](running-the-led-matrix-peripheral.md)
 for how to configure and launch `emma65-led-matrix` itself, and
 [RGB LED Matrix Display](io-devices.md#rgb-led-matrix-display-displaymatrix)
-for `LedMatrix`'s bus-facing register behavior — this page covers only what
+for the device's bus-facing register behavior — this page covers only what
 crosses the transport.
 
 ## Transport requirements
 
-Exactly one connection, outbound only (device → peripheral) — unlike
-`CharDisplay`, `LedMatrix` has no input capability, so there is no inbound
-direction. `Transport::send_bytes` must be atomic — either the whole buffer
-is written or none of it is — which in practice means only `pipe:` is
-supported; the config module rejects any other transport spec for a
-`display/matrix` device at instantiation time.
+Exactly one connection, outbound only (device → peripheral) — unlike the
+Character Display, this device has no input capability, so there is no
+inbound direction. The transport send must be atomic — either the whole
+buffer is written or none of it is — which in practice means only `pipe:` is
+supported; any other transport spec is rejected for a `display/matrix`
+device at configuration time.
 
 ## Message framing
 
@@ -73,14 +74,14 @@ type and fixed length.
 | `matrix_index` | `u8` | 1            | which matrix this block belongs to, `0..matrix_count`        |
 | `pixels`       | raw  | 1024         | one palette-index byte per pixel, row-major, top row first   |
 
-Total message size: 1026 bytes. Sent whenever `LedMatrix::swap_matrix` runs
-for a given matrix — whether triggered by `CMD_SWAP` or by auto-refresh —
-carrying that matrix's scanout buffer exactly as swapped. The peripheral is
-expected to composite these raw indices against its own copy of the current
-palette (see below), the same way the debugger's in-process path does via
-`compositing::composite_matrix`.
+Total message size: 1026 bytes. Sent whenever a matrix is swapped to its
+visible buffer — whether triggered by the `SWAP` command or by
+auto-refresh — carrying that matrix's contents exactly as swapped. The
+peripheral is expected to composite these raw indices against its own copy
+of the current palette (see below), the same way the debugger's in-process
+rendering does.
 
-### Palette (`MSG_PALETTE = 2`, sent only on an actual `CMD_PALETTE_WRITE`)
+### Palette (`MSG_PALETTE = 2`, sent only on an actual `PALETTE_WRITE`)
 
 | Field   | Type     | Size (bytes) | Notes                                                        |
 |---------|----------|--------------|------------------------------------------------------------------|
@@ -88,58 +89,57 @@ palette (see below), the same way the debugger's in-process path does via
 | `index` | `u8`     | 1            | palette entry updated, `0..256`                                  |
 | `color` | `u16` LE | 2            | packed RGB565 (`rrrrrggggggbbbbb`), the entry's new value         |
 
-Total message size: 4 bytes. Sent whenever `CMD_PALETTE_WRITE`'s effect is
-applied, carrying the already-quantized `Rgb565` value stored in the
-device's palette table — the same value a subsequent `CMD_PALETTE_READ` of
-that entry would report (scaled back up to 8-bit components), not the
-original pre-quantization write bytes.
+Total message size: 4 bytes. Sent whenever a `PALETTE_WRITE` command is
+applied, carrying the already-quantized RGB565 value stored in the device's
+palette table — the same value a subsequent `PALETTE_READ` of that entry
+would report (scaled back up to 8-bit components), not the original
+pre-quantization write bytes.
 
-### Power (`MSG_POWER = 3`, sent only on an actual `CMD_SET_POWER`)
+### Power (`MSG_POWER = 3`, sent only on an actual `SET_POWER`)
 
 | Field  | Type | Size (bytes) | Notes                                                    |
 |--------|------|--------------|-------------------------------------------------------------|
 | `tag`  | `u8` | 1            | `3`                                                          |
 | `mask` | `u8` | 1            | new power-state bitmask, one bit per matrix                 |
 
-Total message size: 2 bytes. Sent whenever `CMD_SET_POWER`'s effect is
-applied. The peripheral must retain this mask and reapply it (via
-`compositing::composite_matrix`'s `power_on` parameter) to every future
+Total message size: 2 bytes. Sent whenever a `SET_POWER` command is applied.
+The peripheral must retain this mask and reapply it to every future
 composite of each affected matrix, the same way it already retains the
 palette — a powered-off matrix composites to fully black regardless of
 palette content.
 
-### Brightness (`MSG_BRIGHTNESS = 4`, sent only on an actual `CMD_SET_BRIGHTNESS`)
+### Brightness (`MSG_BRIGHTNESS = 4`, sent only on an actual `SET_BRIGHTNESS`)
 
 | Field   | Type | Size (bytes) | Notes                                            |
 |---------|------|--------------|-------------------------------------------------------|
 | `tag`   | `u8` | 1            | `4`                                                    |
 | `level` | `u8` | 1            | new global brightness level, `0..=255`                 |
 
-Total message size: 2 bytes. Sent whenever `CMD_SET_BRIGHTNESS`'s effect is
-applied. The peripheral must retain this value and reapply it (via
-`compositing::composite_matrix`'s `brightness` parameter) to every future
-composite of every matrix, the same way it already retains the palette.
+Total message size: 2 bytes. Sent whenever a `SET_BRIGHTNESS` command is
+applied. The peripheral must retain this value and reapply it to every
+future composite of every matrix, the same way it already retains the
+palette.
 
 Power and brightness messages are a pure addition to this tagged scheme,
 requiring no change to any existing message's framing.
 
 ## Startup state (device → peripheral)
 
-`LedMatrix` never re-sends the full contents of every matrix or the whole
+The device never re-sends the full contents of every matrix or the whole
 palette at connection time. A peripheral that attaches after the device has
 already been running sees only messages for matrices swapped, palette
 entries written, and power/brightness changes made from that point forward;
-anything unset renders using the peripheral's own reconstruction of
-`compositing::default_palette()`, all-zero (index 0) pixel data, and full
+anything unset renders using the peripheral's own reconstruction of the
+built-in default palette, all-zero (index 0) pixel data, and full
 power/brightness (`power_mask = 0xFF`, `brightness = 0xFF`), matching the
-device's own construction-time defaults.
+device's own defaults at startup.
 
 ## Runtime palette updates
 
-Unlike `CharDisplay`, which resends its entire palette with every frame,
-`LedMatrix`'s palette is comparatively large (256 entries, RGB565) and
-changes independently of any single matrix's swap cadence, so each write is
-sent as its own small message (see [Palette](#palette-msg_palette--2-sent-only-on-an-actual-cmd_palette_write)
+Unlike the Character Display, which resends its entire palette with every
+frame, this device's palette is comparatively large (256 entries, RGB565)
+and changes independently of any single matrix's swap cadence, so each write
+is sent as its own small message (see [Palette](#palette-msg_palette--2-sent-only-on-an-actual-palette_write)
 above) instead. A peripheral must therefore retain every matrix's most
 recently received raw pixel indices as well as its own copy of the palette,
 and recomposite every matrix's stored pixels whenever a palette message

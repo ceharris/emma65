@@ -1,38 +1,38 @@
 # LCD Display External Protocol
 
-Wire protocol [`LcdDisplay`](io-devices.md#lcd-display-displaylcd)
-(config type `display/lcd`) uses to stream its composited frame data to an
-external peripheral process — the bundled `emma65-lcd-display` binary, or a
-replacement for it — over an attached [`Transport`](io-devices.md#transport-options),
-when running the plain `emma65` CLI standalone. It's unrelated to the
-debugger's in-process `LcdDisplayFrame`/`attach_frame_sink` push channel,
-which needs no wire protocol at all (same address space, same process), and
-unrelated to the [Character Display External Protocol](appendix-display-protocol.md)
+Wire protocol the [LCD Display](io-devices.md#lcd-display-displaylcd)
+device (config type `display/lcd`) uses to stream its composited frame data
+to an external peripheral process — the bundled `emma65-lcd-display` binary,
+or a replacement for it — over an attached
+[transport](io-devices.md#transport-options), when running the plain
+`emma65` CLI standalone. It's unrelated to how the debugger renders the same
+device in-process, which needs no wire protocol at all (same address space,
+same process), and unrelated to the
+[Character Display External Protocol](appendix-display-protocol.md)
 and [LED Matrix External Protocol](appendix-led-matrix-protocol.md) — different
-devices with different needs. Implemented in
-`src/emulator/device/lcd_display/protocol.rs`. See
+devices with different needs. See
 [Running the LCD Display Peripheral](running-the-lcd-display-peripheral.md)
 for how to configure and launch `emma65-lcd-display` itself, and
-[LCD Display](io-devices.md#lcd-display-displaylcd) for `LcdDisplay`'s
+[LCD Display](io-devices.md#lcd-display-displaylcd) for the device's
 bus-facing register behavior — this page covers only what crosses the
 transport.
 
 ## Transport requirements
 
-Exactly one connection, outbound only (device → peripheral) — like
-`LedMatrix`, and unlike `CharDisplay`, this device has no input capability at
-all. `Transport::send_bytes` must be atomic — either the whole buffer is
-written or none of it is — which in practice means only `pipe:` is
-supported; the config module rejects any other transport spec for a
-`display/lcd` device at instantiation time.
+Exactly one connection, outbound only (device → peripheral) — like the LED
+Matrix, and unlike the Character Display, this device has no input
+capability at all. The transport send must be atomic — either the whole
+buffer is written or none of it is — which in practice means only `pipe:` is
+supported; any other transport spec is rejected for a `display/lcd` device
+at configuration time.
 
 ## Message framing
 
 The header is sent exactly once, immediately when the transport is attached.
 Every subsequent message is a frame, sent whenever the device pushes a frame
 — i.e. after every register write that could change what's rendered, with
-no periodic cadence at all, unlike `CharDisplay`'s per-vsync or `LedMatrix`'s
-per-swap sends.
+no periodic cadence at all, unlike the Character Display's per-vsync or LED
+Matrix's per-swap sends.
 
 Unlike both of those protocols, a frame here is **not** a fixed size for the
 life of the connection: `Function Set`'s `F` bit can switch the active font
@@ -46,16 +46,16 @@ is only safe because of the transport atomicity requirement above: a
 transport that could deliver a partial frame would desync the stream
 permanently, with no way to resynchronize.
 
-A frame the transport can't accept immediately (its outbound ring still full
-of an earlier, not-yet-drained message — issue #581) is not lost: the device
+A frame the transport can't accept immediately (its outbound buffer still
+full of an earlier, not-yet-drained message) is not lost: the device
 keeps it and retries on every subsequent CPU cycle until it goes through. A
 later write that composites a newer frame before the retry succeeds replaces
 the pending one outright rather than queuing behind it, since only the
 current state is ever worth delivering. This guarantees the peripheral
 eventually catches up to whatever the device last rendered, even after a
-burst of writes outruns the peripheral's read/render rate — unlike
-`CharDisplay`'s or `LedMatrix`'s periodic cadence, which corrects itself on
-the next tick regardless, a permanently dropped frame here would otherwise
+burst of writes outruns the peripheral's read/render rate — unlike the
+Character Display's or LED Matrix's periodic cadence, which corrects itself
+on the next tick regardless, a permanently dropped frame here would otherwise
 leave the peripheral showing stale content indefinitely.
 
 ## Header (sent once, on attach)
@@ -92,21 +92,21 @@ sent is always exactly what the device's compositing produces for its
 current DDRAM/CGRAM/CGROM/cursor/mode state — already fully composited
 (background/foreground baked into each pixel, cursor drawn, blank when
 `display_on` is false). There is no palette to separately transmit or
-retain, unlike `CharDisplay`/`LedMatrix`: this device's only two colors are
-the header's fixed `background`/`foreground`.
+retain, unlike the Character Display or LED Matrix: this device's only two
+colors are the header's fixed `background`/`foreground`.
 
 ## Rendering cosmetics are the peripheral's responsibility
 
 The device-side compositing produces a flat one-RGBA-pixel-per-dot buffer
 with no visual polish — no gaps, no rounded corners, no dim "off" state.
-Per issue #569, that cosmetic dot-matrix rendering (rounded dots, inter-dot
-and inter-cell gaps, a dimly-visible off state rather than flat background)
-deliberately lives independently in each renderer rather than in the shared
-library — this protocol carries the same undecorated raw buffer the
-debugger panel receives in-process, and a companion peripheral is expected
-to apply its own equivalent cosmetic treatment using its own native drawing
-primitives (the same split `LedMatrix`'s protocol and `emma65-led-matrix`
-already use for round-LED rendering). A peripheral can distinguish an "on"
+That cosmetic dot-matrix rendering (rounded dots, inter-dot and inter-cell
+gaps, a dimly-visible off state rather than flat background) deliberately
+lives independently in each renderer rather than in a shared library — this
+protocol carries the same undecorated raw buffer the debugger panel receives
+in-process, and a companion peripheral is expected to apply its own
+equivalent cosmetic treatment using its own native drawing primitives (the
+same split the LED Matrix's protocol and `emma65-led-matrix` already use for
+round-LED rendering). A peripheral can distinguish an "on"
 dot from an "off" one the same way the debugger panel does: a pixel exactly
 equal to the header's `background` triple is "off"; anything else is "on"
 (in practice, always exactly the header's `foreground` triple).
@@ -114,8 +114,8 @@ equal to the header's `background` triple is "off"; anything else is "on"
 ## Startup state and reconnection
 
 There is no reconnection support — the design assumes a single spawned
-child process tied to the device's lifetime, mirroring `CharDisplay`'s and
-`LedMatrix`'s companion processes. A peripheral that attaches sees no frame
+child process tied to the device's lifetime, mirroring the Character
+Display's and LED Matrix's companion processes. A peripheral that attaches sees no frame
 at all until the device's next render-affecting register write — unlike the
 debugger panel, which can fetch a cached last-delivered frame on mount,
 there is no equivalent "replay the last frame" mechanism over this
@@ -128,5 +128,5 @@ No protocol negotiation — a peripheral that doesn't recognize a header's
 `version` should refuse to proceed rather than guess at a compatible
 framing. No inbound direction (this device has no input capability at
 all). No power/brightness/contrast messages (the HD44780 has no such
-registers, and unlike `LedMatrix`'s power/brightness messages, nothing in
+registers, and unlike the LED Matrix's power/brightness messages, nothing in
 this device's spec calls for them).

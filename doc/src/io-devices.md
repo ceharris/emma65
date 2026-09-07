@@ -1,11 +1,11 @@
 # I/O Devices
 
-A number of built-in devices implement the `IoDevice` trait. Most — a simple
-console, 6522 VIA, and 6551 ACIA among them — are register-window devices
-that can be mapped into any address range on the bus; each integrates with
-the interrupt controller and most of them exchange data with the outside
-world over a configurable [Transport](#transport-options). RAM, ROM, and the
-bank-switched memory subsystems that replace them are covered separately in
+Emma65 includes a number of built-in devices. Most — a simple console, 6522
+VIA, and 6551 ACIA among them — are register-window devices that can be
+mapped into any address range on the bus; each integrates with the interrupt
+controller and most of them exchange data with the outside world over a
+configurable [Transport](#transport-options). RAM, ROM, and the bank-switched
+memory subsystems that replace them are covered separately in
 [Memory Devices](memory-devices.md).
 
 Every device is placed on the bus with a TOML `[[devices]]` table — `type`
@@ -611,19 +611,19 @@ rather than asserting one of its own.
 
 ## Transport Options
 
-Devices that exchange byte streams attach a `Transport`. Configurable via TOML/CLI:
+Devices that exchange byte streams attach to a transport. Configurable via TOML/CLI:
 
-| Transport             | Shorthand                       | Best for                                                              |
-|------------------------|---------------------------------|-------------------------------------------------------------------------|
-| `PipeTransport`        | `pipe:/path/to/exe,arg1,arg2`   | Spawning a child process and bridging its stdin/stdout to the device    |
-| `TcpSocketTransport`   | `tcp:PORT` or `tcp:IP:PORT`     | Connecting a terminal emulator or remote process over the network       |
-| `UnixSocketTransport`  | `unix:PATH`                     | Low-latency local IPC (lower overhead than TCP)                         |
-| `PtyTransport`         | `pty` or `pty:SYMLINK_PATH`     | Any program that expects a real TTY — `screen`, `minicom`, `cu`, etc.   |
+| Transport   | Shorthand                       | Best for                                                              |
+|-------------|----------------------------------|-------------------------------------------------------------------------|
+| Pipe        | `pipe:/path/to/exe,arg1,arg2`   | Spawning a child process and bridging its stdin/stdout to the device    |
+| TCP Socket  | `tcp:PORT` or `tcp:IP:PORT`     | Connecting a terminal emulator or remote process over the network       |
+| Unix Socket | `unix:PATH`                     | Low-latency local IPC (lower overhead than TCP)                         |
+| PTY         | `pty` or `pty:SYMLINK_PATH`     | Any program that expects a real TTY — `screen`, `minicom`, `cu`, etc.   |
 
-A fifth implementation, `InternalPipeTransport`, isn't configured via
-TOML/CLI — the `emma65` binary and the debugger UI use it internally to wire
-a console device directly to the host process's own stdin/stdout (CLI) or
-terminal window (debugger) when no `transport` attribute is given.
+There's also an internal-only transport that isn't configured via TOML/CLI —
+the `emma65` binary and the debugger UI use it to wire a console device
+directly to the host process's own stdin/stdout (CLI) or terminal window
+(debugger) when no `transport` attribute is given.
 
 Every transport handles its actual I/O in the background, independent of the
 emulated CPU's own pace. Bytes arriving from the outside world are buffered

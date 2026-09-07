@@ -1,10 +1,9 @@
 # PTM Peer Protocol
 
 Wire protocol for a peripheral to exchange clock, gate, and timer-output
-state with an [`Mc6840`](io-devices.md#mc6840-programmable-timer-module-ptm6840)
+state with a [PTM](io-devices.md#mc6840-programmable-timer-module-ptm6840)
 device (config type `ptm/6840`) over an attached
-[`Transport`](io-devices.md#transport-options). Implemented in
-`src/emulator/device/protocol/ptm.rs`.
+[transport](io-devices.md#transport-options).
 
 ## Connection semantics
 

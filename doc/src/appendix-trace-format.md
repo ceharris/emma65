@@ -1,11 +1,10 @@
 # Trace File Format
 
-The binary format written by `BinaryTraceWriter` and read by
-`BinaryTraceReader` when the CPU's [execution tracing](the-emulator-core.md#execution-tracing)
-is active. Implemented in `src/emulator/cpu/trace.rs`. It's reference
-material for writing an independent trace file reader (e.g. a script or
-alternate viewer) — the bundled `emma65-tracer` binary already decodes it
-into disassembly listings (see [Running the Tracer](running-the-tracer.md)),
+The binary format the emulator writes, and the debugger and tracer read, when
+[execution tracing](the-emulator-core.md#execution-tracing) is active. It's
+reference material for writing an independent trace file reader (e.g. a
+script or alternate viewer) — the bundled `emma65-tracer` binary already
+decodes it into disassembly listings (see [Running the Tracer](running-the-tracer.md)),
 and the debugger's Trace window reads it live without needing to touch this
 format directly.
 
@@ -90,7 +89,7 @@ instruction, as the last record for that `instr_id` — after every
 ## Instruction correlation
 
 `instr_id` is a monotonically increasing counter (wrapping on overflow,
-which in practice never happens) assigned once per `Cpu::step()` call. Every
+which in practice never happens) assigned once per instruction executed. Every
 record belonging to the same instruction — its `Registers` snapshot, each
 bus `Read`/`Write` it performs, and its final `Cycles` total — shares the
 same `instr_id`, in that relative order, though other instructions' records

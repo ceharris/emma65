@@ -1,10 +1,9 @@
 # VIA Peer Protocol
 
 Wire protocol for a peripheral to exchange GPIO port and control-signal
-state with a [`Via6522`](io-devices.md#6522-versatile-interface-adapter-via6522)
+state with a [VIA](io-devices.md#6522-versatile-interface-adapter-via6522)
 device (config type `via/6522`) over an attached
-[`Transport`](io-devices.md#transport-options). Implemented in
-`src/emulator/device/protocol/via.rs`.
+[transport](io-devices.md#transport-options).
 
 ## Connection semantics
 
