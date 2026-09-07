@@ -47,7 +47,7 @@ pub(crate) const ABOUT_ID: &str = "about";
 /// Menu item id for the Help > View on GitHub item.
 pub(crate) const GITHUB_ID: &str = "github";
 /// URL opened in the user's browser by the Help > View on GitHub item.
-pub(crate) const GITHUB_REPO_URL: &str = "https://github.com/ceharris/emma65-rust";
+pub(crate) const GITHUB_REPO_URL: &str = "https://github.com/ceharris/emma65";
 
 /// Menu item id / `run-menu-action` event payload for the Run > Run item.
 pub(crate) const RUN_CPU_ID: &str = "run-cpu";

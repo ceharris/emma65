@@ -13,7 +13,7 @@ fit together internally, for a contributor adding a new device or working on
 the emulator core itself; see [The Emulator Core](the-emulator-core.md) for a
 feature-level tour of the same territory. For full type- and function-level
 detail, see the generated
-[API documentation](https://ceharris.github.io/emma65-rust/api/emma65/).
+[API documentation](https://ceharris.github.io/emma65/api/emma65/).
 
 ## CPU
 

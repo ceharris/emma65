@@ -6,5 +6,5 @@ language = "en"
 src = "src"
 
 [output.html]
-git-repository-url = "https://github.com/ceharris/emma65-rust"
-edit-url-template = "https://github.com/ceharris/emma65-rust/edit/main/doc/{path}"
+git-repository-url = "https://github.com/ceharris/emma65"
+edit-url-template = "https://github.com/ceharris/emma65/edit/main/doc/{path}"
