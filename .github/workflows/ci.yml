@@ -15,6 +15,7 @@ jobs:
       debugger: ${{ steps.filter.outputs.debugger }}
       display: ${{ steps.filter.outputs.display }}
       led-matrix: ${{ steps.filter.outputs.led-matrix }}
+      lcd-display: ${{ steps.filter.outputs.lcd-display }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -27,6 +28,8 @@ jobs:
               - 'display/**'
             led-matrix:
               - 'led-matrix/**'
+            lcd-display:
+              - 'lcd-display/**'
 
   ci:
     name: Build, Clippy, Test
@@ -148,3 +151,31 @@ jobs:
 
       - name: Clippy
         run: cargo clippy -p emma65-led-matrix --all-targets --no-deps -- -D warnings
+
+  ci-lcd-display:
+    name: LCD Display Build and Clippy
+    needs: changes
+    if: needs.changes.outputs.lcd-display == 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build -p emma65-lcd-display
+
+      - name: Clippy
+        run: cargo clippy -p emma65-lcd-display --all-targets --no-deps -- -D warnings
