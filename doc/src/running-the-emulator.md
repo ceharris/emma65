@@ -31,7 +31,7 @@ clock-speed-hz = 1843200   # omit for unlimited throughput
 [[devices]]
 type = "ram"
 address = 0x0000
-size = 32768               # or "32K"
+size = 32768               # or the quoted string "32K"
 
 [[devices]]
 type = "rom"
@@ -61,7 +61,9 @@ emma65 --cpu-variant WDC65C02 \
 Device shorthand format: `type@address[,key=value,...]`
 
 - Address: decimal, `0x` hex, `0o` octal, or `0b` binary
-- Size: bytes, or `K`/`k` suffix for kibibytes (e.g. `32K`)
+- Size: bytes, or `K`/`k` suffix for kibibytes (e.g. `32K`) — since every
+  `key=value` here is already a string, no quoting is needed (contrast the
+  TOML form above, where the suffixed form must be a quoted string)
 - Paths support `~/` tilde expansion
 
 ## Environment variables
@@ -78,8 +80,8 @@ EMMA65_CLOCK_SPEED_HZ=1843200
 
 | Type            | Registers | Key attributes                                                                     |
 |-----------------|:---------:|-------------------------------------------------------------------------------------|
-| `ram`           |     —     | `size` (required), `fill` (optional byte), `image` (optional path)                  |
-| `rom`           |     —     | `size` (required), `image` (required path), `fill` (optional byte)                  |
+| `ram`           |     —     | `size` (required, integer bytes or quoted `"K"`/`"k"`-suffixed string), `fill` (optional byte), `image` (optional path) |
+| `rom`           |     —     | `size` (required, integer bytes or quoted `"K"`/`"k"`-suffixed string), `image` (required path), `fill` (optional byte) |
 | `console`       |     2     | `transport` (optional), `break` (optional byte: break-key code)                     |
 | `acia/6551`     |     4     | `transport` (optional), `with-tdre-bug` (bool), `with-overrun` (bool)               |
 | `acia/6850`     |     2     | `transport` (optional)                                                              |
