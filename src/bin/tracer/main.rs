@@ -14,8 +14,16 @@ use emma65::emulator::{BinaryTraceReader, ExpandedPathBuf, SymbolTable};
 
 /// Command-line arguments for `emma65-tracer`.
 #[derive(Parser)]
-#[clap(name = "emma65-tracer")]
+#[clap(
+    name = "emma65-tracer",
+    version = env!("BUILD_VERSION"),
+    disable_version_flag = true
+)]
 struct Args {
+    /// Print version information and exit
+    #[clap(short = 'v', long = "version", action = clap::ArgAction::Version)]
+    version: Option<bool>,
+
     /// Path to the trace file to read. Reads from stdin if omitted.
     input: Option<ExpandedPathBuf>,
     /// Path to write decoded output to. Writes to stdout if omitted.

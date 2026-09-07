@@ -9,7 +9,16 @@ use serde::{Deserialize, Serialize};
 // This struct exists solely to capture the `--config` option before Figment runs. It must not
 // derive Serde's Serialize or Deserialize.
 #[derive(Parser)]
+#[clap(
+    name = "emma65",
+    version = env!("BUILD_VERSION"),
+    disable_version_flag = true
+)]
 struct CliArgs {
+    /// Print version information and exit
+    #[clap(short = 'v', long = "version", action = clap::ArgAction::Version)]
+    version: Option<bool>,
+
     /// Path to a TOML configuration file
     #[clap(long = "config", conflicts_with = "profile")]
     config: Option<std::path::PathBuf>,

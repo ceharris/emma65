@@ -12,3 +12,6 @@ path = "src/main.rs"
 emma65 = { path = ".." }
 sdl2 = { version = "0.38", features = ["gfx"] }
 clap = { version = "4.0", features = ["derive"] }
+
+[build-dependencies]
+emma65-build-info = { path = "../build-info" }

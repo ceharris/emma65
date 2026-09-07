@@ -28,8 +28,16 @@ use sdl2::pixels::PixelFormatEnum;
 use protocol::{Frame, Header};
 
 #[derive(Parser)]
-#[command(about = "SDL2 external peripheral for emma65's memory-mapped character display")]
+#[command(
+    about = "SDL2 external peripheral for emma65's memory-mapped character display",
+    version = env!("BUILD_VERSION"),
+    disable_version_flag = true
+)]
 struct Args {
+    /// Print version information and exit
+    #[arg(short = 'v', long = "version", action = clap::ArgAction::Version)]
+    version: Option<bool>,
+
     /// Initial window scale factor (integer multiple of the native cells*8 pixel size); the
     /// window remains resizable afterward and SDL2 letterboxes/scales to fit.
     #[arg(long, default_value_t = 3)]

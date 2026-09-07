@@ -1096,6 +1096,7 @@ dependencies = [
  "bitflags 2.13.1",
  "clap",
  "crossbeam-channel",
+ "emma65-build-info",
  "env_logger",
  "figment",
  "jiff",
@@ -1111,13 +1112,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "emma65-build-info"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+]
+
+[[package]]
 name = "emma65-debugger"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "chrono",
  "clap",
  "emma65",
+ "emma65-build-info",
  "figment",
  "gtk",
  "log",
@@ -1139,6 +1147,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "emma65",
+ "emma65-build-info",
  "sdl2",
 ]
 
@@ -1148,6 +1157,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "emma65",
+ "emma65-build-info",
  "sdl2",
 ]
 
@@ -1157,6 +1167,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "emma65",
+ "emma65-build-info",
  "sdl2",
 ]
 
