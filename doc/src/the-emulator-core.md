@@ -44,6 +44,27 @@ All 16 addressing modes are supported, including the zero-page relative mode
 used by the WDC bit-branch instructions. Invalid opcodes can be configured to
 either silently act as NOPs or to halt execution with an error.
 
+Emulating the original NMOS 6502 — its undocumented opcodes, its
+read-modify-write double-write behavior, and the various other quirks that
+NMOS-focused emulators go to great lengths to reproduce — is explicitly not a
+goal of this project. Both variants above are CMOS designs, and "invalid
+opcode" above means exactly that: an opcode with no defined CMOS behavior,
+handled by configuration rather than by reproducing whatever the NMOS die
+happened to do with it. Projects that do emulate the NMOS 6502's undocumented
+behavior, if that's what you're looking for, include:
+
+- [VICE](https://vice-emu.sourceforge.io/) — a suite of Commodore computer
+  emulators with a cycle-exact 6510/8500 core, illegal opcodes included
+- [Mesen](https://www.mesen.ca/) — a NES/Famicom emulator whose 2A03 CPU
+  core reproduces the NMOS 6502's unofficial opcodes cycle-accurately
+- [Visual6502](http://www.visual6502.org/) — a transistor-level simulation
+  of the original NMOS 6502 die, the reference many other emulators validate
+  their undocumented-opcode behavior against
+- the [NESdev wiki's unofficial opcodes
+  reference](https://www.nesdev.org/wiki/CPU_unofficial_opcodes) — a
+  well-maintained catalog of the quirks themselves, useful background on
+  what's being left out here
+
 ### Interrupt Support
 
 Emma65 implements the full 65C02 interrupt model:
