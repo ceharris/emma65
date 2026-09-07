@@ -11,12 +11,12 @@ protocol at all (same address space, same process), and unrelated to the
 [Character Display External Protocol](appendix-display-protocol.md) — a
 different device with different needs, most notably that `LedMatrix` swaps
 happen per-matrix rather than in lockstep across the whole device on a
-single vsync. Implemented in `src/emulator/device/led_matrix/protocol.rs`;
-full historical design rationale in `plan/led-matrix-external-protocol.md`.
+single vsync. Implemented in `src/emulator/device/led_matrix/protocol.rs`.
 See [Running the LED Matrix Peripheral](running-the-led-matrix-peripheral.md)
-for how to configure and launch `emma65-led-matrix` itself; see
-`plan/memory-mapped-led-matrix-device-spec.md` for `LedMatrix`'s bus-facing
-register behavior — this page covers only what crosses the transport.
+for how to configure and launch `emma65-led-matrix` itself, and
+[RGB LED Matrix Display](io-devices.md#rgb-led-matrix-display-displaymatrix)
+for `LedMatrix`'s bus-facing register behavior — this page covers only what
+crosses the transport.
 
 ## Transport requirements
 

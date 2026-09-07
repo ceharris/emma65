@@ -282,7 +282,12 @@ two per-cell RAM arrays and two control registers are:
 
 Character/color RAM writes always target an off-screen buffer; nothing
 changes on screen until a swap — either requested explicitly (control bit
-0) or automatically on every vsync (control bit 1).
+0) or automatically on every vsync (control bit 1). A color RAM byte whose
+value falls outside the configured palette's length still reads back
+exactly what was written — only *compositing* resolves it, by masking to
+`palette.len() - 1` when the palette length is a power of two, or by
+reducing it modulo the palette length otherwise — so an out-of-range index
+always renders as *some* defined color rather than a bus error or a panic.
 
 **Keyboard input** (optional): configuring `keyboard-address=` maps a
 second, separate 2-byte data/latch register pair — behaviorally identical
@@ -290,17 +295,18 @@ to [Console](#console-console)'s (the same latch-and-clear-on-read
 semantics, the same optional break-key handling) — anywhere else in the
 address space, so a program can treat the display as a combined
 screen-and-keyboard console. This is also what makes the device IRQ-capable
-at all; with no keyboard range configured it never asserts IRQ. **In the
-plain `emma65` CLI, configuring `keyboard-address=` maps the registers but
-nothing feeds them input** — it's the debugger's Display panel that
-actually captures keystrokes and wires them into that range, so this
-attribute is only useful when running under the debugger.
+at all; with no keyboard range configured it never asserts IRQ. Live input
+is supplied by whichever display panel is rendering the device's output (see
+below) — the debugger's Display panel, or, for the plain `emma65` CLI, the
+bundled `emma65-display` SDL2 peripheral, which captures SDL2 keyboard
+events from its own window and sends them back over the same `pipe:`
+transport used for frame data (see the
+[inbound keystroke stream](appendix-display-protocol.md#inbound-keystroke-stream-peripheral--device)).
 
-See `plan/memory-mapped-display-device-spec.md` in the repository for the
-full register-level specification. Unlike the other register-window devices,
-`display`'s output is graphical, so the plain `emma65` CLI can't just print
-it to its terminal window the way `console` or an ACIA does. A display panel
-that can actually draw it is available two ways:
+Unlike the other register-window devices, `display`'s output is graphical,
+so the plain `emma65` CLI can't just print it to its terminal window the way
+`console` or an ACIA does. A display panel that can actually draw it is
+available two ways:
 
 - **The debugger** — the Display panel renders composited frames in-process,
   no configuration needed, and also supplies the live keyboard input
@@ -311,7 +317,9 @@ that can actually draw it is available two ways:
   The wire protocol is designed for high throughput — it sends one composited
   frame per vsync rather than streaming every individual memory write, so the
   peripheral stays in sync without the overhead of redrawing more often than
-  the display actually changes. See the
+  the display actually changes — and, when `keyboard-address=` is
+  configured, `emma65-display` supplies live keyboard input the same way the
+  debugger's Display panel does. See the
   [Character Display External Protocol](appendix-display-protocol.md) for
   details.
 
@@ -366,11 +374,10 @@ interface rather than mapping display memory directly:
   addressing) included
 - Not IRQ-capable — the HD44780 interface has no interrupt output
 
-See `plan/memory-mapped-lcd-display-device-spec.md` in the repository for
-the full register-level specification. Like `display` and `display/matrix`,
-`display/lcd`'s output is graphical, so the plain `emma65` CLI can't just
-print it to its terminal window the way `console` or an ACIA does. A
-display panel that can actually draw it is available two ways:
+Like `display` and `display/matrix`, `display/lcd`'s output is graphical,
+so the plain `emma65` CLI can't just print it to its terminal window the way
+`console` or an ACIA does. A display panel that can actually draw it is
+available two ways:
 
 - **The debugger** — the LCD Display panel renders composited frames
   in-process, no configuration needed.

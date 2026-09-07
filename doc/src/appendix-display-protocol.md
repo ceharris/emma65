@@ -9,12 +9,12 @@ debugger's in-process `DisplayFrame`/`attach_frame_sink` push channel, which
 needs no wire protocol at all (same address space, same process), and
 unrelated to the [LED Matrix External Protocol](appendix-led-matrix-protocol.md)
 — a different device with different needs. Implemented in
-`src/emulator/device/display/protocol.rs`; full historical design rationale
-in `plan/char-display-external-protocol.md`. See
+`src/emulator/device/display/protocol.rs`. See
 [Running the Display Peripheral](running-the-display-peripheral.md) for how
-to configure and launch `emma65-display` itself; see
-`plan/memory-mapped-display-device-spec.md` for `CharDisplay`'s bus-facing
-register behavior — this page covers only what crosses the transport.
+to configure and launch `emma65-display` itself, and
+[Character Display](io-devices.md#character-display-display) for
+`CharDisplay`'s bus-facing register behavior — this page covers only what
+crosses the transport.
 
 ## Transport requirements
 

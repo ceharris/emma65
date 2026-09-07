@@ -124,9 +124,16 @@ Beyond `emulator`, the crate exposes three more top-level public modules:
 
 - **`assembler`** — assembles 6502 assembly source into one or more
   `.org`-delimited output segments plus a symbol table, via `assemble(source)`
-  (`src/assembler/`; see `plan/assembler-plan.md` for the full design).
-  Output segments are ready to load into emulator memory (e.g. via
-  `Bus::patch`) or round-trip through the disassembler for verification.
+  (`src/assembler/`). Directives are `.org`, `.byte` (including string-literal
+  operands), `.word`, `.res`, and `.setcpu`; symbols are defined via
+  `FOO = expr`, `FOO .equ expr`, or a label on an instruction
+  (`my_routine:  LDA #$55`). Expressions support arithmetic, logical,
+  bitwise, and shift operators over symbols and literals, plus the classic
+  6502-assembler `<`/`>` unary LSB/MSB extractors (e.g. `LDA #<label`);
+  multi-pass resolution handles forward references and picks the zero-page
+  addressing mode once an operand's value is known. Output segments are
+  ready to load into emulator memory (e.g. via `Bus::patch`) or round-trip
+  through the disassembler for verification.
 - **`disassembler`** — decodes bus memory into human-readable instruction
   listings via side-effect-free `peek` reads, sharing the same opcode decode
   table and variant logic as the CPU (see [CPU](#cpu) above); its `trace`

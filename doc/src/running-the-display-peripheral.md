@@ -36,3 +36,34 @@ the native `columns*8` by `rows*8` pixel size); it remains resizable
 afterward and letterboxes/scales to fit. Closing the window ends
 `emma65-display`; it also exits cleanly if the emulator process exits or is
 killed first, since that closes its stdin.
+
+## Keyboard input
+
+`emma65-display` also feeds keyboard input back to the emulated program — it
+captures key presses from its own SDL2 window and sends them over the same
+pipe (its stdout), the same way the debugger's Display panel supplies live
+input in-process. This only does anything if the `display` device is
+configured with a `keyboard-address=` range (see
+[Character Display](io-devices.md#character-display-display)):
+
+```toml
+[[devices]]
+type = "display"
+address = 0xF000
+transport = "pipe:/path/to/target/release/emma65-display"
+keyboard-address = 0xF800
+break = 0x03
+```
+
+With no keyboard range configured, keystrokes are simply not captured or
+sent — the emulator would discard them anyway.
+
+The `emma65-display` window must have keyboard focus (click it, the same as
+any other window) to capture key presses; SDL2 doesn't deliver events to an
+unfocused window. What's captured: ordinary printable characters (sent as
+their ASCII code); `Enter`, `Backspace`, `Tab`, and `Escape` (as the
+standard ASCII control codes); and `Ctrl+<letter>` (as `0x01`–`0x1A`).
+Anything else — modifier keys on their own, function keys, non-ASCII input
+from an IME — is not sent. See the
+[inbound keystroke stream](appendix-display-protocol.md#inbound-keystroke-stream-peripheral--device)
+for the exact byte-level encoding.

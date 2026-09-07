@@ -1,6 +1,6 @@
 # LCD Display External Protocol
 
-Wire protocol [`LcdDisplay`](io-devices.md#character-lcd-display-displaylcd)
+Wire protocol [`LcdDisplay`](io-devices.md#lcd-display-displaylcd)
 (config type `display/lcd`) uses to stream its composited frame data to an
 external peripheral process — the bundled `emma65-lcd-display` binary, or a
 replacement for it — over an attached [`Transport`](io-devices.md#transport-options),
@@ -10,12 +10,12 @@ which needs no wire protocol at all (same address space, same process), and
 unrelated to the [Character Display External Protocol](appendix-display-protocol.md)
 and [LED Matrix External Protocol](appendix-led-matrix-protocol.md) — different
 devices with different needs. Implemented in
-`src/emulator/device/lcd_display/protocol.rs`; full historical design
-rationale in `plan/lcd-display-external-protocol.md`. See
+`src/emulator/device/lcd_display/protocol.rs`. See
 [Running the LCD Display Peripheral](running-the-lcd-display-peripheral.md)
-for how to configure and launch `emma65-lcd-display` itself; see
-`plan/memory-mapped-lcd-display-device-spec.md` for `LcdDisplay`'s bus-facing
-register behavior — this page covers only what crosses the transport.
+for how to configure and launch `emma65-lcd-display` itself, and
+[LCD Display](io-devices.md#lcd-display-displaylcd) for `LcdDisplay`'s
+bus-facing register behavior — this page covers only what crosses the
+transport.
 
 ## Transport requirements
 
