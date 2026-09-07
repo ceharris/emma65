@@ -266,8 +266,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          mapfile -t assets < <(find dist -type f)
           gh release create "${{ needs.resolve.outputs.tag }}" \
             --repo "${{ github.repository }}" \
             --title "${{ needs.resolve.outputs.crate }} ${{ needs.resolve.outputs.version }}" \
             --notes-file release-notes.md \
-            dist/*
+            "${assets[@]}"
