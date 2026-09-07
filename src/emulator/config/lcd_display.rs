@@ -265,6 +265,7 @@ const MAX_CELL_HEIGHT_PX: usize = 11;
 pub struct LcdDisplayModule;
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct LcdDisplayAttributes {
     /// One of the 10 supported values (design doc §2); default `16x2` (spec §3).
     geometry: Option<String>,

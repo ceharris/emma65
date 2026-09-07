@@ -22,7 +22,7 @@ const DEFAULT_IRQ: u32 = 5;
 pub struct R6551Module;
 
 #[derive(Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct R6551Attributes {
     with_tdre_bug: Option<bool>,
     with_overrun: Option<bool>,

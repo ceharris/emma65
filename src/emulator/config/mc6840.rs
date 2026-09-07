@@ -21,6 +21,7 @@ const DEFAULT_IRQ: u32 = 2;
 pub struct Mc6840Module;
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Mc6840Attributes {
     protocol: Option<ProtocolMessageEncoding>,
     transport: Option<TransportSpecFormat>,

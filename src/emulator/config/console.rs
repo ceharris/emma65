@@ -23,7 +23,7 @@ const DEFAULT_IRQ: u32 = 3;
 pub struct ConsoleModule;
 
 #[derive(Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ConsoleAttributes {
     #[serde(rename = "break", skip_serializing_if = "Option::is_none")]
     break_key: Option<u8>,
@@ -244,6 +244,25 @@ mod tests {
             }
             other => panic!("expected TransportConnected event, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn instantiate_rejects_unrecognized_attribute() {
+        let context = InstantiationContext::default();
+        let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
+        let mut attributes = HashMap::new();
+        attributes.insert("bogus".to_string(), Value::from("value"));
+        let result = ConsoleModule
+            .instantiate(
+                BusConfig::new(),
+                0xFFF8,
+                &attributes,
+                &context,
+                id_allocator,
+            )
+            .await;
+
+        assert!(matches!(result, Err(DeviceModuleError::Config(_))));
     }
 
     #[tokio::test]

@@ -29,6 +29,7 @@ const DEFAULT_KEYBOARD_IRQ: u32 = 7;
 pub struct CharDisplayModule;
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct CharDisplayAttributes {
     columns: Option<u32>,
     rows: Option<u32>,

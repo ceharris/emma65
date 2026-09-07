@@ -17,6 +17,7 @@ pub struct FinchModule;
 
 /// Configuration attributes for the Finch bank-switched MMU module.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FinchAttributes {
     #[serde(rename = "bank-registers", alias = "banks")]
     bank_register_address: u16,

@@ -34,6 +34,7 @@ const VALID_MATRIX_COUNTS: [u32; 4] = [1, 2, 4, 8];
 pub struct LedMatrixModule;
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct LedMatrixAttributes {
     /// Physical arrangement of the daisy-chained matrices (design doc §2.2), `COLSxROWS` (e.g.
     /// `"2x1"`), determining both the matrix count (`columns * rows`) and how bus addresses map

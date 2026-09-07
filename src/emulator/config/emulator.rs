@@ -95,7 +95,7 @@ impl Display for BuildError {
 
 #[derive(Debug, Clone, Parser, Serialize, Deserialize)]
 #[clap(name = "emulator")]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 /// Configuration attributes for the emulator.
 pub struct Config {
     /// Selected CPU variant (e.g. 65C02, WDC65C02).
@@ -247,6 +247,23 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn config_rejects_unrecognized_top_level_attribute() {
+        use figment::Figment;
+        use figment::providers::{Format, Toml};
+
+        let result: Result<Config, _> = Figment::new()
+            .merge(Toml::string(
+                r#"
+                cpu-variant = "65C02"
+                bogus-attribute = true
+                "#,
+            ))
+            .extract();
+
+        assert!(result.is_err());
     }
 
     #[tokio::test]

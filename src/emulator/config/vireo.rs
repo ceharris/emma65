@@ -17,6 +17,7 @@ pub struct VireoModule;
 
 /// Configuration attributes for the Vireo bank-switched memory module.
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct VireoAttributes {
     #[serde(rename = "control-register", alias = "ctrl")]
     control_register_address: u16,
