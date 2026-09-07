@@ -113,18 +113,30 @@ button.status-bar-cell .status-bar-label,
   filter: saturate(1.6) brightness(1.25);
 }
 
-.indicator-run  { color: var(--color-success); }
-.indicator-stop { color: var(--color-indicator-stop); }
-.indicator-step { color: var(--color-info); }
+.indicator-run {
+  color: var(--color-success);
+}
+.indicator-stop {
+  color: var(--color-indicator-stop);
+}
+.indicator-step {
+  color: var(--color-info);
+}
 
 // NMI / IRQ / WAI indicator colors
 .indicator-nmi-active,
 .indicator-irq-active,
-.indicator-wai { color: var(--color-warning); }
+.indicator-wai {
+  color: var(--color-warning);
+}
 
-.indicator-idle { color: var(--color-idle); }
+.indicator-idle {
+  color: var(--color-idle);
+}
 
 // STP shares the Reset button's color (--color-reset-bg) rather than the
 // muted --color-idle: it's easy to miss otherwise, and like Reset it means
 // "the CPU is halted and needs attention".
-.indicator-stp { color: var(--color-reset-bg); }
+.indicator-stp {
+  color: var(--color-reset-bg);
+}

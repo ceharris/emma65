@@ -234,7 +234,9 @@
 
     &:checked {
       background: var(--color-accent);
-      box-shadow: 0 0 0 1px var(--color-accent), inset 0 0 0 3px var(--color-bg);
+      box-shadow:
+        0 0 0 1px var(--color-accent),
+        inset 0 0 0 3px var(--color-bg);
     }
 
     &:focus-visible {
@@ -564,7 +566,9 @@
 
     &:checked {
       background: var(--color-accent);
-      box-shadow: 0 0 0 1px var(--color-accent), inset 0 0 0 3px var(--color-bg);
+      box-shadow:
+        0 0 0 1px var(--color-accent),
+        inset 0 0 0 3px var(--color-bg);
     }
 
     &:focus-visible {

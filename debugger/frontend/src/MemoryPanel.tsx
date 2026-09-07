@@ -1,8 +1,8 @@
-import {useCallback, useEffect, useRef, useState} from "react";
-import {listen} from "@tauri-apps/api/event";
-import {invoke} from "@tauri-apps/api/core";
-import {open as openFileDialog, save as saveFileDialog} from "@tauri-apps/plugin-dialog";
-import {useExecutionContext} from "./ExecutionContext";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
+import { useExecutionContext } from "./ExecutionContext";
 import "./styles/memory.scss";
 
 /** Number of bytes per display row. */
@@ -196,8 +196,9 @@ export default function MemoryPanel() {
         // still executing after a newer fetchPage call has already finished
         // on the backend's thread pool (issue #453).
         invoke<number[]>("get_memory", { addr, seq: requestId }),
-        invoke<string[][]>("get_symbols_for_range", { start: addr, count: 256 })
-          .catch(() => [] as string[][]),
+        invoke<string[][]>("get_symbols_for_range", { start: addr, count: 256 }).catch(
+          () => [] as string[][],
+        ),
       ]);
       // A newer fetchPage call was issued while this one was in flight;
       // its result is stale, so don't let it clobber the newer one.
@@ -250,7 +251,7 @@ export default function MemoryPanel() {
         }
         if (addr === null) {
           const parsed = parseAddress(inputValue);
-          if (!isNaN(parsed) && parsed >= 0 && parsed <= (MEMORY_SIZE - 1)) addr = parsed;
+          if (!isNaN(parsed) && parsed >= 0 && parsed <= MEMORY_SIZE - 1) addr = parsed;
         }
         if (addr !== null) navigateTo(addr);
       }
@@ -263,7 +264,7 @@ export default function MemoryPanel() {
     const handler = (e: KeyboardEvent) => {
       if (document.activeElement instanceof HTMLInputElement) return;
       const PAGE = BYTES_PER_ROW * ROWS_PER_PAGE;
-      let delta = 0;
+      let delta: number;
       if (e.key === "ArrowDown") delta = BYTES_PER_ROW;
       else if (e.key === "ArrowUp") delta = -BYTES_PER_ROW;
       else if (e.key === "PageDown") delta = PAGE;
@@ -291,22 +292,55 @@ export default function MemoryPanel() {
       if (execState !== "stopped" || saveDialog || fillDialog || loadDialog || editDialog) return;
       switch (event.payload) {
         case "load-memory":
-          setLoadDialog({ path: "", pathError: "", format: null, formatError: "", loadAddress: "0000", loadAddressError: "", symbolPath: "" });
+          setLoadDialog({
+            path: "",
+            pathError: "",
+            format: null,
+            formatError: "",
+            loadAddress: "0000",
+            loadAddressError: "",
+            symbolPath: "",
+          });
           break;
         case "save-memory":
-          setSaveDialog({ startInput: fmtAddr(pageAddrRef.current), startError: "", endInput: "FFFF", endError: "", path: "", pathError: "" });
+          setSaveDialog({
+            startInput: fmtAddr(pageAddrRef.current),
+            startError: "",
+            endInput: "FFFF",
+            endError: "",
+            path: "",
+            pathError: "",
+          });
           break;
         case "edit-memory":
-          setEditDialog({ addr: null, addrInput: "", addrError: "", inputValue: "", errorMsg: "", mode: "hex", allowRomOverwrite: false });
+          setEditDialog({
+            addr: null,
+            addrInput: "",
+            addrError: "",
+            inputValue: "",
+            errorMsg: "",
+            mode: "hex",
+            allowRomOverwrite: false,
+          });
           break;
         case "fill-memory": {
           const endAddr = (pageAddrRef.current + 0xff) & 0xffff;
-          setFillDialog({ startInput: fmtAddr(pageAddrRef.current), startError: "", endInput: fmtAddr(endAddr), endError: "", fillValue: "00", fillError: "", allowRomOverwrite: false });
+          setFillDialog({
+            startInput: fmtAddr(pageAddrRef.current),
+            startError: "",
+            endInput: fmtAddr(endAddr),
+            endError: "",
+            fillValue: "00",
+            fillError: "",
+            allowRomOverwrite: false,
+          });
           break;
         }
       }
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, [execState, saveDialog, fillDialog, loadDialog, editDialog]);
 
   // Keeps the native Memory menu's enabled state in lockstep with the old
@@ -336,12 +370,28 @@ export default function MemoryPanel() {
 
   /** Opens the edit dialog in hex mode for the byte at `addr`. */
   const handleByteDoubleClick = useCallback((addr: number) => {
-    setEditDialog({ addr, addrInput: "", addrError: "", inputValue: "", errorMsg: "", mode: "hex", allowRomOverwrite: false });
+    setEditDialog({
+      addr,
+      addrInput: "",
+      addrError: "",
+      inputValue: "",
+      errorMsg: "",
+      mode: "hex",
+      allowRomOverwrite: false,
+    });
   }, []);
 
   /** Opens the edit dialog in Unicode mode for the byte at `addr`. */
   const handleAsciiCharDoubleClick = useCallback((addr: number) => {
-    setEditDialog({ addr, addrInput: "", addrError: "", inputValue: "", errorMsg: "", mode: "utf8", allowRomOverwrite: false });
+    setEditDialog({
+      addr,
+      addrInput: "",
+      addrError: "",
+      inputValue: "",
+      errorMsg: "",
+      mode: "utf8",
+      allowRomOverwrite: false,
+    });
   }, []);
 
   /** Validates address and data, invokes write_memory, refreshes on success, shows errors on failure. */
@@ -366,10 +416,14 @@ export default function MemoryPanel() {
     if (editDialog.mode === "hex") {
       const parsed = parseHexBytes(editDialog.inputValue);
       if (parsed === null) {
-        setEditDialog((d) => d && {
-          ...d,
-          errorMsg: "Enter one or more hex bytes (1–2 digits each), separated by spaces or commas",
-        });
+        setEditDialog(
+          (d) =>
+            d && {
+              ...d,
+              errorMsg:
+                "Enter one or more hex bytes (1–2 digits each), separated by spaces or commas",
+            },
+        );
         return;
       }
       data = parsed;
@@ -383,7 +437,11 @@ export default function MemoryPanel() {
     }
 
     try {
-      await invoke("write_memory", { addr: resolvedAddr, data, patch: editDialog.allowRomOverwrite });
+      await invoke("write_memory", {
+        addr: resolvedAddr,
+        data,
+        patch: editDialog.allowRomOverwrite,
+      });
       setEditDialog(null);
       fetchPage(pageAddrRef.current);
     } catch (e) {
@@ -406,17 +464,22 @@ export default function MemoryPanel() {
     const defaultPath = await invoke<string | null>("get_last_file_dialog_dir");
     const selected = await openFileDialog({
       multiple: false,
-      filters: [{ name: "Memory Files", extensions: ["bin", "rom", "hex", "ihx", "ihex", "s19", "srec"] }],
+      filters: [
+        { name: "Memory Files", extensions: ["bin", "rom", "hex", "ihx", "ihex", "s19", "srec"] },
+      ],
       defaultPath: defaultPath ?? undefined,
     });
     if (typeof selected === "string") {
-      setLoadDialog((d) => d && {
-        ...d,
-        path: selected,
-        pathError: "",
-        format: formatFromPath(selected),
-        formatError: "",
-      });
+      setLoadDialog(
+        (d) =>
+          d && {
+            ...d,
+            path: selected,
+            pathError: "",
+            format: formatFromPath(selected),
+            formatError: "",
+          },
+      );
       invoke("set_last_file_dialog_dir", { path: selected }).catch(() => {});
     }
   }, []);
@@ -424,7 +487,8 @@ export default function MemoryPanel() {
   /** Opens the native file chooser for a symbol file; defaults to the directory of the load file, falling back to the last remembered file chooser directory. */
   const handleChooseSymbolFile = useCallback(async () => {
     const loadFileDir = loadDialog?.path.trim().replace(/\/[^/]*$/, "") || undefined;
-    const defaultPath = loadFileDir ?? (await invoke<string | null>("get_last_file_dialog_dir")) ?? undefined;
+    const defaultPath =
+      loadFileDir ?? (await invoke<string | null>("get_last_file_dialog_dir")) ?? undefined;
     const selected = await openFileDialog({
       multiple: false,
       filters: [{ name: "Symbol Files", extensions: ["lbl", "sym", "map", "txt"] }],
@@ -611,9 +675,7 @@ export default function MemoryPanel() {
             className={`mem-ascii-char${execState !== "stopped" ? " locked" : ""}`}
             title={title}
             onDoubleClick={
-              execState === "stopped"
-                ? () => handleAsciiCharDoubleClick(byteAddr)
-                : undefined
+              execState === "stopped" ? () => handleAsciiCharDoubleClick(byteAddr) : undefined
             }
           >
             {toAsciiChar(b)}
@@ -637,9 +699,7 @@ export default function MemoryPanel() {
             className={`mem-hex-byte${execState !== "stopped" ? " locked" : ""}`}
             title={title}
             onDoubleClick={
-              execState === "stopped"
-                ? () => handleByteDoubleClick(byteAddr)
-                : undefined
+              execState === "stopped" ? () => handleByteDoubleClick(byteAddr) : undefined
             }
           >
             {b.toString(16).toUpperCase().padStart(2, "0")}
@@ -656,15 +716,11 @@ export default function MemoryPanel() {
     rows.push(
       <div key={rowAddr} className="mem-row">
         <span className="mem-addr">{fmtAddr(rowAddr)}:</span>
-        <span className="mem-hex-group">
-          {makeHexSpans(slice.slice(0, 8), rowAddr)}
-        </span>
+        <span className="mem-hex-group">{makeHexSpans(slice.slice(0, 8), rowAddr)}</span>
         <span className="mem-hex-group">
           {makeHexSpans(slice.slice(8, 16), (rowAddr + 8) & (MEMORY_SIZE - 1))}
         </span>
-        <span className="mem-ascii-group">
-          {makeAsciiSpans(slice.slice(0, 8), rowAddr)}
-        </span>
+        <span className="mem-ascii-group">{makeAsciiSpans(slice.slice(0, 8), rowAddr)}</span>
         <span className="mem-ascii-group">
           {makeAsciiSpans(slice.slice(8, 16), (rowAddr + 8) & (MEMORY_SIZE - 1))}
         </span>
@@ -686,11 +742,7 @@ export default function MemoryPanel() {
         />
       </div>
       <div className="memory-body">
-        {!ready ? (
-          <span className="memory-empty">Waiting for session…</span>
-        ) : (
-          rows
-        )}
+        {!ready ? <span className="memory-empty">Waiting for session…</span> : rows}
       </div>
       {fillDialog && (
         <div
@@ -714,15 +766,19 @@ export default function MemoryPanel() {
                 }
                 onKeyDown={(e) => {
                   e.stopPropagation();
-                  if (e.key === "Enter") { e.preventDefault(); commitFillMemory(); }
-                  if (e.key === "Escape") { e.preventDefault(); setFillDialog(null); }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitFillMemory();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setFillDialog(null);
+                  }
                 }}
               />
             </div>
 
-            {fillDialog.startError && (
-              <div className="mem-fill-error">{fillDialog.startError}</div>
-            )}
+            {fillDialog.startError && <div className="mem-fill-error">{fillDialog.startError}</div>}
 
             <div className="mem-fill-field">
               <label className="mem-fill-label">End Address</label>
@@ -736,15 +792,19 @@ export default function MemoryPanel() {
                 }
                 onKeyDown={(e) => {
                   e.stopPropagation();
-                  if (e.key === "Enter") { e.preventDefault(); commitFillMemory(); }
-                  if (e.key === "Escape") { e.preventDefault(); setFillDialog(null); }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitFillMemory();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setFillDialog(null);
+                  }
                 }}
               />
             </div>
 
-            {fillDialog.endError && (
-              <div className="mem-fill-error">{fillDialog.endError}</div>
-            )}
+            {fillDialog.endError && <div className="mem-fill-error">{fillDialog.endError}</div>}
 
             <div className="mem-fill-field">
               <label className="mem-fill-label">Fill Value</label>
@@ -758,15 +818,19 @@ export default function MemoryPanel() {
                 }
                 onKeyDown={(e) => {
                   e.stopPropagation();
-                  if (e.key === "Enter") { e.preventDefault(); commitFillMemory(); }
-                  if (e.key === "Escape") { e.preventDefault(); setFillDialog(null); }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitFillMemory();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setFillDialog(null);
+                  }
                 }}
               />
             </div>
 
-            {fillDialog.fillError && (
-              <div className="mem-fill-error">{fillDialog.fillError}</div>
-            )}
+            {fillDialog.fillError && <div className="mem-fill-error">{fillDialog.fillError}</div>}
 
             <label className="mem-fill-rom-overwrite">
               <input
@@ -786,10 +850,7 @@ export default function MemoryPanel() {
               >
                 Cancel
               </button>
-              <button
-                className="mem-fill-btn-action mem-fill-btn-ok"
-                onClick={commitFillMemory}
-              >
+              <button className="mem-fill-btn-action mem-fill-btn-ok" onClick={commitFillMemory}>
                 OK
               </button>
             </div>
@@ -814,18 +875,27 @@ export default function MemoryPanel() {
                 placeholder="Path to file"
                 value={loadDialog.path}
                 onChange={(e) =>
-                  setLoadDialog((d) => d && {
-                    ...d,
-                    path: e.target.value,
-                    pathError: "",
-                    format: formatFromPath(e.target.value),
-                    formatError: "",
-                  })
+                  setLoadDialog(
+                    (d) =>
+                      d && {
+                        ...d,
+                        path: e.target.value,
+                        pathError: "",
+                        format: formatFromPath(e.target.value),
+                        formatError: "",
+                      },
+                  )
                 }
                 onKeyDown={(e) => {
                   e.stopPropagation();
-                  if (e.key === "Enter") { e.preventDefault(); commitLoadMemory(); }
-                  if (e.key === "Escape") { e.preventDefault(); setLoadDialog(null); }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitLoadMemory();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setLoadDialog(null);
+                  }
                 }}
               />
               <button
@@ -837,9 +907,7 @@ export default function MemoryPanel() {
               </button>
             </div>
 
-            {loadDialog.pathError && (
-              <div className="mem-load-error">{loadDialog.pathError}</div>
-            )}
+            {loadDialog.pathError && <div className="mem-load-error">{loadDialog.pathError}</div>}
 
             <div className="mem-load-format-group">
               {(["image", "intel_hex", "motorola_srec"] as const).map((fmt) => (
@@ -870,12 +938,20 @@ export default function MemoryPanel() {
                 value={loadDialog.format === "image" ? loadDialog.loadAddress : "0000"}
                 disabled={loadDialog.format !== "image"}
                 onChange={(e) =>
-                  setLoadDialog((d) => d && { ...d, loadAddress: e.target.value, loadAddressError: "" })
+                  setLoadDialog(
+                    (d) => d && { ...d, loadAddress: e.target.value, loadAddressError: "" },
+                  )
                 }
                 onKeyDown={(e) => {
                   e.stopPropagation();
-                  if (e.key === "Enter") { e.preventDefault(); commitLoadMemory(); }
-                  if (e.key === "Escape") { e.preventDefault(); setLoadDialog(null); }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitLoadMemory();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setLoadDialog(null);
+                  }
                 }}
               />
             </div>
@@ -885,20 +961,26 @@ export default function MemoryPanel() {
             )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label style={{ color: "var(--color-muted)", fontSize: "var(--font-size-btn)" }}>Symbol File</label>
+              <label style={{ color: "var(--color-muted)", fontSize: "var(--font-size-btn)" }}>
+                Symbol File
+              </label>
               <div className="mem-load-path-row">
                 <input
                   className="mem-load-path-input"
                   spellCheck={false}
                   placeholder="Path to symbol file (optional)"
                   value={loadDialog.symbolPath}
-                  onChange={(e) =>
-                    setLoadDialog((d) => d && { ...d, symbolPath: e.target.value })
-                  }
+                  onChange={(e) => setLoadDialog((d) => d && { ...d, symbolPath: e.target.value })}
                   onKeyDown={(e) => {
                     e.stopPropagation();
-                    if (e.key === "Enter") { e.preventDefault(); commitLoadMemory(); }
-                    if (e.key === "Escape") { e.preventDefault(); setLoadDialog(null); }
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commitLoadMemory();
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setLoadDialog(null);
+                    }
                   }}
                 />
                 <button
@@ -912,7 +994,8 @@ export default function MemoryPanel() {
             </div>
 
             <div className="mem-load-rom-note">
-              The load operation will bypass read-only restrictions for any ROM region targeted by the load.
+              The load operation will bypass read-only restrictions for any ROM region targeted by
+              the load.
             </div>
 
             <div className="mem-load-buttons">
@@ -922,10 +1005,7 @@ export default function MemoryPanel() {
               >
                 Cancel
               </button>
-              <button
-                className="mem-load-btn-action mem-load-btn-ok"
-                onClick={commitLoadMemory}
-              >
+              <button className="mem-load-btn-action mem-load-btn-ok" onClick={commitLoadMemory}>
                 OK
               </button>
             </div>
@@ -976,15 +1056,19 @@ export default function MemoryPanel() {
                 }
                 onKeyDown={(e) => {
                   e.stopPropagation();
-                  if (e.key === "Enter") { e.preventDefault(); commitSaveMemory(); }
-                  if (e.key === "Escape") { e.preventDefault(); setSaveDialog(null); }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitSaveMemory();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setSaveDialog(null);
+                  }
                 }}
               />
             </div>
 
-            {saveDialog.startError && (
-              <div className="mem-save-error">{saveDialog.startError}</div>
-            )}
+            {saveDialog.startError && <div className="mem-save-error">{saveDialog.startError}</div>}
 
             <div className="mem-save-field">
               <label className="mem-save-label">End Address</label>
@@ -998,15 +1082,19 @@ export default function MemoryPanel() {
                 }
                 onKeyDown={(e) => {
                   e.stopPropagation();
-                  if (e.key === "Enter") { e.preventDefault(); commitSaveMemory(); }
-                  if (e.key === "Escape") { e.preventDefault(); setSaveDialog(null); }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitSaveMemory();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setSaveDialog(null);
+                  }
                 }}
               />
             </div>
 
-            {saveDialog.endError && (
-              <div className="mem-save-error">{saveDialog.endError}</div>
-            )}
+            {saveDialog.endError && <div className="mem-save-error">{saveDialog.endError}</div>}
 
             <div className="mem-save-path-row">
               <input
@@ -1019,8 +1107,14 @@ export default function MemoryPanel() {
                 }
                 onKeyDown={(e) => {
                   e.stopPropagation();
-                  if (e.key === "Enter") { e.preventDefault(); commitSaveMemory(); }
-                  if (e.key === "Escape") { e.preventDefault(); setSaveDialog(null); }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitSaveMemory();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setSaveDialog(null);
+                  }
                 }}
               />
               <button
@@ -1032,9 +1126,7 @@ export default function MemoryPanel() {
               </button>
             </div>
 
-            {saveDialog.pathError && (
-              <div className="mem-save-error">{saveDialog.pathError}</div>
-            )}
+            {saveDialog.pathError && <div className="mem-save-error">{saveDialog.pathError}</div>}
 
             <div className="mem-save-buttons">
               <button
@@ -1043,10 +1135,7 @@ export default function MemoryPanel() {
               >
                 Cancel
               </button>
-              <button
-                className="mem-save-btn-action mem-save-btn-ok"
-                onClick={commitSaveMemory}
-              >
+              <button className="mem-save-btn-action mem-save-btn-ok" onClick={commitSaveMemory}>
                 Save
               </button>
             </div>
@@ -1085,16 +1174,20 @@ export default function MemoryPanel() {
                   }
                   onKeyDown={(e) => {
                     e.stopPropagation();
-                    if (e.key === "Enter") { e.preventDefault(); commitEditMemory(); }
-                    if (e.key === "Escape") { e.preventDefault(); setEditDialog(null); }
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commitEditMemory();
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setEditDialog(null);
+                    }
                   }}
                 />
               )}
             </div>
 
-            {editDialog.addrError && (
-              <div className="mem-edit-error">{editDialog.addrError}</div>
-            )}
+            {editDialog.addrError && <div className="mem-edit-error">{editDialog.addrError}</div>}
 
             <div className="mem-edit-mode-group">
               <label className="mem-edit-mode-option">
@@ -1147,15 +1240,19 @@ export default function MemoryPanel() {
                 }
                 onKeyDown={(e) => {
                   e.stopPropagation();
-                  if (e.key === "Enter") { e.preventDefault(); commitEditMemory(); }
-                  if (e.key === "Escape") { e.preventDefault(); setEditDialog(null); }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitEditMemory();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setEditDialog(null);
+                  }
                 }}
               />
             </div>
 
-            {editDialog.errorMsg && (
-              <div className="mem-edit-error">{editDialog.errorMsg}</div>
-            )}
+            {editDialog.errorMsg && <div className="mem-edit-error">{editDialog.errorMsg}</div>}
 
             <div className="mem-edit-buttons">
               <button
@@ -1164,10 +1261,7 @@ export default function MemoryPanel() {
               >
                 Cancel
               </button>
-              <button
-                className="mem-edit-btn-action mem-edit-btn-ok"
-                onClick={commitEditMemory}
-              >
+              <button className="mem-edit-btn-action mem-edit-btn-ok" onClick={commitEditMemory}>
                 OK
               </button>
             </div>

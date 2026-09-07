@@ -11,7 +11,12 @@ import { APP_KEY_BINDINGS } from "./useAppKeyBindings";
 import { useEditMenuOverride } from "./EditMenuContext";
 import { useTheme } from "./ThemeContext";
 import { useOptionalPanelHeaderAction } from "./layout/panelHeaderActions";
-import { resolveTerminalFont, pixelSizeForGrid, logicalSizeForCssPixels, TERMINAL_SIZE_PRESETS } from "./terminalSizing";
+import {
+  resolveTerminalFont,
+  pixelSizeForGrid,
+  logicalSizeForCssPixels,
+  TERMINAL_SIZE_PRESETS,
+} from "./terminalSizing";
 import {
   DEFAULT_CURSOR_ACCENT_COLOR,
   terminalKeyActionBytes,
@@ -44,7 +49,9 @@ const XTERM_LIGHT_THEME: ITheme = {
 
 /** The platform default monospace font, from the `--font-mono` CSS var. */
 function getFallbackMonoFont(): string {
-  return getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim() || "monospace";
+  return (
+    getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim() || "monospace"
+  );
 }
 
 /**
@@ -200,8 +207,11 @@ export default function TerminalPanel({ dockPanelApi }: TerminalPanelProps = {})
     const term = termRef.current;
     if (!term) return;
     const base = resolvedTheme === "dark" ? XTERM_DARK_THEME : XTERM_LIGHT_THEME;
-    let theme = textPreferencesRef.current ? themeWithTextOverrides(base, textPreferencesRef.current) : base;
-    if (cursorPreferencesRef.current) theme = themeWithCursorOverrides(theme, cursorPreferencesRef.current);
+    let theme = textPreferencesRef.current
+      ? themeWithTextOverrides(base, textPreferencesRef.current)
+      : base;
+    if (cursorPreferencesRef.current)
+      theme = themeWithCursorOverrides(theme, cursorPreferencesRef.current);
     term.options.theme = theme;
   };
 
@@ -282,7 +292,9 @@ export default function TerminalPanel({ dockPanelApi }: TerminalPanelProps = {})
   // window's label, so the docked instance's listener never fires.
   useEffect(() => {
     const unlistenPromise = listen("terminal-shown", () => fetchAndApplyPreferences());
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   useEffect(() => {
@@ -363,11 +375,20 @@ export default function TerminalPanel({ dockPanelApi }: TerminalPanelProps = {})
     // canvas-rendered so `window.getSelection()` can't see it either. `null`
     // outside the main window (the detached-Terminal window has no app
     // menu — see `remove_menu` in `lib.rs`), so this is a no-op there.
-    const unregisterOverride = editMenu?.registerOverride(() => {
-      if (document.activeElement !== term.textarea) return null;
-      return { canCut: false, canCopy: term.hasSelection(), canPaste: true, copy: copySelection, paste: pasteClipboard };
-    }) ?? null;
-    const selectionChangeDisposable = editMenu ? term.onSelectionChange(() => editMenu.notifyChanged()) : null;
+    const unregisterOverride =
+      editMenu?.registerOverride(() => {
+        if (document.activeElement !== term.textarea) return null;
+        return {
+          canCut: false,
+          canCopy: term.hasSelection(),
+          canPaste: true,
+          copy: copySelection,
+          paste: pasteClipboard,
+        };
+      }) ?? null;
+    const selectionChangeDisposable = editMenu
+      ? term.onSelectionChange(() => editMenu.notifyChanged())
+      : null;
 
     const fitAddon = new FitAddon();
     fitAddonRef.current = fitAddon;
@@ -490,7 +511,11 @@ export default function TerminalPanel({ dockPanelApi }: TerminalPanelProps = {})
     <>
       <div ref={containerRef} className="terminal-container" />
       {sizeMenu && (
-        <div ref={sizeMenuRef} className="context-menu" style={{ top: sizeMenu.y, left: sizeMenu.x }}>
+        <div
+          ref={sizeMenuRef}
+          className="context-menu"
+          style={{ top: sizeMenu.y, left: sizeMenu.x }}
+        >
           {TERMINAL_SIZE_PRESETS.map((preset) => {
             const term = termRef.current;
             const checked = term ? term.cols === preset.cols && term.rows === preset.rows : false;
@@ -500,10 +525,14 @@ export default function TerminalPanel({ dockPanelApi }: TerminalPanelProps = {})
                 className="context-menu-item"
                 onClick={() => {
                   closeSizeMenu();
-                  resizeToGrid(preset.cols, preset.rows).catch((err) => console.error("resizeToGrid failed:", err));
+                  resizeToGrid(preset.cols, preset.rows).catch((err) =>
+                    console.error("resizeToGrid failed:", err),
+                  );
                 }}
               >
-                <span className="context-menu-item-check">{checked && <i className="codicon codicon-check" />}</span>
+                <span className="context-menu-item-check">
+                  {checked && <i className="codicon codicon-check" />}
+                </span>
                 {preset.cols} x {preset.rows}
               </div>
             );
@@ -529,9 +558,15 @@ export default function TerminalPanel({ dockPanelApi }: TerminalPanelProps = {})
           applyCursorPreferences(preferences.cursor);
           applyCompatibilityPreferences(preferences.compatibility);
         }}
-        defaultForeground={(resolvedTheme === "dark" ? XTERM_DARK_THEME : XTERM_LIGHT_THEME).foreground!}
-        defaultBackground={(resolvedTheme === "dark" ? XTERM_DARK_THEME : XTERM_LIGHT_THEME).background!}
-        defaultCursorColor={(resolvedTheme === "dark" ? XTERM_DARK_THEME : XTERM_LIGHT_THEME).cursor!}
+        defaultForeground={
+          (resolvedTheme === "dark" ? XTERM_DARK_THEME : XTERM_LIGHT_THEME).foreground!
+        }
+        defaultBackground={
+          (resolvedTheme === "dark" ? XTERM_DARK_THEME : XTERM_LIGHT_THEME).background!
+        }
+        defaultCursorColor={
+          (resolvedTheme === "dark" ? XTERM_DARK_THEME : XTERM_LIGHT_THEME).cursor!
+        }
         defaultCursorAccentColor={DEFAULT_CURSOR_ACCENT_COLOR}
       />
     </>

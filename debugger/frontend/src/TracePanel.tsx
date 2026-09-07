@@ -1,7 +1,7 @@
-import {useCallback, useEffect, useRef, useState} from "react";
-import {listen} from "@tauri-apps/api/event";
-import {invoke} from "@tauri-apps/api/core";
-import {save} from "@tauri-apps/plugin-dialog";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
 import "./styles/trace.scss";
 
 interface TraceBusOpDto {
@@ -45,7 +45,13 @@ const VIEWPORT_ROWS = 40;
 
 /** `(letter, bit)` pairs for the P register, in NV-BDIZC display order. */
 const FLAG_BITS: [string, number][] = [
-  ["N", 0x80], ["V", 0x40], ["B", 0x10], ["D", 0x08], ["I", 0x04], ["Z", 0x02], ["C", 0x01],
+  ["N", 0x80],
+  ["V", 0x40],
+  ["B", 0x10],
+  ["D", 0x08],
+  ["I", 0x04],
+  ["Z", 0x02],
+  ["C", 0x01],
 ];
 
 /** Formats P as an 8-char NV-BDIZC field, with a blank where the always-set UNUSED bit would render. */
@@ -64,7 +70,10 @@ function formatByte(b: number): string {
 }
 
 function formatBytes(bytes: string[]): string {
-  return bytes.map((b) => b.padStart(2, "0")).join(" ").padEnd(8, " ");
+  return bytes
+    .map((b) => b.padStart(2, "0"))
+    .join(" ")
+    .padEnd(8, " ");
 }
 
 /** Basename of a file path, for the compact toolbar path display. */
@@ -129,7 +138,10 @@ export default function TracePanel() {
   /** Fetch `VIEWPORT_ROWS` rows starting at `start` and replace the displayed window. */
   const fetchWindow = useCallback(async (start: number, stickToBottom = false) => {
     try {
-      const page = await invoke<TraceWindowPage>("get_trace_window", { startRow: start, count: VIEWPORT_ROWS });
+      const page = await invoke<TraceWindowPage>("get_trace_window", {
+        startRow: start,
+        count: VIEWPORT_ROWS,
+      });
       stickToBottomRef.current = stickToBottom;
       setRows(page.rows);
       setTotalRows(page.total_rows);
@@ -268,7 +280,8 @@ export default function TracePanel() {
       const thumbFrac = Math.max(0.04, Math.min(1, VIEWPORT_ROWS / total));
       const usable = rect.height * (1 - thumbFrac);
       const thumbHalf = (rect.height * thumbFrac) / 2;
-      const frac = usable > 0 ? Math.max(0, Math.min(1, (clientY - rect.top - thumbHalf) / usable)) : 0;
+      const frac =
+        usable > 0 ? Math.max(0, Math.min(1, (clientY - rect.top - thumbHalf) / usable)) : 0;
       const next = Math.round(frac * maxStart);
       if (next !== startRowRef.current) fetchWindow(next);
     },
@@ -313,7 +326,8 @@ export default function TracePanel() {
   const selectedRow = rows.find((r) => r.seq === selectedSeq) ?? null;
   const controlsDisabled = cpuRunning;
   const maxStart = Math.max(0, totalRows - VIEWPORT_ROWS);
-  const thumbHeightPct = totalRows > 0 ? Math.max(4, Math.min(100, (VIEWPORT_ROWS / totalRows) * 100)) : 100;
+  const thumbHeightPct =
+    totalRows > 0 ? Math.max(4, Math.min(100, (VIEWPORT_ROWS / totalRows) * 100)) : 100;
   const thumbTopPct = maxStart > 0 ? (startRow / maxStart) * (100 - thumbHeightPct) : 0;
 
   return (
@@ -417,7 +431,11 @@ export default function TracePanel() {
               </table>
             </div>
             {totalRows > VIEWPORT_ROWS && (
-              <div className="trace-scrollbar" ref={scrollbarTrackRef} onMouseDown={handleTrackMouseDown}>
+              <div
+                className="trace-scrollbar"
+                ref={scrollbarTrackRef}
+                onMouseDown={handleTrackMouseDown}
+              >
                 <div
                   className="trace-scrollbar-thumb"
                   style={{ height: `${thumbHeightPct}%`, top: `${thumbTopPct}%` }}
@@ -430,7 +448,9 @@ export default function TracePanel() {
         <div className="trace-detail">
           {selectedRow ? (
             selectedRow.bus_ops.length === 0 ? (
-              <span className="trace-detail-empty">No bus operations recorded for this instruction.</span>
+              <span className="trace-detail-empty">
+                No bus operations recorded for this instruction.
+              </span>
             ) : (
               <table className="trace-detail-table">
                 <thead>
@@ -446,7 +466,8 @@ export default function TracePanel() {
                       <td className="trace-detail-addr">{formatAddr(op.addr)}</td>
                       <td className="trace-detail-op">{op.op}</td>
                       <td className="trace-detail-value">
-                        {formatByte(op.value)} <span className="trace-detail-comment">{op.comment}</span>
+                        {formatByte(op.value)}{" "}
+                        <span className="trace-detail-comment">{op.comment}</span>
                       </td>
                     </tr>
                   ))}

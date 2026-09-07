@@ -15,8 +15,16 @@ import { emitMockEvent, invoke, resetTauriMocks } from "./test/tauriMock";
 
 function snapshot(overrides: Partial<RegisterSnapshot> = {}): RegisterSnapshot {
   return {
-    a: 0, x: 0, y: 0, s: 0xff, pc: 0x8000, p: 0x20, changed_flags: 0,
-    cpu_stopped: false, cpu_waiting: false, breakpoint_hit: false,
+    a: 0,
+    x: 0,
+    y: 0,
+    s: 0xff,
+    pc: 0x8000,
+    p: 0x20,
+    changed_flags: 0,
+    cpu_stopped: false,
+    cpu_waiting: false,
+    breakpoint_hit: false,
     ...overrides,
   };
 }
@@ -30,15 +38,27 @@ function Providers({ children }: { children: ReactNode }) {
 }
 
 const STOPPED_FLAGS = {
-  run: true, stop: false, step_into: true, step_over: true, step_return: true, toggle_auto_step: true,
+  run: true,
+  stop: false,
+  step_into: true,
+  step_over: true,
+  step_return: true,
+  toggle_auto_step: true,
 };
 const RUNNING_FLAGS = {
-  run: false, stop: true, step_into: false, step_over: false, step_return: false, toggle_auto_step: false,
+  run: false,
+  stop: true,
+  step_into: false,
+  step_over: false,
+  step_return: false,
+  toggle_auto_step: false,
 };
 
 beforeEach(() => {
   resetTauriMocks();
-  vi.mocked(invoke).mockImplementation(async (cmd: unknown) => (cmd === "step_into" ? snapshot() : undefined));
+  vi.mocked(invoke).mockImplementation(async (cmd: unknown) =>
+    cmd === "step_into" ? snapshot() : undefined,
+  );
 });
 
 describe("sliderToInterval / intervalToSlider", () => {
@@ -74,11 +94,18 @@ describe("useRunControlsContext", () => {
 describe("RunControlsProvider commands", () => {
   it("stepInto sets stepping while step_into is in flight, invokes it, and clears stepping after", async () => {
     let resolveStep!: (snap: RegisterSnapshot) => void;
-    vi.mocked(invoke).mockImplementationOnce(() => new Promise((resolve) => { resolveStep = resolve; }));
+    vi.mocked(invoke).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveStep = resolve;
+        }),
+    );
     const { result } = renderHook(() => useRunControlsContext(), { wrapper: Providers });
 
     let stepPromise!: Promise<void>;
-    act(() => { stepPromise = result.current.stepInto(); });
+    act(() => {
+      stepPromise = result.current.stepInto();
+    });
 
     await waitFor(() => expect(result.current.stepping).toBe(true));
     expect(invoke).toHaveBeenCalledWith("step_into");
@@ -94,7 +121,9 @@ describe("RunControlsProvider commands", () => {
   it("runCpu invokes run_cpu and sets isFreeRunning", async () => {
     const { result } = renderHook(() => useRunControlsContext(), { wrapper: Providers });
 
-    await act(async () => { await result.current.runCpu(); });
+    await act(async () => {
+      await result.current.runCpu();
+    });
 
     expect(invoke).toHaveBeenCalledWith("run_cpu");
     expect(result.current.isFreeRunning).toBe(true);
@@ -107,7 +136,9 @@ describe("RunControlsProvider commands", () => {
     act(() => result.current.stopCpu());
     expect(invoke).not.toHaveBeenCalledWith("stop_cpu");
 
-    await act(async () => { await result.current.runCpu(); });
+    await act(async () => {
+      await result.current.runCpu();
+    });
     act(() => result.current.stopCpu());
 
     expect(invoke).toHaveBeenCalledWith("stop_cpu");
@@ -115,7 +146,9 @@ describe("RunControlsProvider commands", () => {
 
   it("a debugger-run-stopped event clears isFreeRunning", async () => {
     const { result } = renderHook(() => useRunControlsContext(), { wrapper: Providers });
-    await act(async () => { await result.current.runCpu(); });
+    await act(async () => {
+      await result.current.runCpu();
+    });
     expect(result.current.isFreeRunning).toBe(true);
 
     act(() => emitMockEvent("debugger-run-stopped", snapshot()));
@@ -126,11 +159,17 @@ describe("RunControlsProvider commands", () => {
 
   it("stepOver and stepReturn are no-ops while already free-running", async () => {
     const { result } = renderHook(() => useRunControlsContext(), { wrapper: Providers });
-    await act(async () => { await result.current.runCpu(); });
+    await act(async () => {
+      await result.current.runCpu();
+    });
     vi.mocked(invoke).mockClear();
 
-    await act(async () => { await result.current.stepOver(); });
-    await act(async () => { await result.current.stepReturn(); });
+    await act(async () => {
+      await result.current.stepOver();
+    });
+    await act(async () => {
+      await result.current.stepReturn();
+    });
 
     expect(invoke).not.toHaveBeenCalledWith("step_over");
     expect(invoke).not.toHaveBeenCalledWith("step_return");
@@ -164,7 +203,9 @@ describe("RunControlsProvider menu-enabled sync", () => {
       expect(invoke).toHaveBeenCalledWith("set_run_controls_enabled", { flags: STOPPED_FLAGS }),
     );
 
-    await act(async () => { await result.current.runCpu(); });
+    await act(async () => {
+      await result.current.runCpu();
+    });
 
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith("set_run_controls_enabled", { flags: RUNNING_FLAGS }),
@@ -181,13 +222,19 @@ describe("RunControlsProvider menu-enabled sync", () => {
   it("gates the profile and recent menus on isStopped", async () => {
     const { result } = renderHook(() => useRunControlsContext(), { wrapper: Providers });
 
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_profile_menu_enabled", { enabled: true }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("set_profile_menu_enabled", { enabled: true }),
+    );
     expect(invoke).toHaveBeenCalledWith("set_recent_menu_enabled", { enabled: true });
 
     vi.mocked(invoke).mockClear();
-    await act(async () => { await result.current.runCpu(); });
+    await act(async () => {
+      await result.current.runCpu();
+    });
 
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith("set_profile_menu_enabled", { enabled: false }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("set_profile_menu_enabled", { enabled: false }),
+    );
     expect(invoke).toHaveBeenCalledWith("set_recent_menu_enabled", { enabled: false });
   });
 });

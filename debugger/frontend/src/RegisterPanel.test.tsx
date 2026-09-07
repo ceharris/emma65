@@ -8,8 +8,16 @@ import { invoke, resetTauriMocks } from "./test/tauriMock";
 
 function snapshot(overrides: Partial<RegisterSnapshot> = {}): RegisterSnapshot {
   return {
-    a: 0x42, x: 0x01, y: 0xff, s: 0xfd, pc: 0x8000, p: 0x20, changed_flags: 0,
-    cpu_stopped: false, cpu_waiting: false, breakpoint_hit: false,
+    a: 0x42,
+    x: 0x01,
+    y: 0xff,
+    s: 0xfd,
+    pc: 0x8000,
+    p: 0x20,
+    changed_flags: 0,
+    cpu_stopped: false,
+    cpu_waiting: false,
+    breakpoint_hit: false,
     ...overrides,
   };
 }
@@ -23,7 +31,13 @@ function ExecStateSetter({ execState }: { execState: "stopped" | "stepping" | "r
   return null;
 }
 
-function Providers({ children, execState = "stopped" }: { children: ReactNode; execState?: "stopped" | "stepping" | "running" }) {
+function Providers({
+  children,
+  execState = "stopped",
+}: {
+  children: ReactNode;
+  execState?: "stopped" | "stepping" | "running";
+}) {
   return (
     <ExecutionProvider>
       <ExecStateSetter execState={execState} />
@@ -33,7 +47,9 @@ function Providers({ children, execState = "stopped" }: { children: ReactNode; e
 }
 
 function renderPanel(execState: "stopped" | "stepping" | "running" = "stopped") {
-  return render(<RegisterPanel />, { wrapper: (props) => <Providers execState={execState}>{props.children}</Providers> });
+  return render(<RegisterPanel />, {
+    wrapper: (props) => <Providers execState={execState}>{props.children}</Providers>,
+  });
 }
 
 beforeEach(() => {
@@ -42,7 +58,9 @@ beforeEach(() => {
 
 describe("RegisterPanel", () => {
   it("shows a waiting placeholder, then the fetched registers formatted in hex", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd) => (cmd === "get_registers" ? snapshot() : undefined));
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "get_registers" ? snapshot() : undefined,
+    );
     renderPanel();
 
     expect(screen.getByText("Waiting…")).toBeInTheDocument();
@@ -58,7 +76,9 @@ describe("RegisterPanel", () => {
   });
 
   it("does not show an ASCII hint for a non-printable A value", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd) => (cmd === "get_registers" ? snapshot({ a: 0x00 }) : undefined));
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "get_registers" ? snapshot({ a: 0x00 }) : undefined,
+    );
     renderPanel();
 
     const aRow = (await screen.findByText("A")).closest("tr")!;
@@ -68,7 +88,9 @@ describe("RegisterPanel", () => {
 
   it("cycling the data radix reformats A/X/Y but not PC/S (a separate radix cycle)", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) => (cmd === "get_registers" ? snapshot({ a: 0x0a }) : undefined));
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "get_registers" ? snapshot({ a: 0x0a }) : undefined,
+    );
     renderPanel();
     const aRow = (await screen.findByText("A")).closest("tr")!;
     expect(within(aRow).getByText("0A")).toBeInTheDocument();
@@ -100,7 +122,9 @@ describe("RegisterPanel", () => {
 
   it("double-clicking a register value auto-selects the input text", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) => (cmd === "get_registers" ? snapshot() : undefined));
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "get_registers" ? snapshot() : undefined,
+    );
     renderPanel();
     const aRow = (await screen.findByText("A")).closest("tr")!;
 
@@ -113,7 +137,9 @@ describe("RegisterPanel", () => {
 
   it("Escape cancels an in-progress edit without committing", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) => (cmd === "get_registers" ? snapshot() : undefined));
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "get_registers" ? snapshot() : undefined,
+    );
     renderPanel();
     const aRow = (await screen.findByText("A")).closest("tr")!;
 
@@ -127,7 +153,9 @@ describe("RegisterPanel", () => {
 
   it("an out-of-range value marks the input invalid and does not commit", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) => (cmd === "get_registers" ? snapshot() : undefined));
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "get_registers" ? snapshot() : undefined,
+    );
     renderPanel();
     const aRow = (await screen.findByText("A")).closest("tr")!;
 
@@ -142,7 +170,9 @@ describe("RegisterPanel", () => {
 
   it("PC rejects a signed value since it has no signed display mode", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) => (cmd === "get_registers" ? snapshot() : undefined));
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "get_registers" ? snapshot() : undefined,
+    );
     renderPanel();
     const pcRow = (await screen.findByText("PC")).closest("tr")!;
 
@@ -156,7 +186,9 @@ describe("RegisterPanel", () => {
   });
 
   it("editing is disabled while the CPU is not stopped", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd) => (cmd === "get_registers" ? snapshot() : undefined));
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "get_registers" ? snapshot() : undefined,
+    );
     const user = userEvent.setup();
     renderPanel("running");
     const aRow = (await screen.findByText("A")).closest("tr")!;
@@ -192,7 +224,9 @@ describe("RegisterPanel", () => {
 
   it("Escape cancels a flags edit without committing", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) => (cmd === "get_registers" ? snapshot({ p: 0x20 }) : undefined));
+    vi.mocked(invoke).mockImplementation(async (cmd) =>
+      cmd === "get_registers" ? snapshot({ p: 0x20 }) : undefined,
+    );
     renderPanel();
     await screen.findByText("A");
 
@@ -200,6 +234,9 @@ describe("RegisterPanel", () => {
     await user.dblClick(within(flagsCell as HTMLElement).getAllByText("-")[0]);
     await user.keyboard("{Escape}");
 
-    expect(invoke).not.toHaveBeenCalledWith("set_register", { field: "p", value: expect.anything() });
+    expect(invoke).not.toHaveBeenCalledWith("set_register", {
+      field: "p",
+      value: expect.anything(),
+    });
   });
 });

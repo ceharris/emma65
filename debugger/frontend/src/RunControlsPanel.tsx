@@ -1,5 +1,5 @@
-import {useExecutionContext} from "./ExecutionContext";
-import {intervalToSlider, SLIDER_STEPS, useRunControlsContext} from "./RunControlsContext";
+import { useExecutionContext } from "./ExecutionContext";
+import { intervalToSlider, SLIDER_STEPS, useRunControlsContext } from "./RunControlsContext";
 import "./styles/run-controls.scss";
 
 /** Auto-step interval bounds in milliseconds, for the speed-input title. */
@@ -43,9 +43,21 @@ export const RUN_CONTROLS_MIN_WIDTH = 400;
 export default function RunControlsPanel() {
   const { cpuStopped } = useExecutionContext();
   const {
-    stepping, isAutoStepping, isFreeRunning, intervalMs, intervalInputValue,
-    runCpu, stopCpu, stepInto, stepOver, stepReturn, toggleAutoStep,
-    handleSliderChange, handleIntervalInputChange, handleIntervalInputBlur, handleIntervalInputKeyDown,
+    stepping,
+    isAutoStepping,
+    isFreeRunning,
+    intervalMs,
+    intervalInputValue,
+    runCpu,
+    stopCpu,
+    stepInto,
+    stepOver,
+    stepReturn,
+    toggleAutoStep,
+    handleSliderChange,
+    handleIntervalInputChange,
+    handleIntervalInputBlur,
+    handleIntervalInputKeyDown,
   } = useRunControlsContext();
 
   return (

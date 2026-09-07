@@ -78,8 +78,12 @@ export default function WatchpointPanel() {
   }, [fetchWatchpoints]);
 
   useEffect(() => {
-    const unlistenHalted = listen("debugger-halted", () => { fetchWatchpoints(); });
-    const unlistenRunStopped = listen("debugger-run-stopped", () => { fetchWatchpoints(); });
+    const unlistenHalted = listen("debugger-halted", () => {
+      fetchWatchpoints();
+    });
+    const unlistenRunStopped = listen("debugger-run-stopped", () => {
+      fetchWatchpoints();
+    });
     return () => {
       unlistenHalted.then((f) => f());
       unlistenRunStopped.then((f) => f());
@@ -157,7 +161,10 @@ export default function WatchpointPanel() {
       return;
     }
     try {
-      const result = await invoke<WatchpointsSnapshot>("edit_watchpoint", { index: editDialog.index, source });
+      const result = await invoke<WatchpointsSnapshot>("edit_watchpoint", {
+        index: editDialog.index,
+        source,
+      });
       setSnapshot(result);
       setEditDialog(null);
     } catch (e) {
@@ -220,7 +227,13 @@ export default function WatchpointPanel() {
       ) : (
         <div className="watchpoint-body">
           {snapshot.rows.map((row, index) => {
-            const statusClass = !row.enabled ? "wp-disabled" : row.error !== null ? "wp-error" : row.triggered ? "wp-true" : "wp-false";
+            const statusClass = !row.enabled
+              ? "wp-disabled"
+              : row.error !== null
+                ? "wp-error"
+                : row.triggered
+                  ? "wp-true"
+                  : "wp-false";
             return (
               <div
                 key={index}
@@ -229,7 +242,13 @@ export default function WatchpointPanel() {
                 <span
                   className={`indicator ${statusClass}${canEdit ? "" : " readonly"}`}
                   onClick={() => canEdit && toggleWatchpointAt(index)}
-                  title={canEdit ? (row.enabled ? "Disable watchpoint" : "Enable watchpoint") : "Stop the CPU to edit watchpoints"}
+                  title={
+                    canEdit
+                      ? row.enabled
+                        ? "Disable watchpoint"
+                        : "Enable watchpoint"
+                      : "Stop the CPU to edit watchpoints"
+                  }
                 >
                   {row.enabled ? "●" : "⊘"}
                 </span>
@@ -257,16 +276,13 @@ export default function WatchpointPanel() {
 
       {snapshot !== null && snapshot.compile_error === null && (
         <div className="wp-vars-section">
-          <div
-            className="wp-vars-header"
-            onClick={() => setVariablesExpanded((e) => !e)}
-          >
+          <div className="wp-vars-header" onClick={() => setVariablesExpanded((e) => !e)}>
             <i className={`codicon codicon-chevron-${variablesExpanded ? "down" : "right"}`} />
             <span className="wp-vars-title">Variables</span>
             <RadixButton radix={varRadix} onCycle={cycleVarRadix} stopPropagation />
           </div>
-          {variablesExpanded && (
-            snapshot.variables.length === 0 ? (
+          {variablesExpanded &&
+            (snapshot.variables.length === 0 ? (
               <span className="wp-vars-empty">No variables</span>
             ) : (
               <div className="wp-vars-body">
@@ -282,16 +298,12 @@ export default function WatchpointPanel() {
                   </tbody>
                 </table>
               </div>
-            )
-          )}
+            ))}
         </div>
       )}
 
       {addDialog && (
-        <div
-          className="wp-add-backdrop"
-          onClick={() => setAddDialog(null)}
-        >
+        <div className="wp-add-backdrop" onClick={() => setAddDialog(null)}>
           <div className="wp-add-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="wp-add-title">Add Watchpoint</div>
 
@@ -307,15 +319,19 @@ export default function WatchpointPanel() {
                 }
                 onKeyDown={(e) => {
                   e.stopPropagation();
-                  if (e.key === "Enter") { e.preventDefault(); commitAddWatchpoint(); }
-                  if (e.key === "Escape") { e.preventDefault(); setAddDialog(null); }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitAddWatchpoint();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setAddDialog(null);
+                  }
                 }}
               />
             </div>
 
-            {addDialog.error && (
-              <div className="wp-add-error">{addDialog.error}</div>
-            )}
+            {addDialog.error && <div className="wp-add-error">{addDialog.error}</div>}
 
             <div className="wp-add-buttons">
               <button
@@ -324,10 +340,7 @@ export default function WatchpointPanel() {
               >
                 Cancel
               </button>
-              <button
-                className="wp-add-btn-action wp-add-btn-ok"
-                onClick={commitAddWatchpoint}
-              >
+              <button className="wp-add-btn-action wp-add-btn-ok" onClick={commitAddWatchpoint}>
                 OK
               </button>
             </div>
@@ -336,10 +349,7 @@ export default function WatchpointPanel() {
       )}
 
       {editDialog && (
-        <div
-          className="wp-add-backdrop"
-          onClick={() => setEditDialog(null)}
-        >
+        <div className="wp-add-backdrop" onClick={() => setEditDialog(null)}>
           <div className="wp-add-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="wp-add-title">Edit Watchpoint</div>
 
@@ -354,15 +364,19 @@ export default function WatchpointPanel() {
                 }
                 onKeyDown={(e) => {
                   e.stopPropagation();
-                  if (e.key === "Enter") { e.preventDefault(); commitEditWatchpoint(); }
-                  if (e.key === "Escape") { e.preventDefault(); setEditDialog(null); }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitEditWatchpoint();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setEditDialog(null);
+                  }
                 }}
               />
             </div>
 
-            {editDialog.error && (
-              <div className="wp-add-error">{editDialog.error}</div>
-            )}
+            {editDialog.error && <div className="wp-add-error">{editDialog.error}</div>}
 
             <div className="wp-add-buttons">
               <button

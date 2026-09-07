@@ -11,7 +11,7 @@ import "./styles/global.scss";
  * context can't cross a window boundary, mirroring `display-detached.tsx` exactly. Installs the
  * app-wide key bindings directly, since this window has no `App.tsx` root to install them for it.
  */
-function LedMatrixDetachedWindow() {
+export function LedMatrixDetachedWindow() {
   useAppKeyBindings();
   return <LedMatrixPanel />;
 }

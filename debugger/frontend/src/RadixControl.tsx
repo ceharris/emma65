@@ -13,11 +13,11 @@ export const ADDR_RADIX_CYCLE: DataRadix[] = ["hex", "udec", "oct"];
 export const STACK_RADIX_CYCLE: DataRadix[] = ["hex", "udec", "sdec", "oct"];
 
 const DATA_RADIX_LABEL: Record<DataRadix, string> = {
-  hex:  "HEX",
+  hex: "HEX",
   udec: "DEC",
   sdec: "±DEC",
-  oct:  "OCT",
-  bin:  "BIN",
+  oct: "OCT",
+  bin: "BIN",
 };
 
 /**
@@ -31,14 +31,21 @@ const DATA_RADIX_LABEL: Record<DataRadix, string> = {
 export function formatDataRadix(value: number, radix: DataRadix, widthBits?: number): string {
   const u = value >>> 0;
   switch (radix) {
-    case "hex":  return u.toString(16).toUpperCase().padStart(widthBits ? Math.ceil(widthBits / 4) : 0, "0");
-    case "udec": return u.toString(10);
+    case "hex":
+      return u
+        .toString(16)
+        .toUpperCase()
+        .padStart(widthBits ? Math.ceil(widthBits / 4) : 0, "0");
+    case "udec":
+      return u.toString(10);
     case "sdec": {
       const shift = 32 - (widthBits ?? 32);
       return ((u << shift) >> shift).toString(10);
     }
-    case "oct":  return u.toString(8).padStart(widthBits ? Math.ceil(widthBits / 3) : 0, "0");
-    case "bin":  return u.toString(2).padStart(widthBits ?? 0, "0");
+    case "oct":
+      return u.toString(8).padStart(widthBits ? Math.ceil(widthBits / 3) : 0, "0");
+    case "bin":
+      return u.toString(2).padStart(widthBits ?? 0, "0");
   }
 }
 

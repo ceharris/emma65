@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useExecutionContext } from "./ExecutionContext";
-import { ADDR_RADIX_CYCLE, DataRadix, formatDataRadix, RadixButton, useDataRadix, useRadixCycle } from "./RadixControl";
+import {
+  ADDR_RADIX_CYCLE,
+  DataRadix,
+  formatDataRadix,
+  RadixButton,
+  useDataRadix,
+  useRadixCycle,
+} from "./RadixControl";
 import "./styles/registers.scss";
 
 export interface RegisterSnapshot {
@@ -60,18 +67,24 @@ function parseRegisterInput(raw: string, defaultRadix: DataRadix): number | null
   if (s.startsWith("$")) return parseDigits(s.slice(1), HEX_DIGITS, 16);
   const lower = s.toLowerCase();
   if (lower.startsWith("0x")) return parseDigits(s.slice(2), HEX_DIGITS, 16);
-  if (lower.startsWith("0o") || lower.startsWith("0q")) return parseDigits(s.slice(2), OCT_DIGITS, 8);
+  if (lower.startsWith("0o") || lower.startsWith("0q"))
+    return parseDigits(s.slice(2), OCT_DIGITS, 8);
   if (lower.startsWith("0b")) return parseDigits(s.slice(2), BIN_DIGITS, 2);
   if (lower.startsWith("0d")) return parseDigits(s.slice(2), DEC_DIGITS, 10);
   if (s.startsWith(".")) return parseDigits(s.slice(1), DEC_DIGITS, 10);
   if (s.startsWith("-") || s.startsWith("+")) return parseDigits(s, SIGNED_DEC, 10);
 
   switch (defaultRadix) {
-    case "hex":  return parseDigits(s, HEX_DIGITS, 16);
-    case "udec": return parseDigits(s, DEC_DIGITS, 10);
-    case "sdec": return parseDigits(s, DEC_DIGITS, 10);
-    case "oct":  return parseDigits(s, OCT_DIGITS, 8);
-    case "bin":  return parseDigits(s, BIN_DIGITS, 2);
+    case "hex":
+      return parseDigits(s, HEX_DIGITS, 16);
+    case "udec":
+      return parseDigits(s, DEC_DIGITS, 10);
+    case "sdec":
+      return parseDigits(s, DEC_DIGITS, 10);
+    case "oct":
+      return parseDigits(s, OCT_DIGITS, 8);
+    case "bin":
+      return parseDigits(s, BIN_DIGITS, 2);
   }
 }
 
@@ -170,46 +183,50 @@ export default function RegisterPanel() {
     fetchRegisters();
   }, [fetchRegisters]);
 
-  const beginEdit = useCallback((field: RegisterField, currentText: string) => {
-    if (!isEditable) return;
-    setEditingTarget(field);
-    setEditValue(currentText);
-    setEditInvalid(false);
-  }, [isEditable]);
+  const beginEdit = useCallback(
+    (field: RegisterField, currentText: string) => {
+      if (!isEditable) return;
+      setEditingTarget(field);
+      setEditValue(currentText);
+      setEditInvalid(false);
+    },
+    [isEditable],
+  );
 
   const cancelEdit = useCallback(() => {
     setEditingTarget(null);
     setEditInvalid(false);
   }, []);
 
-  const commitEdit = useCallback(async (
-    field: RegisterField,
-    radix: DataRadix,
-    widthBits: number,
-    allowSigned: boolean,
-  ) => {
-    const parsed = parseRegisterInput(editValue, radix);
-    const value = parsed === null ? null : toUnsignedInRange(parsed, widthBits, allowSigned);
-    if (value === null) {
-      setEditInvalid(true);
-      return;
-    }
-    try {
-      const result = await invoke<RegisterSnapshot>("set_register", { field, value });
-      onEdit(result);
-      setEditingTarget(null);
-      setEditInvalid(false);
-    } catch (e) {
-      console.error("set_register failed:", e);
-      setEditInvalid(true);
-    }
-  }, [editValue, onEdit]);
+  const commitEdit = useCallback(
+    async (field: RegisterField, radix: DataRadix, widthBits: number, allowSigned: boolean) => {
+      const parsed = parseRegisterInput(editValue, radix);
+      const value = parsed === null ? null : toUnsignedInRange(parsed, widthBits, allowSigned);
+      if (value === null) {
+        setEditInvalid(true);
+        return;
+      }
+      try {
+        const result = await invoke<RegisterSnapshot>("set_register", { field, value });
+        onEdit(result);
+        setEditingTarget(null);
+        setEditInvalid(false);
+      } catch (e) {
+        console.error("set_register failed:", e);
+        setEditInvalid(true);
+      }
+    },
+    [editValue, onEdit],
+  );
 
-  const beginFlagsEdit = useCallback((currentP: number) => {
-    if (!isEditable) return;
-    setEditingTarget("flags");
-    setEditFlags(currentP);
-  }, [isEditable]);
+  const beginFlagsEdit = useCallback(
+    (currentP: number) => {
+      if (!isEditable) return;
+      setEditingTarget("flags");
+      setEditFlags(currentP);
+    },
+    [isEditable],
+  );
 
   const cancelFlagsEdit = useCallback(() => {
     setEditingTarget(null);
@@ -221,7 +238,10 @@ export default function RegisterPanel() {
 
   const commitFlagsEdit = useCallback(async () => {
     try {
-      const result = await invoke<RegisterSnapshot>("set_register", { field: "p", value: editFlags });
+      const result = await invoke<RegisterSnapshot>("set_register", {
+        field: "p",
+        value: editFlags,
+      });
       onEdit(result);
       setEditingTarget(null);
     } catch (e) {
@@ -349,7 +369,13 @@ export default function RegisterPanel() {
               <tr>
                 <td className="reg-name">A</td>
                 <td className="reg-value">
-                  {renderRegisterValue("a", formatDataRadix(snap.a, dataRadix, 8), dataRadix, 8, true)}
+                  {renderRegisterValue(
+                    "a",
+                    formatDataRadix(snap.a, dataRadix, 8),
+                    dataRadix,
+                    8,
+                    true,
+                  )}
                   {editingTarget !== "a" && printableAscii(snap.a) !== null && (
                     <span className="reg-ascii">{printableAscii(snap.a)}</span>
                   )}
@@ -357,11 +383,27 @@ export default function RegisterPanel() {
               </tr>
               <tr>
                 <td className="reg-name">X</td>
-                <td className="reg-value">{renderRegisterValue("x", formatDataRadix(snap.x, dataRadix, 8), dataRadix, 8, true)}</td>
+                <td className="reg-value">
+                  {renderRegisterValue(
+                    "x",
+                    formatDataRadix(snap.x, dataRadix, 8),
+                    dataRadix,
+                    8,
+                    true,
+                  )}
+                </td>
               </tr>
               <tr>
                 <td className="reg-name">Y</td>
-                <td className="reg-value">{renderRegisterValue("y", formatDataRadix(snap.y, dataRadix, 8), dataRadix, 8, true)}</td>
+                <td className="reg-value">
+                  {renderRegisterValue(
+                    "y",
+                    formatDataRadix(snap.y, dataRadix, 8),
+                    dataRadix,
+                    8,
+                    true,
+                  )}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -375,15 +417,39 @@ export default function RegisterPanel() {
               </tr>
               <tr>
                 <td className="reg-name">PC</td>
-                <td className="reg-value">{renderRegisterValue("pc", formatDataRadix(snap.pc, addrRadix, 16), addrRadix, 16, false)}</td>
+                <td className="reg-value">
+                  {renderRegisterValue(
+                    "pc",
+                    formatDataRadix(snap.pc, addrRadix, 16),
+                    addrRadix,
+                    16,
+                    false,
+                  )}
+                </td>
               </tr>
               <tr>
                 <td className="reg-name">S</td>
-                <td className="reg-value">{renderRegisterValue("s", formatDataRadix(snap.s, addrRadix, 8), addrRadix, 8, true)}</td>
+                <td className="reg-value">
+                  {renderRegisterValue(
+                    "s",
+                    formatDataRadix(snap.s, addrRadix, 8),
+                    addrRadix,
+                    8,
+                    true,
+                  )}
+                </td>
               </tr>
               <tr>
                 <td className="reg-name">P</td>
-                <td className="reg-value">{renderRegisterValue("p", formatDataRadix(snap.p, addrRadix, 8), addrRadix, 8, true)}</td>
+                <td className="reg-value">
+                  {renderRegisterValue(
+                    "p",
+                    formatDataRadix(snap.p, addrRadix, 8),
+                    addrRadix,
+                    8,
+                    true,
+                  )}
+                </td>
               </tr>
               <tr>
                 <td className="reg-flags" colSpan={2}>

@@ -28,7 +28,12 @@ interface SelectPopoverProps<T extends string> {
  * active/inactive shape pickers; Work Unit 4's Backspace/Delete pickers
  * reuse it as-is.
  */
-export default function SelectPopover<T extends string>({ label, value, options, onChange }: SelectPopoverProps<T>) {
+export default function SelectPopover<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: SelectPopoverProps<T>) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -38,7 +43,10 @@ export default function SelectPopover<T extends string>({ label, value, options,
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
     };
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.stopPropagation(); setOpen(false); }
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setOpen(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleKeyDown, true);
@@ -65,7 +73,12 @@ export default function SelectPopover<T extends string>({ label, value, options,
       </button>
 
       {open && (
-        <div className="select-popover-list" role="listbox" aria-label={label} onKeyDown={(e) => e.stopPropagation()}>
+        <div
+          className="select-popover-list"
+          role="listbox"
+          aria-label={label}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
           {options.map((o) => (
             <button
               key={o.value}
@@ -73,7 +86,10 @@ export default function SelectPopover<T extends string>({ label, value, options,
               role="option"
               aria-selected={o.value === value}
               className={`select-popover-option${o.value === value ? " active" : ""}`}
-              onClick={() => { onChange(o.value); setOpen(false); }}
+              onClick={() => {
+                onChange(o.value);
+                setOpen(false);
+              }}
             >
               {o.label}
             </button>

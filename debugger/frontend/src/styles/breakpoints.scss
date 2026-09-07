@@ -87,8 +87,12 @@
   }
 }
 
-.bp-enabled  { color: var(--color-indicator-stop); }
-.bp-disabled { color: var(--color-muted); }
+.bp-enabled {
+  color: var(--color-indicator-stop);
+}
+.bp-disabled {
+  color: var(--color-muted);
+}
 
 .bp-add-backdrop {
   position: fixed;

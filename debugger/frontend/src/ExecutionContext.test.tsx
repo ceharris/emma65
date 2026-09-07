@@ -7,8 +7,16 @@ import { emitMockEvent, invoke, resetTauriMocks } from "./test/tauriMock";
 
 function snapshot(overrides: Partial<RegisterSnapshot> = {}): RegisterSnapshot {
   return {
-    a: 0, x: 0, y: 0, s: 0xff, pc: 0x8000, p: 0x20, changed_flags: 0,
-    cpu_stopped: false, cpu_waiting: false, breakpoint_hit: false,
+    a: 0,
+    x: 0,
+    y: 0,
+    s: 0xff,
+    pc: 0x8000,
+    p: 0x20,
+    changed_flags: 0,
+    cpu_stopped: false,
+    cpu_waiting: false,
+    breakpoint_hit: false,
     ...overrides,
   };
 }

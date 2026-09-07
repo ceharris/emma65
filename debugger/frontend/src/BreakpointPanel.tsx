@@ -29,9 +29,7 @@ const HEX_DIGITS = /^[0-9a-fA-F]+$/;
  */
 function parseAddressInput(raw: string): number | null {
   const s = raw.trim();
-  const body = s.startsWith("$") ? s.slice(1)
-    : /^0x/i.test(s) ? s.slice(2)
-    : s;
+  const body = s.startsWith("$") ? s.slice(1) : /^0x/i.test(s) ? s.slice(2) : s;
   if (!HEX_DIGITS.test(body)) return null;
   const n = parseInt(body, 16);
   return n >= 0 && n <= 0xffff ? n : null;
@@ -49,33 +47,45 @@ export default function BreakpointPanel() {
   const canEdit = isStopped;
 
   useEffect(() => {
-    invoke<BreakpointInfo[]>("get_breakpoints").then(setRows).catch((e) => console.error("get_breakpoints failed:", e));
+    invoke<BreakpointInfo[]>("get_breakpoints")
+      .then(setRows)
+      .catch((e) => console.error("get_breakpoints failed:", e));
   }, []);
 
   useEffect(() => {
     const unlistenPromise = listen<BreakpointInfo[]>("breakpoints-changed", (event) => {
       setRows(event.payload);
     });
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
-  const toggleBreakpoint = useCallback(async (addr: number, enabled: boolean) => {
-    if (!canEdit) return;
-    try {
-      await invoke<BreakpointInfo[]>(enabled ? "disable_breakpoint" : "enable_breakpoint", { addr });
-    } catch (e) {
-      console.error("toggle breakpoint failed:", e);
-    }
-  }, [canEdit]);
+  const toggleBreakpoint = useCallback(
+    async (addr: number, enabled: boolean) => {
+      if (!canEdit) return;
+      try {
+        await invoke<BreakpointInfo[]>(enabled ? "disable_breakpoint" : "enable_breakpoint", {
+          addr,
+        });
+      } catch (e) {
+        console.error("toggle breakpoint failed:", e);
+      }
+    },
+    [canEdit],
+  );
 
-  const removeBreakpoint = useCallback(async (addr: number) => {
-    if (!canEdit) return;
-    try {
-      await invoke<BreakpointInfo[]>("remove_breakpoint", { addr });
-    } catch (e) {
-      console.error("remove_breakpoint failed:", e);
-    }
-  }, [canEdit]);
+  const removeBreakpoint = useCallback(
+    async (addr: number) => {
+      if (!canEdit) return;
+      try {
+        await invoke<BreakpointInfo[]>("remove_breakpoint", { addr });
+      } catch (e) {
+        console.error("remove_breakpoint failed:", e);
+      }
+    },
+    [canEdit],
+  );
 
   /** Resolves `input` as a symbol first, falling back to a hex address parse. */
   const resolveAddress = useCallback(async (input: string): Promise<number | null> => {
@@ -139,13 +149,21 @@ export default function BreakpointPanel() {
               <span
                 className={`indicator ${row.enabled ? "bp-enabled" : "bp-disabled"}${canEdit ? "" : " readonly"}`}
                 onClick={() => toggleBreakpoint(row.addr, row.enabled)}
-                title={canEdit ? (row.enabled ? "Disable breakpoint" : "Enable breakpoint") : "Stop the CPU to edit breakpoints"}
+                title={
+                  canEdit
+                    ? row.enabled
+                      ? "Disable breakpoint"
+                      : "Enable breakpoint"
+                    : "Stop the CPU to edit breakpoints"
+                }
               >
                 {row.enabled ? "●" : "⊘"}
               </span>
               <span className="breakpoint-addr">{formatAddr(row.addr)}</span>
               {row.label !== null && (
-                <span className="breakpoint-label" title={row.label}>{row.label}</span>
+                <span className="breakpoint-label" title={row.label}>
+                  {row.label}
+                </span>
               )}
               <button
                 className="breakpoint-remove-btn"
@@ -172,11 +190,19 @@ export default function BreakpointPanel() {
                 spellCheck={false}
                 placeholder="e.g. 55AA or a symbol"
                 value={addDialog.value}
-                onChange={(e) => setAddDialog((d) => d && { ...d, value: e.target.value, error: "" })}
+                onChange={(e) =>
+                  setAddDialog((d) => d && { ...d, value: e.target.value, error: "" })
+                }
                 onKeyDown={(e) => {
                   e.stopPropagation();
-                  if (e.key === "Enter") { e.preventDefault(); commitAddBreakpoint(); }
-                  if (e.key === "Escape") { e.preventDefault(); setAddDialog(null); }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitAddBreakpoint();
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setAddDialog(null);
+                  }
                 }}
               />
             </div>
@@ -184,7 +210,10 @@ export default function BreakpointPanel() {
             {addDialog.error && <div className="bp-add-error">{addDialog.error}</div>}
 
             <div className="bp-add-buttons">
-              <button className="bp-add-btn-action bp-add-btn-cancel" onClick={() => setAddDialog(null)}>
+              <button
+                className="bp-add-btn-action bp-add-btn-cancel"
+                onClick={() => setAddDialog(null)}
+              >
                 Cancel
               </button>
               <button className="bp-add-btn-action bp-add-btn-ok" onClick={commitAddBreakpoint}>

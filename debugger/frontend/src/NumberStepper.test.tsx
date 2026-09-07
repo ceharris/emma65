@@ -30,7 +30,9 @@ describe("NumberStepper", () => {
   });
 
   it("renders empty when value is null, with a placeholder", () => {
-    render(<NumberStepper value={null} onChange={vi.fn()} min={0} max={20} placeholder="Default" />);
+    render(
+      <NumberStepper value={null} onChange={vi.fn()} min={0} max={20} placeholder="Default" />,
+    );
     const input = screen.getByRole("spinbutton");
     expect(input).toHaveValue(null);
     expect(input).toHaveAttribute("placeholder", "Default");

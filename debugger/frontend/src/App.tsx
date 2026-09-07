@@ -65,7 +65,9 @@ export default function App() {
       }
     });
 
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   // Start fetching DockLayout's chunk as soon as the splash screen is up,
@@ -108,7 +110,13 @@ export default function App() {
         </header>
         <ExecutionProvider>
           <RunControlsProvider>
-            <Suspense fallback={<div className="app-splash"><span className="status-pending">Initializing…</span></div>}>
+            <Suspense
+              fallback={
+                <div className="app-splash">
+                  <span className="status-pending">Initializing…</span>
+                </div>
+              }
+            >
               <DockLayout />
             </Suspense>
             <StatusBar />

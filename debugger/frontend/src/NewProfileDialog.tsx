@@ -41,12 +41,22 @@ export default function NewProfileDialog() {
   /** Fetches the available templates and opens the dialog with the first one selected. */
   const openDialog = async () => {
     const templates = await invoke<TemplateInfo[]>("list_templates");
-    setDialog({ name: "", templateId: templates[0]?.id ?? "default", templates, error: "", submitting: false });
+    setDialog({
+      name: "",
+      templateId: templates[0]?.id ?? "default",
+      templates,
+      error: "",
+      submitting: false,
+    });
   };
 
   useEffect(() => {
-    const unlistenPromise = listen("open-new-profile-dialog", () => { openDialog(); });
-    return () => { unlistenPromise.then((f) => f()); };
+    const unlistenPromise = listen("open-new-profile-dialog", () => {
+      openDialog();
+    });
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   /** Ctrl+N: open the dialog, scoped to this (main) window only. */
@@ -110,8 +120,14 @@ export default function NewProfileDialog() {
             onChange={(e) => setDialog((d) => d && { ...d, name: e.target.value, error: "" })}
             onKeyDown={(e) => {
               e.stopPropagation();
-              if (e.key === "Enter") { e.preventDefault(); commit(); }
-              if (e.key === "Escape") { e.preventDefault(); setDialog(null); }
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setDialog(null);
+              }
             }}
           />
         </div>

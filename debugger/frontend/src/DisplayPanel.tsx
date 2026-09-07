@@ -144,7 +144,9 @@ export default function DisplayPanel({ dockPanelApi }: DisplayPanelProps = {}) {
     };
     fetchGeometry();
     const unlistenPromise = listen("session-loaded", fetchGeometry);
-    return () => { unlistenPromise.then((f) => f()); };
+    return () => {
+      unlistenPromise.then((f) => f());
+    };
   }, []);
 
   useEffect(() => {
@@ -152,7 +154,10 @@ export default function DisplayPanel({ dockPanelApi }: DisplayPanelProps = {}) {
     if (!container || !geometry) return;
     const { pixel_width, pixel_height } = geometry;
     const recomputeScale = () => {
-      const fit = Math.min(container.clientWidth / pixel_width, container.clientHeight / pixel_height);
+      const fit = Math.min(
+        container.clientWidth / pixel_width,
+        container.clientHeight / pixel_height,
+      );
       setScale(Math.max(1, Math.floor(fit)));
     };
     recomputeScale();
@@ -169,7 +174,11 @@ export default function DisplayPanel({ dockPanelApi }: DisplayPanelProps = {}) {
       const { pixel_width, pixel_height } = geometry;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      const imageData = new ImageData(decodeBase64(event.payload.pixels), pixel_width, pixel_height);
+      const imageData = new ImageData(
+        decodeBase64(event.payload.pixels),
+        pixel_width,
+        pixel_height,
+      );
       ctx.putImageData(imageData, 0, 0);
     });
     return () => {

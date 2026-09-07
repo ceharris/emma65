@@ -60,7 +60,8 @@ function makeFakeTerminal(options: {
     element: options.noElement ? null : element,
     options: {
       scrollback: options.scrollback ?? 1000,
-      overviewRuler: options.overviewRulerWidth != null ? { width: options.overviewRulerWidth } : undefined,
+      overviewRuler:
+        options.overviewRulerWidth != null ? { width: options.overviewRulerWidth } : undefined,
     },
     _core: {
       _renderService: {

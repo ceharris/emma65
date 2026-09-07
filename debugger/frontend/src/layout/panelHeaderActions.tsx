@@ -38,7 +38,11 @@ export function PanelHeaderActionProvider({ children }: { children: React.ReactN
       return { ...prev, [id]: action };
     });
   }, []);
-  return <PanelHeaderActionContext.Provider value={{ actions, register }}>{children}</PanelHeaderActionContext.Provider>;
+  return (
+    <PanelHeaderActionContext.Provider value={{ actions, register }}>
+      {children}
+    </PanelHeaderActionContext.Provider>
+  );
 }
 
 /**
@@ -83,6 +87,7 @@ export function useOptionalPanelHeaderAction(id: MainPanelId, action: PanelHeade
 /** Reads the current id -> action map, for `DockTabActions` to render from. */
 export function usePanelHeaderActions() {
   const ctx = useContext(PanelHeaderActionContext);
-  if (!ctx) throw new Error("usePanelHeaderActions must be used within a PanelHeaderActionProvider");
+  if (!ctx)
+    throw new Error("usePanelHeaderActions must be used within a PanelHeaderActionProvider");
   return ctx.actions;
 }

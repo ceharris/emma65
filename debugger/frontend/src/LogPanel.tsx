@@ -1,6 +1,6 @@
-import {useEffect, useRef, useState} from "react";
-import {listen} from "@tauri-apps/api/event";
-import {invoke} from "@tauri-apps/api/core";
+import { useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import "./styles/log.scss";
 
 interface LogRecordDto {
@@ -61,13 +61,13 @@ export default function LogPanel() {
   useEffect(() => {
     invoke<LogRecordDto[]>("get_log_records")
       .then((history) => {
-        const rows = history.map((rec) => ({...rec, id: nextIdRef.current++}));
+        const rows = history.map((rec) => ({ ...rec, id: nextIdRef.current++ }));
         setRecords(rows.slice(-MAX_RECORDS));
       })
       .catch((err) => console.error("get_log_records failed:", err));
 
     const unlistenPromise = listen<LogRecordDto>("log-record", (event) => {
-      const row: LogRow = {...event.payload, id: nextIdRef.current++};
+      const row: LogRow = { ...event.payload, id: nextIdRef.current++ };
       setRecords((prev) => {
         const next = [...prev, row];
         return next.length > MAX_RECORDS ? next.slice(next.length - MAX_RECORDS) : next;

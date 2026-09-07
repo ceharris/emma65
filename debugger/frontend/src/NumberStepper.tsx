@@ -22,7 +22,14 @@ interface NumberStepperProps {
  * adds a hand-drawn +/- button stack next to it instead. Used by the
  * Preferences dialog's Text tab (font size, scrollback).
  */
-export default function NumberStepper({ value, onChange, min, max, step = 1, placeholder }: NumberStepperProps) {
+export default function NumberStepper({
+  value,
+  onChange,
+  min,
+  max,
+  step = 1,
+  placeholder,
+}: NumberStepperProps) {
   const clamp = (n: number) => Math.min(max, Math.max(min, n));
   const adjust = (delta: number) => onChange(clamp((value ?? min) + delta));
 

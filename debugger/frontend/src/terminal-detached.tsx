@@ -12,7 +12,7 @@ import "./styles/global.scss";
  * wraps `App`. Installs the app-wide key bindings directly, since this
  * window has no `App.tsx` root to install them for it.
  */
-function TerminalDetachedWindow() {
+export function TerminalDetachedWindow() {
   useAppKeyBindings();
   return <TerminalPanel />;
 }

@@ -43,7 +43,9 @@ export function ExecutionProvider({ children }: { children: ReactNode }) {
         .then((snap) => setLastSnapshot(snap))
         .catch(() => {});
     });
-    return () => { unlistenTick.then((f) => f()); };
+    return () => {
+      unlistenTick.then((f) => f());
+    };
   }, []);
 
   const handleExecStateChange = useCallback((state: ExecState) => {
