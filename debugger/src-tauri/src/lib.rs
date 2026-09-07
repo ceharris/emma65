@@ -157,25 +157,23 @@ pub struct SessionStatusState(pub Mutex<Option<SessionStatus>>);
 /// device plan, design doc §7) for a possible `display/lcd` device to consume via
 /// `InstantiationContext::lcd_display_frame_sink`/`lcd_display_geometry_sink`, the same way as
 /// the display channel/slot above.
-#[allow(clippy::type_complexity)]
-async fn load_session(
-    profile_dir: &Path,
-    log_sender: LogSender,
-) -> Result<
-    (
-        EmulatorSession,
-        InternalPipeTransport,
-        InternalPipeTransport,
-        IrqSource,
-        mpsc::Receiver<DisplayFrame>,
-        Option<display::DisplayGeometryPayload>,
-        mpsc::Receiver<LedMatrixFrame>,
-        Option<led_matrix::LedMatrixGeometryPayload>,
-        mpsc::Receiver<LcdDisplayFrame>,
-        Option<lcd_display::LcdDisplayGeometryPayload>,
-    ),
-    String,
-> {
+/// The pieces [`load_session`] hands back to its caller ([`load_or_reload_session`]). Grouped
+/// into a struct because the function's return type otherwise exceeds clippy's type-complexity
+/// lint.
+struct LoadedSession {
+    session: EmulatorSession,
+    remote: InternalPipeTransport,
+    kbd_remote: InternalPipeTransport,
+    ui_irq_source: IrqSource,
+    display_frame_rx: mpsc::Receiver<DisplayFrame>,
+    display_geometry: Option<display::DisplayGeometryPayload>,
+    led_matrix_frame_rx: mpsc::Receiver<LedMatrixFrame>,
+    led_matrix_geometry: Option<led_matrix::LedMatrixGeometryPayload>,
+    lcd_display_frame_rx: mpsc::Receiver<LcdDisplayFrame>,
+    lcd_display_geometry: Option<lcd_display::LcdDisplayGeometryPayload>,
+}
+
+async fn load_session(profile_dir: &Path, log_sender: LogSender) -> Result<LoadedSession, String> {
     let config_path = profile_dir.join("emulator.toml");
 
     let config: Config = Figment::new()
@@ -296,7 +294,7 @@ async fn load_session(
         .unwrap()
         .take()
         .map(lcd_display::LcdDisplayGeometryPayload::from);
-    Ok((
+    Ok(LoadedSession {
         session,
         remote,
         kbd_remote,
@@ -307,7 +305,7 @@ async fn load_session(
         led_matrix_geometry,
         lcd_display_frame_rx,
         lcd_display_geometry,
-    ))
+    })
 }
 
 /// Stops any free-running CPU (Run, Step Over, or Step Return) and waits for
@@ -408,7 +406,7 @@ pub(crate) async fn load_or_reload_session(app: &AppHandle, profile_dir: &Path) 
         });
 
     match load_session(profile_dir, log_sender.clone()).await {
-        Ok((
+        Ok(LoadedSession {
             session,
             remote,
             kbd_remote,
@@ -419,7 +417,7 @@ pub(crate) async fn load_or_reload_session(app: &AppHandle, profile_dir: &Path) 
             led_matrix_geometry,
             lcd_display_frame_rx,
             lcd_display_geometry,
-        )) => {
+        }) => {
             let (remote_rx, remote_tx) = remote.into_split();
             *app.state::<terminal::TerminalTx>().0.lock().unwrap() = Some(remote_tx);
 
@@ -1118,8 +1116,8 @@ pub fn run() {
             about::get_about_info,
         ])
         .setup(move |app| {
-            let (
-                app_menu,
+            let menu::MenuBuild {
+                menu: app_menu,
                 window_menu_state,
                 recent_menu_state,
                 run_menu_state,
@@ -1127,7 +1125,7 @@ pub fn run() {
                 assembler_menu_state,
                 edit_menu_state,
                 profile_menu_state,
-            ) = menu::build_menu(app)?;
+            } = menu::build_menu(app)?;
             app.set_menu(app_menu)?;
 
             // GTK's default `gtk-menu-bar-accel` binds F10 to focus/open the menu

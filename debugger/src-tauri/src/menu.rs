@@ -254,19 +254,20 @@ pub struct ProfileMenuState {
 /// handle `on_menu_event` needs to dispatch an Exit click. The File > Open
 /// Recent submenu starts empty — populated once the recent-profiles list is
 /// loaded, via `rebuild_open_recent_submenu`.
-#[allow(clippy::type_complexity)]
-pub fn build_menu(
-    app: &tauri::App,
-) -> tauri::Result<(
-    Menu<Wry>,
-    WindowMenuState,
-    RecentMenuState,
-    RunMenuState,
-    MemoryMenuState,
-    AssemblerMenuState,
-    EditMenuState,
-    ProfileMenuState,
-)> {
+/// The menu and per-panel state handles [`build_menu`] hands back to its caller. Grouped into a
+/// struct because the function's return type otherwise exceeds clippy's type-complexity lint.
+pub struct MenuBuild {
+    pub menu: Menu<Wry>,
+    pub window_menu_state: WindowMenuState,
+    pub recent_menu_state: RecentMenuState,
+    pub run_menu_state: RunMenuState,
+    pub memory_menu_state: MemoryMenuState,
+    pub assembler_menu_state: AssemblerMenuState,
+    pub edit_menu_state: EditMenuState,
+    pub profile_menu_state: ProfileMenuState,
+}
+
+pub fn build_menu(app: &tauri::App) -> tauri::Result<MenuBuild> {
     // A plain `MenuItem` rather than `PredefinedMenuItem::quit`: muda's GTK
     // backend silently drops `Quit` (it isn't in its short list of supported
     // predefined types on Linux), so the item never appeared at all. The
@@ -641,23 +642,23 @@ pub fn build_menu(
         ],
     )?;
 
-    Ok((
+    Ok(MenuBuild {
         menu,
-        WindowMenuState {
+        window_menu_state: WindowMenuState {
             exit_item,
             terminal_item,
             display_item,
             led_matrix_item,
             lcd_display_item,
         },
-        RecentMenuState {
+        recent_menu_state: RecentMenuState {
             submenu: open_recent_submenu,
             gate: Mutex::new(RecentMenuGate {
                 has_recent: false,
                 cpu_stopped: true,
             }),
         },
-        RunMenuState {
+        run_menu_state: RunMenuState {
             run_item,
             stop_item,
             step_into_item,
@@ -665,24 +666,24 @@ pub fn build_menu(
             step_return_item,
             toggle_auto_step_item,
         },
-        MemoryMenuState {
+        memory_menu_state: MemoryMenuState {
             load_item: load_memory_item,
             save_item: save_memory_item,
             edit_item: edit_memory_item,
             fill_item: fill_memory_item,
         },
-        AssemblerMenuState { assemble_load_item },
-        EditMenuState {
+        assembler_menu_state: AssemblerMenuState { assemble_load_item },
+        edit_menu_state: EditMenuState {
             cut_item,
             copy_item,
             paste_item,
         },
-        ProfileMenuState {
+        profile_menu_state: ProfileMenuState {
             new_item: new_profile_item,
             open_item: open_profile_item,
             reload_item: reload_profile_item,
         },
-    ))
+    })
 }
 
 /// Pushes `flags` onto the Edit menu's three items' enabled state

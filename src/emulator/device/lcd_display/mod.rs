@@ -248,26 +248,36 @@ pub struct LcdDisplay {
     log_sender: LogSender,
 }
 
+/// Construction-time parameters for [`LcdDisplay::new`], fixed for the device's lifetime (spec
+/// §3). Grouped into a struct because `new` otherwise exceeds clippy's argument-count lint.
+pub struct LcdDisplayConfig {
+    pub name: &'static str,
+    /// Must span exactly 2 bytes (spec §4.1) -- callers (the config module) are responsible for
+    /// this.
+    pub address_range: AddressRange,
+    pub geometry: &'static Geometry,
+    /// The CPU's configured clock speed in Hz, or `None` if the CPU runs unthrottled
+    /// (`ClockSpeed::unlimited()`); see [`NOMINAL_CLOCK_HZ`].
+    pub clock_hz: Option<u64>,
+    /// Consumed by [`compositing::composite`] once a frame sink is attached (design doc §7) via
+    /// [`LcdDisplay::attach_frame_sink`].
+    pub cgrom: CgRom,
+    pub background: Rgb24,
+    pub foreground: Rgb24,
+}
+
 impl LcdDisplay {
-    /// Creates a new device. `address_range` must span exactly 2 bytes (spec §4.1) -- callers
-    /// (the config module) are responsible for this.
-    ///
-    /// `clock_hz` is the CPU's configured clock speed in Hz, or `None` if the CPU runs
-    /// unthrottled (`ClockSpeed::unlimited()`); see [`NOMINAL_CLOCK_HZ`].
-    ///
-    /// `cgrom`, `background`, and `foreground` are fixed at configuration time (spec §3) and
-    /// consumed by [`compositing::composite`] once a frame sink is attached (design doc §7) via
-    /// [`Self::attach_frame_sink`].
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        name: &'static str,
-        address_range: AddressRange,
-        geometry: &'static Geometry,
-        clock_hz: Option<u64>,
-        cgrom: CgRom,
-        background: Rgb24,
-        foreground: Rgb24,
-    ) -> Self {
+    /// Creates a new device from `config`.
+    pub fn new(config: LcdDisplayConfig) -> Self {
+        let LcdDisplayConfig {
+            name,
+            address_range,
+            geometry,
+            clock_hz,
+            cgrom,
+            background,
+            foreground,
+        } = config;
         debug_assert_eq!(
             address_range.len(),
             2,
@@ -385,18 +395,18 @@ impl LcdDisplay {
             return;
         }
         let cursor = self.compositing_cursor();
-        let pixels = compositing::composite(
-            &self.ddram,
-            &self.cgram,
-            self.geometry,
-            &self.line_shift,
+        let pixels = compositing::composite(compositing::CompositeInput {
+            ddram: &self.ddram,
+            cgram: &self.cgram,
+            geometry: self.geometry,
+            line_shift: &self.line_shift,
             cursor,
-            self.display_on,
-            self.font_5x10,
-            &self.cgrom,
-            self.background,
-            self.foreground,
-        );
+            display_on: self.display_on,
+            font_5x10: self.font_5x10,
+            cgrom: &self.cgrom,
+            background: self.background,
+            foreground: self.foreground,
+        });
         if let Some(transport) = self.external_transport.as_mut() {
             // `width_px` is fixed by `geometry`; `height_px` is derived from the buffer's own
             // length (rather than duplicating `compositing`'s private cell-height constants here)
@@ -794,39 +804,39 @@ mod tests {
     }
 
     fn device() -> LcdDisplay {
-        LcdDisplay::new(
-            DEVICE_NAME,
-            address_range(),
-            &DUAL_LINE_GEOMETRY,
-            Some(1_000_000),
-            CgRom::default(),
-            Rgb24::new(0, 0, 0),
-            Rgb24::new(255, 255, 255),
-        )
+        LcdDisplay::new(LcdDisplayConfig {
+            name: DEVICE_NAME,
+            address_range: address_range(),
+            geometry: &DUAL_LINE_GEOMETRY,
+            clock_hz: Some(1_000_000),
+            cgrom: CgRom::default(),
+            background: Rgb24::new(0, 0, 0),
+            foreground: Rgb24::new(255, 255, 255),
+        })
     }
 
     fn single_line_device() -> LcdDisplay {
-        LcdDisplay::new(
-            DEVICE_NAME,
-            address_range(),
-            &SINGLE_LINE_GEOMETRY,
-            Some(1_000_000),
-            CgRom::default(),
-            Rgb24::new(0, 0, 0),
-            Rgb24::new(255, 255, 255),
-        )
+        LcdDisplay::new(LcdDisplayConfig {
+            name: DEVICE_NAME,
+            address_range: address_range(),
+            geometry: &SINGLE_LINE_GEOMETRY,
+            clock_hz: Some(1_000_000),
+            cgrom: CgRom::default(),
+            background: Rgb24::new(0, 0, 0),
+            foreground: Rgb24::new(255, 255, 255),
+        })
     }
 
     fn true_5x10_device() -> LcdDisplay {
-        LcdDisplay::new(
-            DEVICE_NAME,
-            address_range(),
-            &TRUE_5X10_GEOMETRY,
-            Some(1_000_000),
-            CgRom::default(),
-            Rgb24::new(0, 0, 0),
-            Rgb24::new(255, 255, 255),
-        )
+        LcdDisplay::new(LcdDisplayConfig {
+            name: DEVICE_NAME,
+            address_range: address_range(),
+            geometry: &TRUE_5X10_GEOMETRY,
+            clock_hz: Some(1_000_000),
+            cgrom: CgRom::default(),
+            background: Rgb24::new(0, 0, 0),
+            foreground: Rgb24::new(255, 255, 255),
+        })
     }
 
     fn instruction_addr() -> u16 {

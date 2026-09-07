@@ -5,7 +5,7 @@ use super::{
 use crate::emulator::bus::DeviceIdAllocator;
 use crate::emulator::device::display::DEFAULT_FRAME_RATE_HZ;
 use crate::emulator::device::led_matrix::compositing::default_palette;
-use crate::emulator::device::led_matrix::{LedMatrix, PIXELS_PER_MATRIX};
+use crate::emulator::device::led_matrix::{LedMatrix, LedMatrixConfig, PIXELS_PER_MATRIX};
 use crate::emulator::{AddressRange, BusConfig, IoDevice};
 use figment::providers::Serialized;
 use figment::value::{Dict, Value};
@@ -129,16 +129,16 @@ impl DeviceModule for LedMatrixModule {
         let register_range =
             AddressRange::new(config.register_address, config.register_address + 1);
 
-        let mut device = LedMatrix::new(
-            self.name(),
+        let mut device = LedMatrix::new(LedMatrixConfig {
+            name: self.name(),
             pixel_range,
             register_range,
-            matrix_count,
+            matrices: matrix_count,
             cols,
-            context.clock_hz,
+            clock_hz: context.clock_hz,
             frame_rate_hz,
-            default_palette(),
-        );
+            palette: default_palette(),
+        });
 
         if let Some(sender) = &context.log_sender {
             device.set_log_sender(sender.clone());

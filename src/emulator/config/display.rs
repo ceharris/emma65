@@ -7,7 +7,7 @@ use crate::emulator::bus::DeviceIdAllocator;
 use crate::emulator::device::display::compositing::default_palette;
 use crate::emulator::device::display::font::{FONT_BYTES, Font};
 use crate::emulator::device::display::{
-    CharDisplay, DEFAULT_COLUMNS, DEFAULT_FRAME_RATE_HZ, DEFAULT_ROWS,
+    CharDisplay, CharDisplayConfig, DEFAULT_COLUMNS, DEFAULT_FRAME_RATE_HZ, DEFAULT_ROWS,
 };
 use crate::emulator::transport::TransportRelay;
 use crate::emulator::{AddressRange, BusConfig, IoDevice};
@@ -128,17 +128,17 @@ impl DeviceModule for CharDisplayModule {
             id_allocator.lock().unwrap().next_available()
         };
 
-        let mut device = CharDisplay::new(
-            self.name(),
+        let mut device = CharDisplay::new(CharDisplayConfig {
+            name: self.name(),
             address_range,
             columns,
             rows,
             double_buffered,
-            context.clock_hz,
+            clock_hz: context.clock_hz,
             frame_rate_hz,
             font,
             palette,
-        );
+        });
 
         if let Some(sender) = &context.log_sender {
             device.set_log_sender(sender.clone());

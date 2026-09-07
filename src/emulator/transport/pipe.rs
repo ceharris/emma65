@@ -121,16 +121,20 @@ impl PipeTransport {
         let connected = Arc::new(AtomicBool::new(true));
 
         tokio::spawn(run_pipe_task(
-            stdin,
-            stdout,
-            child,
-            on_exit,
-            in_tx,
-            outbound_consumer,
-            Arc::clone(&outbound_notify),
-            shutdown_rx,
-            Arc::clone(&connected),
-            reporter.clone(),
+            PipeTaskIo {
+                stdin,
+                stdout,
+                child,
+                on_exit,
+            },
+            PipeTaskChannels {
+                in_tx,
+                outbound: outbound_consumer,
+                outbound_notify: Arc::clone(&outbound_notify),
+                shutdown_rx,
+                connected: Arc::clone(&connected),
+                reporter: reporter.clone(),
+            },
         ));
 
         let transport = Self {
@@ -210,6 +214,28 @@ impl Transport for PipeTransport {
     }
 }
 
+/// The child process handles [`run_pipe_task`] bridges, plus the callback it invokes on exit.
+/// Grouped separately from [`PipeTaskChannels`] because `run_pipe_task` otherwise exceeds
+/// clippy's argument-count lint.
+struct PipeTaskIo<F> {
+    stdin: tokio::process::ChildStdin,
+    stdout: tokio::process::ChildStdout,
+    child: tokio::process::Child,
+    on_exit: F,
+}
+
+/// The channel/shared-state plumbing [`run_pipe_task`] bridges the child process to. Grouped
+/// separately from [`PipeTaskIo`] because `run_pipe_task` otherwise exceeds clippy's
+/// argument-count lint.
+struct PipeTaskChannels {
+    in_tx: Sender<u8>,
+    outbound: Consumer<u8>,
+    outbound_notify: Arc<Notify>,
+    shutdown_rx: oneshot::Receiver<()>,
+    connected: Arc<AtomicBool>,
+    reporter: TransportReporter,
+}
+
 /// Tokio task: bridges child process stdin/stdout to the sync side.
 ///
 /// Reads bytes from `stdout` and pushes them into `in_tx` (consumed by the
@@ -222,21 +248,24 @@ impl Transport for PipeTransport {
 /// error and reports the disconnect edge via `reporter`; the matching
 /// connect edge is reported once at `spawn`, since a spawned child is
 /// considered connected from the start.
-#[allow(clippy::too_many_arguments)]
-async fn run_pipe_task<F>(
-    mut stdin: tokio::process::ChildStdin,
-    mut stdout: tokio::process::ChildStdout,
-    mut child: tokio::process::Child,
-    on_exit: F,
-    in_tx: Sender<u8>,
-    mut outbound: Consumer<u8>,
-    outbound_notify: Arc<Notify>,
-    mut shutdown_rx: oneshot::Receiver<()>,
-    connected: Arc<AtomicBool>,
-    reporter: TransportReporter,
-) where
+async fn run_pipe_task<F>(io: PipeTaskIo<F>, channels: PipeTaskChannels)
+where
     F: FnOnce(io::Error) + Send + 'static,
 {
+    let PipeTaskIo {
+        mut stdin,
+        mut stdout,
+        mut child,
+        on_exit,
+    } = io;
+    let PipeTaskChannels {
+        in_tx,
+        mut outbound,
+        outbound_notify,
+        mut shutdown_rx,
+        connected,
+        reporter,
+    } = channels;
     let mut report_interval = tokio::time::interval(std::time::Duration::from_secs(1));
     report_interval.tick().await; // first tick fires immediately; skip it
 
