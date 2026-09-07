@@ -291,17 +291,22 @@ The command register always reads `0`; writing it discards whatever partial
 command sequence was in progress and arms a new one. There's no interrupt
 capability — swaps are always synchronous, so there's nothing to wait on.
 
-Like `display` and `display/lcd`, this device has no in-process
-console-style rendering when running the plain `emma65` CLI:
+Like `display` and `display/lcd`, this device's output is graphical, so
+the plain `emma65` CLI can't just print it to its terminal window the way
+`console` or an ACIA does. A display panel that can actually draw it is
+available two ways:
 
 - **The debugger** — the LED Matrix panel renders each matrix as an
   independent, composited canvas in-process, no configuration needed.
 - **Standalone `emma65`** — configure a `pipe:` transport pointing at the
   bundled `emma65-led-matrix` SDL2 peripheral binary (see
   [Running the LED Matrix Peripheral](running-the-led-matrix-peripheral.md)
-  below). A block message streams per matrix swap, and a palette message
-  streams per palette write, over the
-  [LED Matrix External Protocol](appendix-led-matrix-protocol.md).
+  below). The wire protocol is designed for high throughput — it only
+  sends a matrix's pixels when that matrix actually swaps, and a palette
+  update only when the palette actually changes — so the peripheral stays
+  in sync without redrawing anything that hasn't changed. See the
+  [LED Matrix External Protocol](appendix-led-matrix-protocol.md) for
+  details.
 
 ### Configuration
 
@@ -351,17 +356,21 @@ interface rather than mapping display memory directly:
 
 See `plan/memory-mapped-lcd-display-device-spec.md` in the repository for
 the full register-level specification. Like `display` and `display/matrix`,
-`display/lcd` has no in-process console-style rendering when running the
-plain `emma65` CLI:
+`display/lcd`'s output is graphical, so the plain `emma65` CLI can't just
+print it to its terminal window the way `console` or an ACIA does. A
+display panel that can actually draw it is available two ways:
 
 - **The debugger** — the LCD Display panel renders composited frames
   in-process, no configuration needed.
 - **Standalone `emma65`** — configure a `pipe:` transport pointing at the
   bundled `emma65-lcd-display` SDL2 peripheral binary (see
   [Running the LCD Display Peripheral](running-the-lcd-display-peripheral.md)
-  below). A frame streams on every register write that could change what's
-  rendered, over the
-  [LCD Display External Protocol](appendix-lcd-display-protocol.md).
+  below). The wire protocol is designed for high throughput — it only
+  sends a fresh frame when a register write could actually change what's
+  rendered, so the peripheral stays in sync without redrawing anything
+  that hasn't changed. See the
+  [LCD Display External Protocol](appendix-lcd-display-protocol.md) for
+  details.
 
 ### Configuration
 
@@ -444,9 +453,9 @@ attribute is only useful when running under the debugger.
 
 See `plan/memory-mapped-display-device-spec.md` in the repository for the
 full register-level specification. Unlike the other register-window devices,
-`display` has no in-process console-style rendering when running the plain
-`emma65` CLI: it needs an external peripheral to actually put pixels on
-screen. Two ways to view it:
+`display`'s output is graphical, so the plain `emma65` CLI can't just print
+it to its terminal window the way `console` or an ACIA does. A display panel
+that can actually draw it is available two ways:
 
 - **The debugger** — the Display panel renders composited frames in-process,
   no configuration needed, and also supplies the live keyboard input
@@ -454,9 +463,12 @@ screen. Two ways to view it:
 - **Standalone `emma65`** — configure a `pipe:` transport pointing at the
   bundled `emma65-display` SDL2 peripheral binary (see
   [Running the Display Peripheral](running-the-display-peripheral.md) below).
-  Composited frame data (char RAM, color RAM, palette, and the font) streams
-  to the peripheral once per vsync over the
-  [Character Display External Protocol](appendix-display-protocol.md).
+  The wire protocol is designed for high throughput — it sends one composited
+  frame per vsync rather than streaming every individual memory write, so the
+  peripheral stays in sync without the overhead of redrawing more often than
+  the display actually changes. See the
+  [Character Display External Protocol](appendix-display-protocol.md) for
+  details.
 
 ### Configuration
 
