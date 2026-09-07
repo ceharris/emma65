@@ -190,19 +190,34 @@ fn set_pixel(pixels: &mut [u8], width_px: usize, x: usize, y: usize, color: Rgb2
 /// `background`. `display_on = false` renders every cell blank instead, leaving DDRAM, CGRAM,
 /// and the address counter untouched by definition since this function never mutates them (spec
 /// §8.3).
-#[allow(clippy::too_many_arguments)]
-pub fn composite(
-    ddram: &[u8; 80],
-    cgram: &[u8; 64],
-    geometry: &Geometry,
-    line_shift: &[u8; 2],
-    cursor: CursorState,
-    display_on: bool,
-    font_5x10: bool,
-    cgrom: &CgRom,
-    background: Rgb24,
-    foreground: Rgb24,
-) -> Vec<u8> {
+/// Inputs to [`composite`], grouped into a struct because the function otherwise exceeds
+/// clippy's argument-count lint.
+pub struct CompositeInput<'a> {
+    pub ddram: &'a [u8; 80],
+    pub cgram: &'a [u8; 64],
+    pub geometry: &'a Geometry,
+    pub line_shift: &'a [u8; 2],
+    pub cursor: CursorState,
+    pub display_on: bool,
+    pub font_5x10: bool,
+    pub cgrom: &'a CgRom,
+    pub background: Rgb24,
+    pub foreground: Rgb24,
+}
+
+pub fn composite(input: CompositeInput) -> Vec<u8> {
+    let CompositeInput {
+        ddram,
+        cgram,
+        geometry,
+        line_shift,
+        cursor,
+        display_on,
+        font_5x10,
+        cgrom,
+        background,
+        foreground,
+    } = input;
     // `font_5x10` reflects Function Set's raw F bit, stored regardless of geometry (real hardware
     // register behavior) -- rendering only honors it on a geometry with the physical common lines
     // a true 5×10 glyph needs (issue #603).
@@ -325,18 +340,18 @@ mod tests {
     fn display_off_renders_all_background() {
         let mut ddram = empty_ddram();
         ddram[0] = 0x41; // 'A' -- must not show through
-        let pixels = composite(
-            &ddram,
-            &blank_cgram(),
-            &SINGLE_ROW,
-            &[0, 0],
-            no_cursor(),
-            false,
-            false,
-            &CgRom::default(),
-            BG,
-            FG,
-        );
+        let pixels = composite(CompositeInput {
+            ddram: &ddram,
+            cgram: &blank_cgram(),
+            geometry: &SINGLE_ROW,
+            line_shift: &[0, 0],
+            cursor: no_cursor(),
+            display_on: false,
+            font_5x10: false,
+            cgrom: &CgRom::default(),
+            background: BG,
+            foreground: FG,
+        });
 
         assert_eq!(
             pixels.len(),
@@ -349,18 +364,18 @@ mod tests {
     fn ascii_glyph_composites_expected_pixels() {
         let mut ddram = empty_ddram();
         ddram[0] = 0x41; // 'A'
-        let pixels = composite(
-            &ddram,
-            &blank_cgram(),
-            &SINGLE_ROW,
-            &[0, 0],
-            no_cursor(),
-            true,
-            false,
-            &CgRom::default(),
-            BG,
-            FG,
-        );
+        let pixels = composite(CompositeInput {
+            ddram: &ddram,
+            cgram: &blank_cgram(),
+            geometry: &SINGLE_ROW,
+            line_shift: &[0, 0],
+            cursor: no_cursor(),
+            display_on: true,
+            font_5x10: false,
+            cgrom: &CgRom::default(),
+            background: BG,
+            foreground: FG,
+        });
         let width_px = SINGLE_ROW.columns as usize * CELL_WIDTH;
 
         // Row 0 of 'A' is lit at col 2 in the default (A00) CGROM.
@@ -373,18 +388,18 @@ mod tests {
     fn second_cell_composites_at_correct_column_offset() {
         let mut ddram = empty_ddram();
         ddram[1] = 0x41; // 'A' in the second visible column
-        let pixels = composite(
-            &ddram,
-            &blank_cgram(),
-            &SINGLE_ROW,
-            &[0, 0],
-            no_cursor(),
-            true,
-            false,
-            &CgRom::default(),
-            BG,
-            FG,
-        );
+        let pixels = composite(CompositeInput {
+            ddram: &ddram,
+            cgram: &blank_cgram(),
+            geometry: &SINGLE_ROW,
+            line_shift: &[0, 0],
+            cursor: no_cursor(),
+            display_on: true,
+            font_5x10: false,
+            cgrom: &CgRom::default(),
+            background: BG,
+            foreground: FG,
+        });
         let width_px = SINGLE_ROW.columns as usize * CELL_WIDTH;
 
         assert_eq!(
@@ -397,18 +412,18 @@ mod tests {
     fn dual_line_second_row_reads_from_second_ddram_line() {
         let mut ddram = empty_ddram();
         ddram[40] = 0x41; // 'A' at the start of the second physical line (raw address 0x40 folds to 40)
-        let pixels = composite(
-            &ddram,
-            &blank_cgram(),
-            &DUAL_ROW,
-            &[0, 0],
-            no_cursor(),
-            true,
-            false,
-            &CgRom::default(),
-            BG,
-            FG,
-        );
+        let pixels = composite(CompositeInput {
+            ddram: &ddram,
+            cgram: &blank_cgram(),
+            geometry: &DUAL_ROW,
+            line_shift: &[0, 0],
+            cursor: no_cursor(),
+            display_on: true,
+            font_5x10: false,
+            cgrom: &CgRom::default(),
+            background: BG,
+            foreground: FG,
+        });
         let width_px = DUAL_ROW.columns as usize * CELL_WIDTH;
         let second_display_row = 1;
 
@@ -433,18 +448,18 @@ mod tests {
     fn wide_dual_line_last_column_stays_in_bounds_and_reads_correct_cell() {
         let mut ddram = empty_ddram();
         ddram[79] = 0x41; // 'A' at the last physical byte of the second line
-        let pixels = composite(
-            &ddram,
-            &blank_cgram(),
-            &WIDE_DUAL_ROW,
-            &[0, 0],
-            no_cursor(),
-            true,
-            false,
-            &CgRom::default(),
-            BG,
-            FG,
-        );
+        let pixels = composite(CompositeInput {
+            ddram: &ddram,
+            cgram: &blank_cgram(),
+            geometry: &WIDE_DUAL_ROW,
+            line_shift: &[0, 0],
+            cursor: no_cursor(),
+            display_on: true,
+            font_5x10: false,
+            cgrom: &CgRom::default(),
+            background: BG,
+            foreground: FG,
+        });
         let width_px = WIDE_DUAL_ROW.columns as usize * CELL_WIDTH;
         let last_col = WIDE_DUAL_ROW.columns as usize - 1;
         let second_display_row = 1;
@@ -475,18 +490,18 @@ mod tests {
         let mut ddram = empty_ddram();
         ddram[20] = 0x41; // row 3's segment starts at raw 0x14, which folds to physical line 0, index 20
         ddram[60] = 0x41; // row 4's segment starts at raw 0x54, which folds to physical line 1, index 60
-        let pixels = composite(
-            &ddram,
-            &blank_cgram(),
-            &PAIRED_ROW_GEOMETRY,
-            &[0, 0],
-            no_cursor(),
-            true,
-            false,
-            &CgRom::default(),
-            BG,
-            FG,
-        );
+        let pixels = composite(CompositeInput {
+            ddram: &ddram,
+            cgram: &blank_cgram(),
+            geometry: &PAIRED_ROW_GEOMETRY,
+            line_shift: &[0, 0],
+            cursor: no_cursor(),
+            display_on: true,
+            font_5x10: false,
+            cgrom: &CgRom::default(),
+            background: BG,
+            foreground: FG,
+        });
         let width_px = PAIRED_ROW_GEOMETRY.columns as usize * CELL_WIDTH;
 
         // 'A' row 0 of the glyph has only the middle column set (see ascii_glyph_composites_expected_pixels).
@@ -507,18 +522,18 @@ mod tests {
         let mut ddram = empty_ddram();
         ddram[1] = 0x41; // 'A' one position to the right of the unshifted window
         // Shifting line 0 left by one brings ddram[1] into the first visible column.
-        let pixels = composite(
-            &ddram,
-            &blank_cgram(),
-            &SINGLE_ROW,
-            &[1, 0],
-            no_cursor(),
-            true,
-            false,
-            &CgRom::default(),
-            BG,
-            FG,
-        );
+        let pixels = composite(CompositeInput {
+            ddram: &ddram,
+            cgram: &blank_cgram(),
+            geometry: &SINGLE_ROW,
+            line_shift: &[1, 0],
+            cursor: no_cursor(),
+            display_on: true,
+            font_5x10: false,
+            cgrom: &CgRom::default(),
+            background: BG,
+            foreground: FG,
+        });
         let width_px = SINGLE_ROW.columns as usize * CELL_WIDTH;
 
         assert_eq!(pixel_at(&pixels, width_px, 2, 0), [FG.r, FG.g, FG.b, 0xFF]);
@@ -534,18 +549,18 @@ mod tests {
         let mut cgram = blank_cgram();
         let character_row = 3;
         cgram[2 * CELL_HEIGHT_5X8 + character_row] = 0b10101; // alternating pixels
-        let pixels = composite(
-            &ddram,
-            &cgram,
-            &SINGLE_ROW,
-            &[0, 0],
-            no_cursor(),
-            true,
-            false,
-            &CgRom::default(),
-            BG,
-            FG,
-        );
+        let pixels = composite(CompositeInput {
+            ddram: &ddram,
+            cgram: &cgram,
+            geometry: &SINGLE_ROW,
+            line_shift: &[0, 0],
+            cursor: no_cursor(),
+            display_on: true,
+            font_5x10: false,
+            cgrom: &CgRom::default(),
+            background: BG,
+            foreground: FG,
+        });
         let width_px = SINGLE_ROW.columns as usize * CELL_WIDTH;
 
         for (col, expect_set) in [(0, true), (1, false), (2, true), (3, false), (4, true)] {
@@ -575,18 +590,18 @@ mod tests {
         let character_group = 1;
         let last_rendered_row = 10;
         cgram[character_group * 16 + last_rendered_row] = 0b11111;
-        let pixels = composite(
-            &ddram,
-            &cgram,
-            &SINGLE_ROW,
-            &[0, 0],
-            no_cursor(),
-            true,
-            true,
-            &CgRom::default(),
-            BG,
-            FG,
-        );
+        let pixels = composite(CompositeInput {
+            ddram: &ddram,
+            cgram: &cgram,
+            geometry: &SINGLE_ROW,
+            line_shift: &[0, 0],
+            cursor: no_cursor(),
+            display_on: true,
+            font_5x10: true,
+            cgrom: &CgRom::default(),
+            background: BG,
+            foreground: FG,
+        });
         let width_px = SINGLE_ROW.columns as usize * CELL_WIDTH;
 
         for col in 0..CELL_WIDTH {
@@ -607,18 +622,18 @@ mod tests {
         let mut cgram = blank_cgram();
         let character_group = 1;
         cgram[character_group * 16 + 11] = 0b11111; // one row past the rendered 0..11 range
-        let pixels = composite(
-            &ddram,
-            &cgram,
-            &SINGLE_ROW,
-            &[0, 0],
-            no_cursor(),
-            true,
-            true,
-            &CgRom::default(),
-            BG,
-            FG,
-        );
+        let pixels = composite(CompositeInput {
+            ddram: &ddram,
+            cgram: &cgram,
+            geometry: &SINGLE_ROW,
+            line_shift: &[0, 0],
+            cursor: no_cursor(),
+            display_on: true,
+            font_5x10: true,
+            cgrom: &CgRom::default(),
+            background: BG,
+            foreground: FG,
+        });
 
         assert!(
             all_pixels_are(&pixels, BG),
@@ -630,18 +645,18 @@ mod tests {
     fn font_5x10_is_a_no_op_on_a_geometry_that_does_not_support_it() {
         let mut ddram = empty_ddram();
         ddram[0] = 0x41; // 'A'
-        let pixels = composite(
-            &ddram,
-            &blank_cgram(),
-            &DUAL_ROW,
-            &[0, 0],
-            no_cursor(),
-            true,
-            true,
-            &CgRom::default(),
-            BG,
-            FG,
-        );
+        let pixels = composite(CompositeInput {
+            ddram: &ddram,
+            cgram: &blank_cgram(),
+            geometry: &DUAL_ROW,
+            line_shift: &[0, 0],
+            cursor: no_cursor(),
+            display_on: true,
+            font_5x10: true,
+            cgrom: &CgRom::default(),
+            background: BG,
+            foreground: FG,
+        });
 
         // DUAL_ROW is not 5x10-capable, so the frame must still be sized for 8-row cells.
         assert_eq!(
@@ -658,18 +673,18 @@ mod tests {
             visible: true,
             blinking: false,
         };
-        let pixels = composite(
-            &ddram,
-            &blank_cgram(),
-            &SINGLE_ROW,
-            &[0, 0],
+        let pixels = composite(CompositeInput {
+            ddram: &ddram,
+            cgram: &blank_cgram(),
+            geometry: &SINGLE_ROW,
+            line_shift: &[0, 0],
             cursor,
-            true,
-            false,
-            &CgRom::default(),
-            BG,
-            FG,
-        );
+            display_on: true,
+            font_5x10: false,
+            cgrom: &CgRom::default(),
+            background: BG,
+            foreground: FG,
+        });
         let width_px = SINGLE_ROW.columns as usize * CELL_WIDTH;
         let bottom_row = CELL_HEIGHT_5X8 - 1;
 
@@ -691,18 +706,18 @@ mod tests {
             visible: true,
             blinking: true,
         };
-        let pixels = composite(
-            &ddram,
-            &blank_cgram(),
-            &SINGLE_ROW,
-            &[0, 0],
+        let pixels = composite(CompositeInput {
+            ddram: &ddram,
+            cgram: &blank_cgram(),
+            geometry: &SINGLE_ROW,
+            line_shift: &[0, 0],
             cursor,
-            true,
-            false,
-            &CgRom::default(),
-            BG,
-            FG,
-        );
+            display_on: true,
+            font_5x10: false,
+            cgrom: &CgRom::default(),
+            background: BG,
+            foreground: FG,
+        });
         let width_px = SINGLE_ROW.columns as usize * CELL_WIDTH;
 
         for row in 0..CELL_HEIGHT_5X8 {
@@ -724,18 +739,18 @@ mod tests {
             visible: false,
             blinking: true,
         };
-        let pixels = composite(
-            &ddram,
-            &blank_cgram(),
-            &SINGLE_ROW,
-            &[0, 0],
+        let pixels = composite(CompositeInput {
+            ddram: &ddram,
+            cgram: &blank_cgram(),
+            geometry: &SINGLE_ROW,
+            line_shift: &[0, 0],
             cursor,
-            true,
-            false,
-            &CgRom::default(),
-            BG,
-            FG,
-        );
+            display_on: true,
+            font_5x10: false,
+            cgrom: &CgRom::default(),
+            background: BG,
+            foreground: FG,
+        });
 
         assert!(all_pixels_are(&pixels, BG));
     }

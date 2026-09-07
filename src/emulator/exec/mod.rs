@@ -588,11 +588,13 @@ pub fn run_from(
             cpu,
             skip_pc,
             mem_view_addr,
-            stop_rx,
-            cmd_rx,
-            live_tx,
-            result_tx,
-            cpu_tx,
+            RunLoopChannels {
+                stop_rx,
+                cmd_rx,
+                live_tx,
+                result_tx,
+                cpu_tx,
+            },
             park_on_stall,
         );
     });
@@ -606,18 +608,31 @@ pub fn run_from(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// The channel endpoints [`run_loop`] reports through, counterparts to the ones [`RunHandle`]
+/// holds. Grouped into a struct because `run_loop` otherwise exceeds clippy's argument-count
+/// lint.
+struct RunLoopChannels {
+    stop_rx: watch::Receiver<bool>,
+    cmd_rx: mpsc::UnboundedReceiver<InterruptCommand>,
+    live_tx: watch::Sender<Option<CpuLiveSnapshot>>,
+    result_tx: oneshot::Sender<StepResult>,
+    cpu_tx: oneshot::Sender<Cpu>,
+}
+
 fn run_loop(
     mut cpu: Cpu,
     skip_pc: Option<u16>,
     mem_view_addr: Arc<AtomicU16>,
-    stop_rx: watch::Receiver<bool>,
-    mut cmd_rx: mpsc::UnboundedReceiver<InterruptCommand>,
-    live_tx: watch::Sender<Option<CpuLiveSnapshot>>,
-    result_tx: oneshot::Sender<StepResult>,
-    cpu_tx: oneshot::Sender<Cpu>,
+    channels: RunLoopChannels,
     park_on_stall: bool,
 ) {
+    let RunLoopChannels {
+        stop_rx,
+        mut cmd_rx,
+        live_tx,
+        result_tx,
+        cpu_tx,
+    } = channels;
     let start_cycles = cpu.cycles();
     let start_timestamp = Instant::now();
     let hz = cpu.clock_speed().hz_value();

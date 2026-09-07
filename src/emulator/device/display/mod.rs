@@ -188,28 +188,41 @@ pub struct CharDisplay {
     log_sender: LogSender,
 }
 
+/// Construction-time parameters for [`CharDisplay::new`]. Grouped into a struct because `new`
+/// otherwise exceeds clippy's argument-count lint.
+pub struct CharDisplayConfig {
+    pub name: &'static str,
+    /// Must span exactly `2 * columns * rows + 2` bytes; callers (the config module) are
+    /// responsible for computing it from `columns`/`rows`.
+    pub address_range: AddressRange,
+    pub columns: u32,
+    pub rows: u32,
+    pub double_buffered: bool,
+    /// The CPU's configured clock speed in Hz, or `None` if the CPU runs unthrottled
+    /// (`ClockSpeed::unlimited()`); see [`NOMINAL_CLOCK_HZ`].
+    pub clock_hz: Option<u64>,
+    pub frame_rate_hz: u32,
+    /// The glyph bitmap fixed at configuration time (spec §3, §7).
+    pub font: Font,
+    /// The color list fixed at configuration time (spec §3, §7); must be non-empty, per spec §3
+    /// -- the config module validates this before constructing the device.
+    pub palette: Vec<Rgb24>,
+}
+
 impl CharDisplay {
-    /// Creates a new device. `address_range` must span exactly `2 * columns * rows + 2` bytes;
-    /// callers (the config module) are responsible for computing it from `columns`/`rows`.
-    ///
-    /// `clock_hz` is the CPU's configured clock speed in Hz, or `None` if the CPU runs
-    /// unthrottled (`ClockSpeed::unlimited()`); see [`NOMINAL_CLOCK_HZ`].
-    ///
-    /// `font` and `palette` are the glyph bitmap and color list fixed at configuration time
-    /// (spec §3, §7); `palette` must be non-empty, per spec §3 -- the config module validates
-    /// this before constructing the device.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        name: &'static str,
-        address_range: AddressRange,
-        columns: u32,
-        rows: u32,
-        double_buffered: bool,
-        clock_hz: Option<u64>,
-        frame_rate_hz: u32,
-        font: Font,
-        palette: Vec<Rgb24>,
-    ) -> Self {
+    /// Creates a new device from `config`. See [`CharDisplayConfig`] for its fields' constraints.
+    pub fn new(config: CharDisplayConfig) -> Self {
+        let CharDisplayConfig {
+            name,
+            address_range,
+            columns,
+            rows,
+            double_buffered,
+            clock_hz,
+            frame_rate_hz,
+            font,
+            palette,
+        } = config;
         debug_assert!(
             !palette.is_empty(),
             "palette must be non-empty (validated by the config module)"
@@ -624,17 +637,17 @@ mod tests {
     }
 
     fn device(double_buffered: bool) -> CharDisplay {
-        CharDisplay::new(
-            DEVICE_NAME,
-            address_range(),
-            COLUMNS,
-            ROWS,
+        CharDisplay::new(CharDisplayConfig {
+            name: DEVICE_NAME,
+            address_range: address_range(),
+            columns: COLUMNS,
+            rows: ROWS,
             double_buffered,
-            Some(1_000_000),
-            100,
-            Font::default(),
-            compositing::default_palette(),
-        )
+            clock_hz: Some(1_000_000),
+            frame_rate_hz: 100,
+            font: Font::default(),
+            palette: compositing::default_palette(),
+        })
     }
 
     fn char_ram_addr(offset: u16) -> u16 {
@@ -871,17 +884,17 @@ mod tests {
 
     #[test]
     fn nominal_clock_used_when_clock_hz_unavailable() {
-        let mut device = CharDisplay::new(
-            DEVICE_NAME,
-            address_range(),
-            COLUMNS,
-            ROWS,
-            true,
-            None,
-            DEFAULT_FRAME_RATE_HZ,
-            Font::default(),
-            compositing::default_palette(),
-        );
+        let mut device = CharDisplay::new(CharDisplayConfig {
+            name: DEVICE_NAME,
+            address_range: address_range(),
+            columns: COLUMNS,
+            rows: ROWS,
+            double_buffered: true,
+            clock_hz: None,
+            frame_rate_hz: DEFAULT_FRAME_RATE_HZ,
+            font: Font::default(),
+            palette: compositing::default_palette(),
+        });
         let cycles_per_frame = NOMINAL_CLOCK_HZ / DEFAULT_FRAME_RATE_HZ as u64;
         device.tick(cycles_per_frame as u32 - 1);
         assert_eq!(device.peek(status_addr()) & STATUS_VSYNC, 0);
@@ -920,17 +933,17 @@ mod tests {
     fn font_and_palette_accessors_reflect_constructor_arguments() {
         let font = Font::default();
         let palette = vec![Rgb24::new(1, 2, 3), Rgb24::new(4, 5, 6)];
-        let device = CharDisplay::new(
-            DEVICE_NAME,
-            address_range(),
-            COLUMNS,
-            ROWS,
-            true,
-            Some(1_000_000),
-            100,
-            font.clone(),
-            palette.clone(),
-        );
+        let device = CharDisplay::new(CharDisplayConfig {
+            name: DEVICE_NAME,
+            address_range: address_range(),
+            columns: COLUMNS,
+            rows: ROWS,
+            double_buffered: true,
+            clock_hz: Some(1_000_000),
+            frame_rate_hz: 100,
+            font: font.clone(),
+            palette: palette.clone(),
+        });
         assert_eq!(device.font(), &font);
         assert_eq!(device.palette(), palette.as_slice());
     }

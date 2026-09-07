@@ -184,35 +184,46 @@ pub struct LedMatrix {
     external_transport: Option<Box<dyn Transport>>,
 }
 
-impl LedMatrix {
-    /// Creates a new device. `pixel_range` must span exactly `matrices * 1024` bytes and
-    /// `register_range` must span exactly 2 bytes (command register first, data register second);
-    /// callers (the config module) are responsible for computing both from `matrices` and the
-    /// configured `register-address` attribute. The two ranges must be disjoint -- enforced by
-    /// `BusConfig::device`/`extend_device`'s overlap check at configuration time, not by this
-    /// constructor.
-    ///
-    /// `clock_hz` is the CPU's configured clock speed in Hz, or `None` if the CPU runs
-    /// unthrottled (`ClockSpeed::unlimited()`); see
-    /// [`crate::emulator::device::display::NOMINAL_CLOCK_HZ`].
-    ///
-    /// `palette` is the initial 256-entry color palette (spec §2.1); it remains mutable at
-    /// runtime via `CMD_PALETTE_WRITE`.
-    ///
-    /// `cols` is the arrangement grid's column count (design doc §2.2), parsed from the required
-    /// `arrangement` config attribute; it must evenly divide `matrices` (in fact `matrices` is
+/// Construction-time parameters for [`LedMatrix::new`]. Grouped into a struct because `new`
+/// otherwise exceeds clippy's argument-count lint.
+pub struct LedMatrixConfig {
+    pub name: &'static str,
+    /// Must span exactly `matrices * 1024` bytes; callers (the config module) are responsible
+    /// for computing this from `matrices`.
+    pub pixel_range: AddressRange,
+    /// Must span exactly 2 bytes (command register first, data register second); callers (the
+    /// config module) are responsible for computing this from the configured `register-address`
+    /// attribute. Must be disjoint from `pixel_range` -- enforced by
+    /// `BusConfig::device`/`extend_device`'s overlap check at configuration time, not by
+    /// [`LedMatrix::new`].
+    pub register_range: AddressRange,
+    pub matrices: u32,
+    /// The arrangement grid's column count (design doc §2.2), parsed from the required
+    /// `arrangement` config attribute; must evenly divide `matrices` (in fact `matrices` is
     /// itself derived as `cols * rows` by the config module, so this always holds).
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        name: &'static str,
-        pixel_range: AddressRange,
-        register_range: AddressRange,
-        matrices: u32,
-        cols: u32,
-        clock_hz: Option<u64>,
-        frame_rate_hz: u32,
-        palette: Vec<Rgb565>,
-    ) -> Self {
+    pub cols: u32,
+    /// The CPU's configured clock speed in Hz, or `None` if the CPU runs unthrottled
+    /// (`ClockSpeed::unlimited()`); see [`crate::emulator::device::display::NOMINAL_CLOCK_HZ`].
+    pub clock_hz: Option<u64>,
+    pub frame_rate_hz: u32,
+    /// The initial 256-entry color palette (spec §2.1); it remains mutable at runtime via
+    /// `CMD_PALETTE_WRITE`.
+    pub palette: Vec<Rgb565>,
+}
+
+impl LedMatrix {
+    /// Creates a new device from `config`. See [`LedMatrixConfig`] for its fields' constraints.
+    pub fn new(config: LedMatrixConfig) -> Self {
+        let LedMatrixConfig {
+            name,
+            pixel_range,
+            register_range,
+            matrices,
+            cols,
+            clock_hz,
+            frame_rate_hz,
+            palette,
+        } = config;
         debug_assert!(
             (1..=8).contains(&matrices),
             "matrices must be 1..=8 (validated by the config module)"
@@ -643,16 +654,16 @@ mod tests {
     /// Builds a device with an explicit arrangement column count, for tests exercising
     /// arrangement-aware addressing (design doc §2.2).
     fn device_with_arrangement(matrices: u32, cols: u32) -> LedMatrix {
-        LedMatrix::new(
-            DEVICE_NAME,
-            pixel_range(matrices),
-            register_range(),
+        LedMatrix::new(LedMatrixConfig {
+            name: DEVICE_NAME,
+            pixel_range: pixel_range(matrices),
+            register_range: register_range(),
             matrices,
             cols,
-            Some(1_000_000),
-            100,
-            test_palette(),
-        )
+            clock_hz: Some(1_000_000),
+            frame_rate_hz: 100,
+            palette: test_palette(),
+        })
     }
 
     fn pixel_addr(offset: u16) -> u16 {
@@ -973,16 +984,16 @@ mod tests {
 
     #[test]
     fn nominal_clock_used_when_clock_hz_unavailable() {
-        let mut device = LedMatrix::new(
-            DEVICE_NAME,
-            pixel_range(1),
-            register_range(),
-            1,
-            1,
-            None,
-            super::super::display::DEFAULT_FRAME_RATE_HZ,
-            test_palette(),
-        );
+        let mut device = LedMatrix::new(LedMatrixConfig {
+            name: DEVICE_NAME,
+            pixel_range: pixel_range(1),
+            register_range: register_range(),
+            matrices: 1,
+            cols: 1,
+            clock_hz: None,
+            frame_rate_hz: super::super::display::DEFAULT_FRAME_RATE_HZ,
+            palette: test_palette(),
+        });
         let cycles_per_frame = super::super::display::NOMINAL_CLOCK_HZ
             / super::super::display::DEFAULT_FRAME_RATE_HZ as u64;
         device.write(pixel_addr(0), 0x41);

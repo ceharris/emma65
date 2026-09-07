@@ -6,7 +6,7 @@ use super::{
 use crate::emulator::bus::DeviceIdAllocator;
 use crate::emulator::device::lcd_display::cgrom::CgRom;
 use crate::emulator::device::lcd_display::compositing::Rgb24;
-use crate::emulator::device::lcd_display::{Geometry, LcdDisplay};
+use crate::emulator::device::lcd_display::{Geometry, LcdDisplay, LcdDisplayConfig};
 use crate::emulator::{AddressRange, BusConfig, IoDevice};
 use figment::providers::Serialized;
 use figment::value::{Dict, Value};
@@ -373,15 +373,15 @@ impl DeviceModule for LcdDisplayModule {
         // scale with any config attribute.
         let address_range = AddressRange::new(address, address + 1);
 
-        let mut device = LcdDisplay::new(
-            self.name(),
+        let mut device = LcdDisplay::new(LcdDisplayConfig {
+            name: self.name(),
             address_range,
             geometry,
-            context.clock_hz,
+            clock_hz: context.clock_hz,
             cgrom,
             background,
             foreground,
-        );
+        });
 
         if let Some(sender) = &context.log_sender {
             device.set_log_sender(sender.clone());
