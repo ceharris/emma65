@@ -8,6 +8,16 @@ name: Release
 # GitHub tag-filter globs don't support alternation, so the five known crate
 # names are enumerated explicitly. Adding a sixth artifact later is a
 # one-line addition here.
+#
+# The `push: tags:` trigger above looks sufficient but in practice never fires for this
+# repo's process: GitHub Actions dedupes check-suites by (repo, head_sha, app), and every
+# release tag points at a commit that was already pushed to `main` as part of merging the
+# version-bump PR — so it already has a completed Actions check-suite by the time it's
+# tagged, and the tag push creates no new one. `workflow_dispatch` is the real trigger in
+# practice: dispatch with `--ref main` (so the run picks up this trigger definition) and
+# `-f tag=<crate>-vX.Y.Z` naming the already-pushed tag; every job's checkout below pins to
+# that tag explicitly, so the build still comes from the tagged commit regardless of which
+# ref the workflow definition itself was read from.
 on:
   push:
     tags:
@@ -16,6 +26,12 @@ on:
       - 'emma65-led-matrix-v[0-9]+.[0-9]+.[0-9]+'
       - 'emma65-lcd-display-v[0-9]+.[0-9]+.[0-9]+'
       - 'emma65-debugger-v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build (must already exist), e.g. emma65-v0.1.0"
+        required: true
+        type: string
 
 env:
   CARGO_TERM_COLOR: always
@@ -25,27 +41,37 @@ jobs:
     name: Resolve tag and verify version
     runs-on: ubuntu-latest
     outputs:
+      tag: ${{ steps.parse.outputs.tag }}
       crate: ${{ steps.parse.outputs.crate }}
       version: ${{ steps.parse.outputs.version }}
       kind: ${{ steps.parse.outputs.kind }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Parse tag
         id: parse
         run: |
-          version="${GITHUB_REF_NAME##*-v}"
-          crate="${GITHUB_REF_NAME%-v${version}}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+          version="${tag##*-v}"
+          crate="${tag%-v${version}}"
           kind="cli"
           if [ "$crate" = "emma65-debugger" ]; then
             kind="debugger"
           fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "crate=$crate" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
 
       - name: Verify committed version matches tag
         run: |
+          tag="${{ steps.parse.outputs.tag }}"
           version="${{ steps.parse.outputs.version }}"
           crate="${{ steps.parse.outputs.crate }}"
 
@@ -56,7 +82,7 @@ jobs:
             emma65-lcd-display) cargo_toml="lcd-display/Cargo.toml" ;;
             emma65-debugger) cargo_toml="debugger/src-tauri/Cargo.toml" ;;
             *)
-              echo "::error::unrecognized crate '$crate' parsed from tag '$GITHUB_REF_NAME'"
+              echo "::error::unrecognized crate '$crate' parsed from tag '$tag'"
               exit 1
               ;;
           esac
@@ -125,6 +151,8 @@ jobs:
       packages: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -170,6 +198,8 @@ jobs:
       packages: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -236,7 +266,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
+          gh release create "${{ needs.resolve.outputs.tag }}" \
             --repo "${{ github.repository }}" \
             --title "${{ needs.resolve.outputs.crate }} ${{ needs.resolve.outputs.version }}" \
             --notes-file release-notes.md \
