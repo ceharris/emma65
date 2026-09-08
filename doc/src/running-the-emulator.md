@@ -24,8 +24,10 @@ Use `--config <file>` to load a TOML configuration file. Top-level keys map
 directly to emulator fields — there is no `[emulator]` wrapper:
 
 ```toml
-cpu-variant = "WDC65C02"   # or "65C02" (CMOS only, default)
-clock-speed-hz = 1843200   # omit for unlimited throughput
+cpu-variant = "WDC65C02"      # or "65C02" (CMOS only, default)
+clock-speed-hz = 1843200      # omit for unlimited throughput
+unmapped-policy = "ignore"    # or "error"; how unmapped-address accesses
+                               # are handled (default: "ignore")
 
 [[devices]]
 type = "ram"
@@ -56,6 +58,7 @@ and has no use for these flags.
 ```
 emma65 --cpu-variant WDC65C02 \
        --clock-speed-hz 1843200 \
+       --unmapped-policy error \
        --device ram@0x0000,size=32768,fill=0 \
        --device rom@0x8000,size=32768,image=~/roms/my.bin \
        --device console@0xFFF8,transport=pty:~/.emma/dev/ttyS0

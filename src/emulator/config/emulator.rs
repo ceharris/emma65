@@ -4,6 +4,7 @@ use crate::emulator::bus::DeviceIdAllocator;
 use crate::emulator::device::device_event_channel;
 use crate::emulator::{
     BusConfig, ClockSpeed, Cpu, CpuBuildError, CpuVariant, EmulatorSession, ErrorReceiver,
+    UnmappedPolicy,
 };
 use clap::Parser;
 use serde::{Deserialize, Serialize};
@@ -64,6 +65,61 @@ impl FromStr for CpuVariantSpec {
     }
 }
 
+/// Policy for accesses to unmapped bus addresses, as set via the top-level
+/// `unmapped-policy` configuration attribute.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub enum UnmappedPolicySpec {
+    /// Reads return a default value and writes are silently discarded.
+    Ignore,
+    /// Reads and writes to unmapped addresses return a `BusError::Unmapped`.
+    Error,
+}
+
+impl UnmappedPolicySpec {
+    fn to_unmapped_policy(&self) -> UnmappedPolicy {
+        match self {
+            UnmappedPolicySpec::Ignore => UnmappedPolicy::DefaultValue,
+            UnmappedPolicySpec::Error => UnmappedPolicy::Error,
+        }
+    }
+}
+
+impl Display for UnmappedPolicySpec {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnmappedPolicySpec::Ignore => write!(f, "ignore"),
+            UnmappedPolicySpec::Error => write!(f, "error"),
+        }
+    }
+}
+
+impl From<UnmappedPolicySpec> for String {
+    fn from(v: UnmappedPolicySpec) -> Self {
+        v.to_string()
+    }
+}
+
+impl TryFrom<String> for UnmappedPolicySpec {
+    type Error = String;
+
+    fn try_from(s: String) -> Result<Self, <Self as TryFrom<String>>::Error> {
+        s.parse()
+    }
+}
+
+impl FromStr for UnmappedPolicySpec {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "ignore" => Ok(UnmappedPolicySpec::Ignore),
+            "error" => Ok(UnmappedPolicySpec::Error),
+            _ => Err(format!("Invalid unmapped policy '{s}'")),
+        }
+    }
+}
+
 /// An error that occurs during emulator configuration or startup.
 #[derive(Debug)]
 pub enum BuildError {
@@ -112,6 +168,13 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[clap(long = "device", num_args = 1..)]
     pub devices: Option<Vec<DeviceSpec>>,
+
+    /// Policy for accesses to unmapped addresses: "ignore" (read as a default
+    /// value, discard writes) or "error" (fail the access). Defaults to
+    /// "ignore".
+    #[serde(rename = "unmapped-policy", skip_serializing_if = "Option::is_none")]
+    #[clap(long = "unmapped-policy")]
+    pub unmapped_policy: Option<UnmappedPolicySpec>,
 }
 
 impl Config {
@@ -173,6 +236,9 @@ impl Config {
             .cpu_variant_spec
             .as_ref()
             .map_or(CpuVariant::Cmos65C02, CpuVariantSpec::to_cpu_variant);
+        if let Some(policy) = &self.unmapped_policy {
+            bus_config = bus_config.unmapped_policy(policy.to_unmapped_policy());
+        }
         let vector_resolver = bus_config.take_vector_resolver();
         let bus = bus_config.build();
         let mut builder = Cpu::builder(variant)
@@ -238,6 +304,7 @@ mod tests {
                 "resolver-installer@0x1000".parse().unwrap(),
                 "resolver-installer@0x2000".parse().unwrap(),
             ]),
+            unmapped_policy: None,
         };
         let err = config.build(&registry).await.err().unwrap();
         assert!(matches!(
@@ -274,7 +341,48 @@ mod tests {
             cpu_variant_spec: None,
             clock_speed_hz: None,
             devices: Some(vec!["resolver-installer@0x1000".parse().unwrap()]),
+            unmapped_policy: None,
         };
         assert!(config.build(&registry).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn build_applies_unmapped_policy_error() {
+        let registry = DeviceRegistry::with_builtins();
+        let config = Config {
+            cpu_variant_spec: None,
+            clock_speed_hz: None,
+            devices: Some(vec!["ram@0x0000,size=256,fill=0".parse().unwrap()]),
+            unmapped_policy: Some(UnmappedPolicySpec::Error),
+        };
+        let mut session = config.build(&registry).await.unwrap();
+        assert!(matches!(
+            session.cpu.bus_mut().read(0x1000),
+            Err(crate::emulator::BusError::Unmapped { addr: 0x1000 })
+        ));
+    }
+
+    #[test]
+    fn unmapped_policy_toml_values_parse() {
+        use figment::Figment;
+        use figment::providers::{Format, Toml};
+
+        let config: Config = Figment::new()
+            .merge(Toml::string(r#"unmapped-policy = "error""#))
+            .extract()
+            .unwrap();
+        assert!(matches!(
+            config.unmapped_policy,
+            Some(UnmappedPolicySpec::Error)
+        ));
+
+        let config: Config = Figment::new()
+            .merge(Toml::string(r#"unmapped-policy = "ignore""#))
+            .extract()
+            .unwrap();
+        assert!(matches!(
+            config.unmapped_policy,
+            Some(UnmappedPolicySpec::Ignore)
+        ));
     }
 }

@@ -104,8 +104,8 @@ impl AppConfig {
 /// If `--profile <id>` was given, materializes that bundled starter-profile
 /// template into a fresh tempdir, loads it through the same
 /// `Figment`/`Toml::file()` path used for `--config`, and merges its devices
-/// into `config` — preserving any `cpu_variant_spec`/`clock_speed_hz`
-/// already set from CLI/env. Returns the tempdir handle (must be kept alive
+/// into `config` — preserving any `cpu_variant_spec`/`clock_speed_hz`/
+/// `unmapped_policy` already set from CLI/env. Returns the tempdir handle (must be kept alive
 /// until `Config::build()` completes).
 ///
 /// Unlike [`apply_default_if_unconfigured`]'s `.expect()`s — safe only
@@ -131,6 +131,11 @@ pub fn apply_named_profile(config: &mut AppConfig, id: &str) -> Result<tempfile:
         .clock_speed_hz
         .take()
         .or(template.clock_speed_hz);
+    config.emulator.unmapped_policy = config
+        .emulator
+        .unmapped_policy
+        .take()
+        .or(template.unmapped_policy);
     config.emulator.devices = template.devices;
     Ok(dir)
 }
@@ -139,8 +144,8 @@ pub fn apply_named_profile(config: &mut AppConfig, id: &str) -> Result<tempfile:
 /// configuration (ROM image, VICE labels, and `emulator.toml`) into a fresh
 /// tempdir, loads it through the same `Figment`/`Toml::file()` path used for
 /// a user-supplied `--config`, and merges its devices into `config` —
-/// preserving any `cpu_variant_spec`/`clock_speed_hz` already set from
-/// CLI/env/`--config`. Returns the tempdir handle (must be kept alive until
+/// preserving any `cpu_variant_spec`/`clock_speed_hz`/`unmapped_policy`
+/// already set from CLI/env/`--config`. Returns the tempdir handle (must be kept alive until
 /// `Config::build()` completes).
 pub fn apply_default_if_unconfigured(config: &mut AppConfig) -> Option<tempfile::TempDir> {
     if config
@@ -166,6 +171,11 @@ pub fn apply_default_if_unconfigured(config: &mut AppConfig) -> Option<tempfile:
             .clock_speed_hz
             .take()
             .or(default.clock_speed_hz);
+        config.emulator.unmapped_policy = config
+            .emulator
+            .unmapped_policy
+            .take()
+            .or(default.unmapped_policy);
         config.emulator.devices = default.devices;
         Some(dir)
     } else {
@@ -183,6 +193,7 @@ mod tests {
                 cpu_variant_spec: None,
                 clock_speed_hz: None,
                 devices: None,
+                unmapped_policy: None,
             },
             trace_file: None,
             log_file: None,
