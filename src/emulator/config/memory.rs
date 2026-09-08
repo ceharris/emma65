@@ -1,4 +1,5 @@
 use super::device::parse_suffixed_u32;
+use super::write_policy::WritePolicySpec;
 use super::{DeviceModule, DeviceModuleError, ExpandedPathBuf, InstantiationContext, loader};
 use crate::emulator::bus::{DeviceIdAllocator, symbol};
 use crate::emulator::{AddressRange, BusConfig};
@@ -31,6 +32,19 @@ pub struct MemoryAttributes {
     fill: Option<u8>,
     image: Option<ExpandedPathBuf>,
     labels: Option<ExpandedPathBuf>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RomAttributes {
+    #[serde(deserialize_with = "deserialize_size")]
+    size: u32,
+    offset: Option<isize>,
+    fill: Option<u8>,
+    image: Option<ExpandedPathBuf>,
+    labels: Option<ExpandedPathBuf>,
+    #[serde(rename = "write-policy", skip_serializing_if = "Option::is_none")]
+    write_policy: Option<WritePolicySpec>,
 }
 
 /// Accepts `size` either as a plain integer (as it would already be after parsing a `--device`
@@ -75,6 +89,16 @@ where
 }
 
 impl MemoryAttributes {
+    fn from_attributes(attributes: &HashMap<String, Value>) -> Result<Self, DeviceModuleError> {
+        let attrs = Dict::from_iter(attributes.clone());
+        figment::Figment::new()
+            .merge(Serialized::defaults(attrs))
+            .extract()
+            .map_err(|e| DeviceModuleError::Config(format!("configuration error: {e}")))
+    }
+}
+
+impl RomAttributes {
     fn from_attributes(attributes: &HashMap<String, Value>) -> Result<Self, DeviceModuleError> {
         let attrs = Dict::from_iter(attributes.clone());
         figment::Figment::new()
@@ -148,7 +172,7 @@ impl DeviceModule for RomModule {
         _context: &InstantiationContext,
         _id_allocator: Arc<Mutex<DeviceIdAllocator>>,
     ) -> Result<BusConfig, DeviceModuleError> {
-        let config = MemoryAttributes::from_attributes(attributes)?;
+        let config = RomAttributes::from_attributes(attributes)?;
         let range = AddressRange::new(address, address + (config.size - 1) as u16);
         let offset = config.offset.unwrap_or(0);
 
@@ -167,9 +191,14 @@ impl DeviceModule for RomModule {
                 .await
                 .map_err(DeviceModuleError::Load)?;
         }
-        bus_config
-            .rom(range, data)
-            .map_err(DeviceModuleError::BusConfig)
+        match config.write_policy {
+            Some(write_policy) => bus_config
+                .rom_with_write_policy(range, data, write_policy.to_rom_write_policy())
+                .map_err(DeviceModuleError::BusConfig),
+            None => bus_config
+                .rom(range, data)
+                .map_err(DeviceModuleError::BusConfig),
+        }
     }
 }
 
@@ -223,5 +252,46 @@ mod tests {
         attributes.insert("size".to_string(), Value::from("not-a-size"));
 
         assert!(MemoryAttributes::from_attributes(&attributes).is_err());
+    }
+
+    #[test]
+    fn rom_write_policy_defaults_to_none() {
+        let mut attributes = HashMap::new();
+        attributes.insert("size".to_string(), Value::from(32768));
+
+        let config = RomAttributes::from_attributes(&attributes).unwrap();
+
+        assert!(config.write_policy.is_none());
+    }
+
+    #[test]
+    fn rom_write_policy_accepts_ignore() {
+        let mut attributes = HashMap::new();
+        attributes.insert("size".to_string(), Value::from(32768));
+        attributes.insert("write-policy".to_string(), Value::from("ignore"));
+
+        let config = RomAttributes::from_attributes(&attributes).unwrap();
+
+        assert!(matches!(config.write_policy, Some(WritePolicySpec::Ignore)));
+    }
+
+    #[test]
+    fn rom_write_policy_accepts_error() {
+        let mut attributes = HashMap::new();
+        attributes.insert("size".to_string(), Value::from(32768));
+        attributes.insert("write-policy".to_string(), Value::from("error"));
+
+        let config = RomAttributes::from_attributes(&attributes).unwrap();
+
+        assert!(matches!(config.write_policy, Some(WritePolicySpec::Error)));
+    }
+
+    #[test]
+    fn rom_write_policy_rejects_invalid_string() {
+        let mut attributes = HashMap::new();
+        attributes.insert("size".to_string(), Value::from(32768));
+        attributes.insert("write-policy".to_string(), Value::from("bogus"));
+
+        assert!(RomAttributes::from_attributes(&attributes).is_err());
     }
 }

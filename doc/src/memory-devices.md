@@ -67,6 +67,9 @@ image = "~/roms/my.bin"    # .bin, .rom, .hex, .ihx, .ihex, .s19, .srec
   `image` (or, if negative, before it) at which loading begins.
 - `labels` (optional, path) — a VICE-format label file, for symbol
   resolution in the debugger and tracer.
+- `write-policy` (optional, `"ignore"` or `"error"`, default `"ignore"`) —
+  what happens when the 6502 program writes to this ROM region: silently
+  discard the write, or report it as a bus error.
 
 ## Bank-Switched Memory Modules
 

@@ -467,8 +467,24 @@ impl BusConfig {
 
     /// Maps a ROM region over `range`, pre-loaded with `data`.
     ///
+    /// Uses the bus's default ROM write policy (see [`rom_write_policy`](Self::rom_write_policy)).
     /// `data.len()` must equal `range.len()`.
-    pub fn rom(mut self, range: AddressRange, data: Vec<u8>) -> Result<Self, BusConfigError> {
+    pub fn rom(self, range: AddressRange, data: Vec<u8>) -> Result<Self, BusConfigError> {
+        let write_policy = self.rom_write_policy;
+        self.rom_with_write_policy(range, data, write_policy)
+    }
+
+    /// Maps a ROM region over `range`, pre-loaded with `data`, using an explicit write policy
+    /// for this region regardless of the bus's default (see
+    /// [`rom_write_policy`](Self::rom_write_policy)).
+    ///
+    /// `data.len()` must equal `range.len()`.
+    pub fn rom_with_write_policy(
+        mut self,
+        range: AddressRange,
+        data: Vec<u8>,
+        write_policy: RomWritePolicy,
+    ) -> Result<Self, BusConfigError> {
         let expected = range.len() as usize;
         if data.len() != expected {
             return Err(BusConfigError::RomSizeMismatch {
@@ -478,7 +494,6 @@ impl BusConfig {
             });
         }
         self.check_overlap(range)?;
-        let write_policy = self.rom_write_policy;
         self.regions.push(Region::Rom {
             range,
             data,
@@ -722,6 +737,33 @@ mod tests {
             .build();
         let result = bus.write(0xC010, 0x00);
         assert!(matches!(result, Err(BusError::RomWrite { addr: 0xC010 })));
+    }
+
+    #[test]
+    fn rom_with_write_policy_overrides_bus_default_independently() {
+        // The bus-wide default stays `Ignore`; this region explicitly opts into `Error`
+        // without mutating that default for any other region built afterward.
+        let data = vec![0xEAu8; 256];
+        let mut bus_config = Bus::config()
+            .rom_with_write_policy(
+                AddressRange::new(0xC000, 0xC0FF),
+                data,
+                RomWritePolicy::Error,
+            )
+            .unwrap();
+        assert_eq!(bus_config.rom_write_policy, RomWritePolicy::Ignore);
+
+        let other_data = vec![0xEAu8; 256];
+        bus_config = bus_config
+            .rom(AddressRange::new(0xD000, 0xD0FF), other_data)
+            .unwrap();
+
+        let mut bus = bus_config.build();
+        assert!(matches!(
+            bus.write(0xC010, 0x00),
+            Err(BusError::RomWrite { addr: 0xC010 })
+        ));
+        assert!(bus.write(0xD010, 0x00).is_ok());
     }
 
     #[test]
