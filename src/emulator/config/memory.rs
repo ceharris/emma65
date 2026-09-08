@@ -1,6 +1,7 @@
 use super::device::parse_suffixed_u32;
+use super::write_policy::WritePolicySpec;
 use super::{DeviceModule, DeviceModuleError, ExpandedPathBuf, InstantiationContext, loader};
-use crate::emulator::bus::{DeviceIdAllocator, symbol};
+use crate::emulator::bus::{DeviceIdAllocator, RomWritePolicy, symbol};
 use crate::emulator::{AddressRange, BusConfig};
 use figment::providers::Serialized;
 use figment::value::{Dict, Value};
@@ -31,6 +32,30 @@ pub struct MemoryAttributes {
     fill: Option<u8>,
     image: Option<ExpandedPathBuf>,
     labels: Option<ExpandedPathBuf>,
+}
+
+/// Configuration attributes for the ROM device, which additionally accepts a `write-policy`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RomAttributes {
+    #[serde(deserialize_with = "deserialize_size")]
+    size: u32,
+    offset: Option<isize>,
+    fill: Option<u8>,
+    image: Option<ExpandedPathBuf>,
+    labels: Option<ExpandedPathBuf>,
+    #[serde(rename = "write-policy", skip_serializing_if = "Option::is_none")]
+    write_policy: Option<WritePolicySpec>,
+}
+
+impl RomAttributes {
+    fn from_attributes(attributes: &HashMap<String, Value>) -> Result<Self, DeviceModuleError> {
+        let attrs = Dict::from_iter(attributes.clone());
+        figment::Figment::new()
+            .merge(Serialized::defaults(attrs))
+            .extract()
+            .map_err(|e| DeviceModuleError::Config(format!("configuration error: {e}")))
+    }
 }
 
 /// Accepts `size` either as a plain integer (as it would already be after parsing a `--device`
@@ -148,7 +173,7 @@ impl DeviceModule for RomModule {
         _context: &InstantiationContext,
         _id_allocator: Arc<Mutex<DeviceIdAllocator>>,
     ) -> Result<BusConfig, DeviceModuleError> {
-        let config = MemoryAttributes::from_attributes(attributes)?;
+        let config = RomAttributes::from_attributes(attributes)?;
         let range = AddressRange::new(address, address + (config.size - 1) as u16);
         let offset = config.offset.unwrap_or(0);
 
@@ -167,7 +192,11 @@ impl DeviceModule for RomModule {
                 .await
                 .map_err(DeviceModuleError::Load)?;
         }
+        let write_policy = config
+            .write_policy
+            .map_or(RomWritePolicy::Ignore, |spec| spec.to_rom_write_policy());
         bus_config
+            .rom_write_policy(write_policy)
             .rom(range, data)
             .map_err(DeviceModuleError::BusConfig)
     }

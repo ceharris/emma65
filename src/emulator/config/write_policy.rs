@@ -7,6 +7,7 @@ use std::str::FromStr;
 #[serde(try_from = "String", into = "String")]
 pub enum WritePolicySpec {
     Ignore,
+    Log,
     Error,
 }
 
@@ -14,6 +15,7 @@ impl WritePolicySpec {
     pub fn to_rom_write_policy(&self) -> RomWritePolicy {
         match self {
             WritePolicySpec::Ignore => RomWritePolicy::Ignore,
+            WritePolicySpec::Log => RomWritePolicy::Log,
             WritePolicySpec::Error => RomWritePolicy::Error,
         }
     }
@@ -23,6 +25,7 @@ impl Display for WritePolicySpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             WritePolicySpec::Ignore => write!(f, "ignore"),
+            WritePolicySpec::Log => write!(f, "log"),
             WritePolicySpec::Error => write!(f, "error"),
         }
     }
@@ -50,9 +53,10 @@ impl FromStr for WritePolicySpec {
         let ls = lower_s.as_str();
         match ls {
             "ignore" => Ok(WritePolicySpec::Ignore),
+            "log" => Ok(WritePolicySpec::Log),
             "error" => Ok(WritePolicySpec::Error),
             _ => Err(format!(
-                "Invalid write policy '{s}'; try 'ignore' or 'error'"
+                "Invalid write policy '{s}'; try 'ignore', 'log', or 'error'"
             )),
         }
     }

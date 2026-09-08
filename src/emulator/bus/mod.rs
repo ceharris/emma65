@@ -14,6 +14,7 @@ pub use symbol::{SymbolSource, SymbolTable};
 use crate::emulator::cpu::vector::VectorResolver;
 use crate::emulator::device::{DeviceId, IoDevice};
 use crate::emulator::error::{BusConfigError, BusError};
+use crate::emulator::logging::{LogCategory, LogLevel, LogSender, log_msg};
 
 /// Value returned on reads from unmapped addresses when `UnmappedPolicy::DefaultValue` is active.
 const UNMAPPED_READ_VALUE: u8 = 0xFF;
@@ -32,6 +33,8 @@ pub enum UnmappedPolicy {
 pub enum RomWritePolicy {
     /// Silently ignore writes to ROM.
     Ignore,
+    /// Silently ignore writes to ROM, but log each attempt.
+    Log,
     /// Return a `BusError::RomWrite` error.
     Error,
 }
@@ -127,6 +130,7 @@ pub struct Bus {
     unmapped_policy: UnmappedPolicy,
     symbol_table: SymbolTable,
     resolved: Box<[Option<u32>]>,
+    log_sender: LogSender,
 }
 
 impl Bus {
@@ -151,13 +155,18 @@ impl Bus {
 
     /// Writes one byte to `addr`, triggering device side effects if an IO device is mapped there.
     pub fn write(&mut self, addr: u16, value: u8) -> Result<(), BusError> {
-        match self.find_region_mut(addr) {
+        let mut log_ignored_rom_write = false;
+        let result = match self.find_region_mut(addr) {
             Some(RegionMatch::Ram { data, offset }) => {
                 data[offset] = value;
                 Ok(())
             }
-            Some(RegionMatch::Rom { write_policy, .. }) => match &write_policy {
+            Some(RegionMatch::Rom { write_policy, .. }) => match write_policy {
                 RomWritePolicy::Ignore => Ok(()),
+                RomWritePolicy::Log => {
+                    log_ignored_rom_write = true;
+                    Ok(())
+                }
                 RomWritePolicy::Error => Err(BusError::RomWrite { addr }),
             },
             Some(RegionMatch::Device { device, addr }) => {
@@ -168,8 +177,16 @@ impl Bus {
                 UnmappedPolicy::DefaultValue => Ok(()),
                 UnmappedPolicy::Error => Err(BusError::Unmapped { addr }),
             },
-        }?;
-        Ok(())
+        };
+        if log_ignored_rom_write {
+            log_msg!(
+                self.log_sender,
+                LogLevel::Warn,
+                LogCategory::Device,
+                "rom write ignored at 0x{addr:04x}"
+            );
+        }
+        result
     }
 
     /// Reads one byte from `addr` without triggering device side effects.
@@ -386,6 +403,7 @@ pub struct BusConfig {
     /// Drained by [`take_vector_resolver`](Self::take_vector_resolver) and chained onto
     /// the `CpuBuilder` at construction time.
     vector_resolver: Option<Box<dyn VectorResolver>>,
+    log_sender: LogSender,
 }
 
 impl BusConfig {
@@ -398,6 +416,7 @@ impl BusConfig {
             rom_write_policy: RomWritePolicy::Ignore,
             symbol_table: SymbolTable::new(),
             vector_resolver: None,
+            log_sender: LogSender::default(),
         }
     }
 
@@ -415,6 +434,12 @@ impl BusConfig {
     /// Sets the default policy for writes to ROM regions (can be overridden per region).
     pub fn rom_write_policy(mut self, policy: RomWritePolicy) -> Self {
         self.rom_write_policy = policy;
+        self
+    }
+
+    /// Installs a log sender for diagnostic messages (e.g. logging a `RomWritePolicy::Log` write attempt).
+    pub fn log_sender(mut self, sender: LogSender) -> Self {
+        self.log_sender = sender;
         self
     }
 
@@ -566,6 +591,7 @@ impl BusConfig {
             unmapped_policy: self.unmapped_policy,
             symbol_table: self.symbol_table,
             resolved,
+            log_sender: self.log_sender,
         }
     }
 
@@ -722,6 +748,23 @@ mod tests {
             .build();
         let result = bus.write(0xC010, 0x00);
         assert!(matches!(result, Err(BusError::RomWrite { addr: 0xC010 })));
+    }
+
+    #[test]
+    fn rom_read_only_log_policy_ignores_write_and_logs_it() {
+        let (sender, rx) = crate::emulator::logging::test_channel_sender(4);
+        let data = vec![0xEAu8; 256];
+        let mut bus = Bus::config()
+            .log_sender(sender)
+            .rom_write_policy(RomWritePolicy::Log)
+            .rom(AddressRange::new(0xC000, 0xC0FF), data)
+            .unwrap()
+            .build();
+        bus.write(0xC010, 0x00).unwrap();
+        assert_eq!(bus.read(0xC010).unwrap(), 0xEA);
+        let received = rx.recv().unwrap();
+        assert_eq!(received.category, LogCategory::Device);
+        assert_eq!(received.message, "rom write ignored at 0xc010");
     }
 
     #[test]

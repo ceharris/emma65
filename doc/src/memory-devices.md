@@ -42,8 +42,8 @@ size = 32768               # or the quoted string "32K"
 
 ## ROM (`rom`)
 
-A block of read-only memory mapped into any address range on the bus.
-Writes are silently discarded.
+A block of read-only memory mapped into any address range on the bus. By
+default, writes are silently discarded.
 
 ```toml
 [[devices]]
@@ -67,6 +67,10 @@ image = "~/roms/my.bin"    # .bin, .rom, .hex, .ihx, .ihex, .s19, .srec
   `image` (or, if negative, before it) at which loading begins.
 - `labels` (optional, path) — a VICE-format label file, for symbol
   resolution in the debugger and tracer.
+- `write-policy` (optional, `"ignore"`, `"log"`, or `"error"`, default
+  `"ignore"`) — what happens when the 6502 program writes to this region:
+  silently discard the write, discard it but record it in the log, or report
+  it as a bus error.
 
 ## Bank-Switched Memory Modules
 
@@ -84,9 +88,10 @@ share these attributes:
   within the module's ROM region.
 - `labels` (optional, path) — a VICE-format label file, for symbol
   resolution in the debugger and tracer.
-- `write-policy` (optional, `"ignore"` or `"error"`, default `"ignore"`) —
-  what happens when the 6502 program writes to ROM: silently discard the
-  write, or report it as a bus error.
+- `write-policy` (optional, `"ignore"`, `"log"`, or `"error"`, default
+  `"ignore"`) — what happens when the 6502 program writes to ROM: silently
+  discard the write, discard it but record it in the log, or report it as a
+  bus error.
 - `fill` (optional, byte) — value used to initialize any ROM bytes the
   image doesn't cover.
 

@@ -214,6 +214,9 @@ impl Config {
         error_receiver: ErrorReceiver,
     ) -> Result<EmulatorSession, BuildError> {
         let mut bus_config = BusConfig::new();
+        if let Some(sender) = &context.log_sender {
+            bus_config = bus_config.log_sender(sender.clone());
+        }
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
         for spec in self.devices.iter().flatten() {
             bus_config = registry

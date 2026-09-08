@@ -190,6 +190,67 @@ async fn rom_module_with_binary_image() {
     }
 }
 
+#[tokio::test]
+async fn rom_module_defaults_to_ignore_write_policy() {
+    let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
+    let a = attrs(&[("size", Value::from(64u32)), ("fill", Value::from(0xEAu32))]);
+    let bus_config = RomModule
+        .instantiate(BusConfig::new(), 0x8000, &a, &ctx(), id_allocator)
+        .await
+        .unwrap();
+    let mut bus = bus_config.build();
+    bus.write(0x8000, 0x00).unwrap();
+    assert_eq!(bus.read(0x8000).unwrap(), 0xEA);
+}
+
+#[tokio::test]
+async fn rom_module_with_write_policy_error_rejects_write() {
+    let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
+    let a = attrs(&[
+        ("size", Value::from(64u32)),
+        ("fill", Value::from(0xEAu32)),
+        ("write-policy", Value::from("error")),
+    ]);
+    let bus_config = RomModule
+        .instantiate(BusConfig::new(), 0x8000, &a, &ctx(), id_allocator)
+        .await
+        .unwrap();
+    let mut bus = bus_config.build();
+    assert!(bus.write(0x8000, 0x00).is_err());
+}
+
+#[tokio::test]
+async fn rom_module_with_write_policy_log_ignores_write() {
+    let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
+    let a = attrs(&[
+        ("size", Value::from(64u32)),
+        ("fill", Value::from(0xEAu32)),
+        ("write-policy", Value::from("log")),
+    ]);
+    let bus_config = RomModule
+        .instantiate(BusConfig::new(), 0x8000, &a, &ctx(), id_allocator)
+        .await
+        .unwrap();
+    let mut bus = bus_config.build();
+    bus.write(0x8000, 0x00).unwrap();
+    assert_eq!(bus.read(0x8000).unwrap(), 0xEA);
+}
+
+#[tokio::test]
+async fn rom_module_rejects_unknown_write_policy() {
+    let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
+    let a = attrs(&[
+        ("size", Value::from(64u32)),
+        ("write-policy", Value::from("bogus")),
+    ]);
+    let err = RomModule
+        .instantiate(BusConfig::new(), 0x8000, &a, &ctx(), id_allocator)
+        .await
+        .err()
+        .unwrap();
+    assert!(matches!(err, DeviceModuleError::Config(_)));
+}
+
 // ---------------------------------------------------------------------------
 // Group D — DeviceRegistry dispatch
 // ---------------------------------------------------------------------------

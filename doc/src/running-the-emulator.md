@@ -171,7 +171,7 @@ EMMA65_CLOCK_SPEED_HZ=1843200
 | Type            | Registers | Key attributes                                                                     |
 |-----------------|:---------:|-------------------------------------------------------------------------------------|
 | `ram`           |     —     | `size` (required, integer bytes or quoted `"K"`/`"k"`-suffixed string), `fill` (optional byte), `image` (optional path) |
-| `rom`           |     —     | `size` (required, integer bytes or quoted `"K"`/`"k"`-suffixed string), `image` (required path), `fill` (optional byte) |
+| `rom`           |     —     | `size` (required, integer bytes or quoted `"K"`/`"k"`-suffixed string), `image` (required path), `write-policy`, `fill` (all optional) |
 | `console`       |     2     | `transport` (optional), `break` (optional byte: break-key code)                     |
 | `acia/6551`     |     4     | `transport` (optional), `with-tdre-bug` (bool), `with-overrun` (bool)               |
 | `acia/6850`     |     2     | `transport` (optional)                                                              |

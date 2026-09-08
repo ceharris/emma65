@@ -187,6 +187,17 @@ impl Vireo {
         }
     }
 
+    fn log_ignored_write(&self, address: u16) {
+        log_msg!(
+            self.log_sender,
+            LogLevel::Warn,
+            LogCategory::Device,
+            "{} ignored write at 0x{:04x}",
+            self.identity(),
+            address
+        );
+    }
+
     fn control_register(&self) -> u8 {
         (if self.window_inhibit {
             CTRL_WINDOW_INHIBIT
@@ -236,6 +247,7 @@ impl IoDevice for Vireo {
             } else if let Some(write_policy) = self.write_policy {
                 match write_policy {
                     RomWritePolicy::Ignore => (),
+                    RomWritePolicy::Log => self.log_ignored_write(address),
                     RomWritePolicy::Error => self.report_rejected_write(address),
                 }
             }
@@ -558,6 +570,22 @@ mod tests {
         device.set_write_policy(RomWritePolicy::Ignore);
         device.write(0xFFFF, 0);
         assert_eq!(device.rom_data[0x7FFF], 0xFF);
+    }
+
+    #[test]
+    fn write_rom_ignored_and_logged_when_policy_is_log() {
+        let (sender, rx) = crate::emulator::logging::test_channel_sender(4);
+        let mut device = device();
+        device.set_log_sender(sender);
+        device.set_write_policy(RomWritePolicy::Log);
+        device.write(0xFFFF, 0);
+        assert_eq!(device.rom_data[0x7FFF], 0xFF);
+        let received = rx.recv().unwrap();
+        assert_eq!(received.category, LogCategory::Device);
+        assert_eq!(
+            received.message,
+            format!("{DEVICE_NAME}@0x{CTRL_REGISTER_ADDRESS:04x} ignored write at 0xffff")
+        );
     }
 
     #[test]
