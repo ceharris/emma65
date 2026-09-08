@@ -149,10 +149,15 @@ than a silent misconfiguration.
 Address resolution is a one-time cost paid when the configuration loads, so
 reads and writes at runtime are effectively free regardless of how many
 devices are configured — bus overhead stays out of the way of maximum
-emulated CPU throughput. Bus errors (unmapped reads/writes, ROM write
-violations) are reported back to whichever tool is running the CPU (the
-`emma65` CLI, the debugger, or the tracer) so it can decide how to respond —
-typically by halting and reporting the error.
+emulated CPU throughput. By default, accesses to addresses not covered by any
+configured region are silently ignored (reads return `0xFF`, writes are
+discarded), matching how unpopulated address space typically behaves on real
+hardware. Set `unmapped-policy = "error"` (TOML) or `--unmapped-policy error`
+(CLI) to instead treat these as bus errors — useful when tracking down a
+program that's straying outside its intended memory map. Bus errors (this
+setting, and ROM write violations) are reported back to whichever tool is
+running the CPU (the `emma65` CLI, the debugger, or the tracer) so it can
+decide how to respond — typically by halting and reporting the error.
 
 ### Memory-Mapped I/O Devices
 

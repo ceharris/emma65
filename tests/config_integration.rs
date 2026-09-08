@@ -27,6 +27,7 @@ fn config_with_devices(devices: Option<Vec<&str>>) -> Config {
         cpu_variant_spec: None,
         clock_speed_hz: None,
         devices: devices.map(|specs| specs.into_iter().map(|s| s.parse().unwrap()).collect()),
+        unmapped_policy: None,
     }
 }
 
@@ -57,6 +58,7 @@ async fn build_with_cmos65c02_variant() {
         cpu_variant_spec: Some(CpuVariantSpec::Cmos6502),
         clock_speed_hz: None,
         devices: Some(vec!["ram@0x0000,size=65536,fill=0".parse().unwrap()]),
+        unmapped_policy: None,
     };
     config.build(&registry).await.unwrap();
 }
@@ -68,6 +70,7 @@ async fn build_with_wdc65c02_variant() {
         cpu_variant_spec: Some(CpuVariantSpec::Wdc6502),
         clock_speed_hz: None,
         devices: Some(vec!["ram@0x0000,size=65536,fill=0".parse().unwrap()]),
+        unmapped_policy: None,
     };
     config.build(&registry).await.unwrap();
 }
