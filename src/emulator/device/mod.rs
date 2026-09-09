@@ -39,7 +39,7 @@ pub use protocol::{ProtocolMessageDecoder, ProtocolMessageEncoder, ProtocolMessa
 
 use tokio::sync::mpsc;
 
-use crate::emulator::{LogCategory, LogLevel, LogSender, log_msg};
+use crate::emulator::{BusError, LogCategory, LogLevel, LogSender, log_msg};
 
 /// Uniquely identifies a device registered on the bus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -220,6 +220,14 @@ pub async fn log_device_events(mut receiver: ErrorReceiver, sender: LogSender) {
 pub trait IoDevice: Send {
     /// Reads a byte at the absolute bus address `address`, with side effects.
     fn read(&mut self, address: u16) -> u8;
+
+    /// Tests whether a given address is writable.
+    ///
+    /// Returns `Ok` by default; implementations that guard part of their address space
+    /// (e.g. a ROM region) override this to reject writes there instead.
+    fn check_writability(&self, _address: u16) -> Result<(), BusError> {
+        Ok(())
+    }
 
     /// Writes `value` at the absolute bus address `address`.
     fn write(&mut self, address: u16, value: u8);

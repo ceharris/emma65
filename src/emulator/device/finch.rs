@@ -80,9 +80,9 @@
 //!         STA $FFD8       ; store the new config register state
 //! ```
 //!
-use crate::emulator::AddressRange;
 use crate::emulator::bus::RomWritePolicy;
-use crate::emulator::device::{ErrorSender, IoDevice};
+use crate::emulator::device::IoDevice;
+use crate::emulator::{AddressRange, BusError};
 use crate::emulator::{LogCategory, LogLevel, LogSender, log_msg};
 
 const NUM_SLOTS: usize = 16;
@@ -106,10 +106,8 @@ pub struct Finch {
     bank_register_range: AddressRange,
     /// Address for the control register
     control_register_address: u16,
-    /// Write policy to apply for attempted write operations on ROM
+    /// Policy to apply for attempted writes to ROM
     write_policy: Option<RomWritePolicy>,
-    /// Destination for error events.
-    error_sender: Option<ErrorSender>,
     /// Bank selection registers
     bank_registers: [u8; NUM_SLOTS],
     /// Control register image
@@ -140,7 +138,6 @@ impl Finch {
             ),
             control_register_address,
             write_policy: None,
-            error_sender: None,
             bank_registers: [0; NUM_SLOTS],
             control_register: 0,
             data: Vec::new(),
@@ -179,24 +176,9 @@ impl Finch {
         self.write_policy = Some(write_policy);
     }
 
-    /// Sets the error sender for event reporting.
-    pub fn set_error_sender(&mut self, sender: ErrorSender) {
-        self.error_sender = Some(sender);
-    }
-
     /// Installs a log sender for diagnostic messages (e.g. `reset()`).
     pub fn set_log_sender(&mut self, sender: LogSender) {
         self.log_sender = sender;
-    }
-
-    fn report_rejected_write(&self, address: u16) {
-        if let Some(sender) = &self.error_sender {
-            use crate::emulator::device::DeviceEvent;
-            let _ = sender.send(DeviceEvent::RejectedWrite {
-                device: self.identity(),
-                address,
-            });
-        }
     }
 
     fn mmu_enabled(&self) -> bool {
@@ -221,6 +203,19 @@ impl IoDevice for Finch {
         self.peek(address)
     }
 
+    fn check_writability(&self, address: u16) -> Result<(), BusError> {
+        if self.effective_address(address) >= ROM_START
+            && let Some(write_policy) = self.write_policy
+        {
+            match write_policy {
+                RomWritePolicy::Ignore => Ok(()),
+                RomWritePolicy::Error => Err(BusError::RomWrite { addr: address }),
+            }
+        } else {
+            Ok(())
+        }
+    }
+
     fn write(&mut self, address: u16, value: u8) {
         if address == self.control_register_address {
             self.control_register = value
@@ -230,11 +225,6 @@ impl IoDevice for Finch {
             let effective_address = self.effective_address(address);
             if effective_address < ROM_START {
                 self.data[effective_address] = value;
-            } else if let Some(write_policy) = self.write_policy {
-                match write_policy {
-                    RomWritePolicy::Ignore => (),
-                    RomWritePolicy::Error => self.report_rejected_write(address),
-                }
             }
         }
     }
@@ -287,8 +277,6 @@ impl IoDevice for Finch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::emulator::DeviceEvent;
-    use tokio::sync::mpsc;
 
     const DEVICE_NAME: &str = "finch";
     const BANK_REGISTER_BASE: u16 = 0xFFC0;
@@ -409,7 +397,7 @@ mod tests {
     }
 
     #[test]
-    fn write_rom_ignored_when_policy_is_none() {
+    fn write_rom_ignored() {
         let mut device = device();
         device.data[0x87FFF] = 0xFF;
         device.write(0xFFFF, 0);
@@ -417,35 +405,32 @@ mod tests {
     }
 
     #[test]
-    fn write_rom_ignored_when_policy_is_ignore() {
-        let mut device = device();
-        device.set_write_policy(RomWritePolicy::Ignore);
-        device.data[0x87FFF] = 0xFF;
-        device.write(0xFFFF, 0);
-        assert_eq!(device.data[0x87FFF], 0xFF);
+    fn check_writability_ram_is_ok() {
+        let device = device();
+        assert!(matches!(device.check_writability(0x01FF), Ok(())));
     }
 
-    #[tokio::test]
-    async fn write_rom_reports_rejected_write_when_policy_is_error() {
+    #[test]
+    fn check_writability_rom_is_ok_when_policy_is_none() {
+        let device = device();
+        assert!(matches!(device.check_writability(0xFFFF), Ok(())));
+    }
+
+    #[test]
+    fn check_writability_ok_when_policy_is_ignore() {
         let mut device = device();
-        let (tx, mut rx) = mpsc::unbounded_channel::<DeviceEvent>();
-        device.set_error_sender(tx);
+        device.set_write_policy(RomWritePolicy::Ignore);
+        assert!(matches!(device.check_writability(0xFFFF), Ok(())));
+    }
+
+    #[test]
+    fn check_writability_bus_error_when_policy_is_error() {
+        let mut device = device();
         device.set_write_policy(RomWritePolicy::Error);
-
-        device.write(0xFFFF, 0);
-
-        match rx.try_recv() {
-            Ok(event) => {
-                assert!(matches!(
-                    event,
-                    DeviceEvent::RejectedWrite {
-                        address: 0xFFFF,
-                        ..
-                    }
-                ));
-            }
-            Err(e) => panic!("Expected a DeviceEvent, but channel was empty: {:?}", e),
-        }
+        assert!(matches!(
+            device.check_writability(0xFFFF),
+            Err(BusError::RomWrite { addr: 0xFFFF })
+        ));
     }
 
     #[test]
