@@ -67,7 +67,7 @@ impl DeviceModule for PhoebeModule {
         };
 
         let mut rom_data = super::memory::make_buffer(phoebe::ROM_SIZE, config.fill);
-        let ram_data = super::memory::make_buffer(phoebe::ROM_SIZE, config.ram_fill);
+        let ram_data = super::memory::make_buffer(phoebe::RAM_SIZE, config.ram_fill);
         loader::load_image(&config.image, &mut rom_data, offset)
             .await
             .map_err(DeviceModuleError::Load)?;
@@ -80,9 +80,6 @@ impl DeviceModule for PhoebeModule {
             );
             if let Some(write_policy) = config.write_policy {
                 dev.set_write_policy(write_policy.to_rom_write_policy());
-            }
-            if let Some(sender) = &context.error_sender {
-                dev.set_error_sender(sender.clone());
             }
             if let Some(sender) = &context.log_sender {
                 dev.set_log_sender(sender.clone());

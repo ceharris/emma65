@@ -57,9 +57,9 @@
 //! effectively maps 4K at `0x1F000` into the window at `0xC000`, and 4K at `0x10000` into the
 //! window at `0xD000`.
 //!
-use crate::emulator::AddressRange;
 use crate::emulator::bus::RomWritePolicy;
-use crate::emulator::device::{ErrorSender, IoDevice};
+use crate::emulator::device::IoDevice;
+use crate::emulator::{AddressRange, BusError};
 use crate::emulator::{LogCategory, LogLevel, LogSender, log_msg};
 
 pub const RAM_SIZE: usize = 128 * 1024;
@@ -83,8 +83,6 @@ pub struct Vireo {
     control_register_address: u16,
     /// Write policy to apply for attempted write operations on ROM
     write_policy: Option<RomWritePolicy>,
-    /// Destination for error events.
-    error_sender: Option<ErrorSender>,
     /// Range of addresses that optionally map to ROM
     rom_range: AddressRange,
     /// Range of addresses that optionally map to a segment in unmapped RAM
@@ -116,7 +114,6 @@ impl Vireo {
             name,
             control_register_address,
             write_policy: None,
-            error_sender: None,
             rom_range: AddressRange::new(ROM_START, ROM_END),
             window_range: AddressRange::new(WINDOW_START, WINDOW_END),
             window_inhibit: true,
@@ -167,24 +164,9 @@ impl Vireo {
         self.write_policy = Some(write_policy);
     }
 
-    /// Sets the error sender for event reporting.
-    pub fn set_error_sender(&mut self, sender: ErrorSender) {
-        self.error_sender = Some(sender);
-    }
-
     /// Installs a log sender for diagnostic messages (e.g. `reset()`).
     pub fn set_log_sender(&mut self, sender: LogSender) {
         self.log_sender = sender;
-    }
-
-    fn report_rejected_write(&self, address: u16) {
-        if let Some(sender) = &self.error_sender {
-            use crate::emulator::device::DeviceEvent;
-            let _ = sender.send(DeviceEvent::RejectedWrite {
-                device: self.identity(),
-                address,
-            });
-        }
     }
 
     fn control_register(&self) -> u8 {
@@ -226,6 +208,18 @@ impl IoDevice for Vireo {
         self.peek(address)
     }
 
+    fn check_writability(&self, address: u16) -> Result<(), BusError> {
+        let (is_rom, _) = self.effective_address(address);
+        if is_rom && let Some(write_policy) = self.write_policy {
+            match write_policy {
+                RomWritePolicy::Ignore => Ok(()),
+                RomWritePolicy::Error => Err(BusError::RomWrite { addr: address }),
+            }
+        } else {
+            Ok(())
+        }
+    }
+
     fn write(&mut self, address: u16, value: u8) {
         if address == self.control_register_address {
             self.set_control_register(value);
@@ -233,11 +227,6 @@ impl IoDevice for Vireo {
             let (is_rom, effective_address) = self.effective_address(address);
             if !is_rom {
                 self.ram_data[effective_address] = value;
-            } else if let Some(write_policy) = self.write_policy {
-                match write_policy {
-                    RomWritePolicy::Ignore => (),
-                    RomWritePolicy::Error => self.report_rejected_write(address),
-                }
             }
         }
     }
@@ -295,8 +284,6 @@ impl IoDevice for Vireo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::emulator::DeviceEvent;
-    use tokio::sync::mpsc;
 
     const DEVICE_NAME: &str = "vireo";
     const CTRL_REGISTER_ADDRESS: u16 = 0xFFD8;
@@ -546,18 +533,39 @@ mod tests {
     }
 
     #[test]
-    fn write_rom_ignored_when_policy_is_none() {
+    fn write_rom_ignored() {
         let mut device = device();
         device.write(0xFFFF, 0);
         assert_eq!(device.rom_data[0x7FFF], 0xFF);
     }
 
     #[test]
-    fn write_rom_ignored_when_policy_is_ignore() {
+    fn check_writability_ram_is_ok() {
+        let device = device();
+        assert!(matches!(device.check_writability(0x7FFF), Ok(())));
+    }
+
+    #[test]
+    fn check_writability_rom_is_ok_when_policy_is_none() {
+        let device = device();
+        assert!(matches!(device.check_writability(0xFFFF), Ok(())));
+    }
+
+    #[test]
+    fn check_writability_rom_is_ok_when_policy_is_ignore() {
         let mut device = device();
         device.set_write_policy(RomWritePolicy::Ignore);
-        device.write(0xFFFF, 0);
-        assert_eq!(device.rom_data[0x7FFF], 0xFF);
+        assert!(matches!(device.check_writability(0xFFFF), Ok(())));
+    }
+
+    #[test]
+    fn check_writability_rom_is_error_when_policy_is_error() {
+        let mut device = device();
+        device.set_write_policy(RomWritePolicy::Error);
+        assert!(matches!(
+            device.check_writability(0xFFFF),
+            Err(BusError::RomWrite { addr: 0xFFFF })
+        ));
     }
 
     #[test]
@@ -597,29 +605,6 @@ mod tests {
         let mut device = device();
         device.patch(0xFFFF, 0);
         assert_eq!(device.rom_data[0x7FFF], 0);
-    }
-
-    #[tokio::test]
-    async fn write_rom_reports_rejected_write_when_policy_is_error() {
-        let mut device = device();
-        let (tx, mut rx) = mpsc::unbounded_channel::<DeviceEvent>();
-        device.set_error_sender(tx);
-        device.set_write_policy(RomWritePolicy::Error);
-
-        device.write(0xFFFF, 0);
-
-        match rx.try_recv() {
-            Ok(event) => {
-                assert!(matches!(
-                    event,
-                    DeviceEvent::RejectedWrite {
-                        address: 0xFFFF,
-                        ..
-                    }
-                ));
-            }
-            Err(e) => panic!("Expected a DeviceEvent, but channel was empty: {:?}", e),
-        }
     }
 
     #[test]

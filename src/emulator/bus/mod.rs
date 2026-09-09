@@ -160,10 +160,13 @@ impl Bus {
                 RomWritePolicy::Ignore => Ok(()),
                 RomWritePolicy::Error => Err(BusError::RomWrite { addr }),
             },
-            Some(RegionMatch::Device { device, addr }) => {
-                device.write(addr, value);
-                Ok(())
-            }
+            Some(RegionMatch::Device { device, addr }) => match device.check_writability(addr) {
+                Ok(()) => {
+                    device.write(addr, value);
+                    Ok(())
+                }
+                Err(e) => Err(e),
+            },
             None => match self.unmapped_policy {
                 UnmappedPolicy::DefaultValue => Ok(()),
                 UnmappedPolicy::Error => Err(BusError::Unmapped { addr }),
@@ -701,6 +704,46 @@ mod tests {
         }
     }
 
+    /// A device whose `check_writability` can be toggled to simulate a device that guards
+    /// part of its address space against writes (e.g. `Finch`, `Phoebe`, `Vireo`'s ROM regions).
+    struct GuardedWriteDevice {
+        address: u16,
+        data: Vec<u8>,
+        reject: bool,
+    }
+
+    impl GuardedWriteDevice {
+        fn new(address: u16, size: usize, reject: bool) -> Self {
+            Self {
+                address,
+                data: vec![0u8; size],
+                reject,
+            }
+        }
+    }
+
+    impl IoDevice for GuardedWriteDevice {
+        fn read(&mut self, address: u16) -> u8 {
+            self.peek(address)
+        }
+        fn check_writability(&self, address: u16) -> Result<(), BusError> {
+            if self.reject {
+                Err(BusError::RomWrite { addr: address })
+            } else {
+                Ok(())
+            }
+        }
+        fn write(&mut self, address: u16, value: u8) {
+            self.data[(address - self.address) as usize] = value;
+        }
+        fn peek(&self, address: u16) -> u8 {
+            self.data[(address - self.address) as usize]
+        }
+        fn identity_address(&self) -> u16 {
+            self.address
+        }
+    }
+
     fn ram_bus(start: u16, end: u16) -> Bus {
         Bus::config()
             .ram_with_fill(AddressRange::new(start, end), 0)
@@ -783,6 +826,53 @@ mod tests {
             .build();
         bus.patch(0xC000, 0xAB);
         assert_eq!(bus.read(0xC000).unwrap(), 0xAB);
+    }
+
+    #[test]
+    fn device_write_allowed_when_check_writability_ok() {
+        let device = Box::new(GuardedWriteDevice::new(0xDF00, 16, false));
+        let mut bus = Bus::config()
+            .device(AddressRange::new(0xDF00, 0xDF0F), DeviceId(1), device)
+            .unwrap()
+            .build();
+        bus.write(0xDF00, 0x42).unwrap();
+        assert_eq!(bus.read(0xDF00).unwrap(), 0x42);
+    }
+
+    #[test]
+    fn device_write_rejected_when_check_writability_errs() {
+        let device = Box::new(GuardedWriteDevice::new(0xDF00, 16, true));
+        let mut bus = Bus::config()
+            .device(AddressRange::new(0xDF00, 0xDF0F), DeviceId(1), device)
+            .unwrap()
+            .build();
+        let result = bus.write(0xDF00, 0x42);
+        assert!(matches!(result, Err(BusError::RomWrite { addr: 0xDF00 })));
+        // The bus must not have called write() on the device when check_writability failed.
+        assert_eq!(bus.read(0xDF00).unwrap(), 0x00);
+    }
+
+    #[test]
+    fn device_write_allowed_by_default_check_writability() {
+        // A device that doesn't override check_writability (the IoDevice default) writes normally.
+        let device = Box::new(MockDevice::new(0xDF00, 16));
+        let mut bus = Bus::config()
+            .device(AddressRange::new(0xDF00, 0xDF0F), DeviceId(1), device)
+            .unwrap()
+            .build();
+        bus.write(0xDF00, 0x7A).unwrap();
+        assert_eq!(bus.read(0xDF00).unwrap(), 0x7A);
+    }
+
+    #[test]
+    fn device_patch_bypasses_check_writability() {
+        let device = Box::new(GuardedWriteDevice::new(0xDF00, 16, true));
+        let mut bus = Bus::config()
+            .device(AddressRange::new(0xDF00, 0xDF0F), DeviceId(1), device)
+            .unwrap()
+            .build();
+        bus.patch(0xDF00, 0x99);
+        assert_eq!(bus.read(0xDF00).unwrap(), 0x99);
     }
 
     #[test]
