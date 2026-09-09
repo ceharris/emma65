@@ -119,6 +119,57 @@ pub(super) fn parse_suffixed_u32(s: &str) -> Result<u32, std::num::ParseIntError
     }
 }
 
+/// Accepts a memory device's `size` attribute either as a plain integer (as it would already
+/// be after parsing a `--device` CLI argument) or as a string such as `"32K"` (the shorthand
+/// form TOML configuration carries through as a string, since figment doesn't parse suffixed
+/// strings into numbers on its own). Shared by the `ram` and `rom` device modules.
+pub(super) fn deserialize_size<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct SizeVisitor;
+
+    impl serde::de::Visitor<'_> for SizeVisitor {
+        type Value = u32;
+
+        fn expecting(&self, f: &mut Formatter) -> std::fmt::Result {
+            f.write_str("an integer byte count, or a string such as \"32K\"")
+        }
+
+        fn visit_u64<E>(self, v: u64) -> Result<u32, E>
+        where
+            E: serde::de::Error,
+        {
+            u32::try_from(v).map_err(|_| E::custom(format!("size {v} is out of range")))
+        }
+
+        fn visit_i64<E>(self, v: i64) -> Result<u32, E>
+        where
+            E: serde::de::Error,
+        {
+            u32::try_from(v).map_err(|_| E::custom(format!("size {v} is out of range")))
+        }
+
+        fn visit_str<E>(self, v: &str) -> Result<u32, E>
+        where
+            E: serde::de::Error,
+        {
+            parse_suffixed_u32(v).map_err(|_| E::custom(format!("invalid size: \"{v}\"")))
+        }
+    }
+
+    deserializer.deserialize_any(SizeVisitor)
+}
+
+/// Builds a `size`-byte buffer, filled with `fill_value` if given, or random bytes otherwise.
+/// Shared by the `ram`, `rom`, `finch`, `phoebe`, and `vireo` device modules.
+pub(super) fn make_buffer(size: usize, fill_value: Option<u8>) -> Vec<u8> {
+    match fill_value {
+        Some(v) => vec![v; size],
+        None => (0..size).map(|_| rand::random::<u8>()).collect(),
+    }
+}
+
 fn parse_device_mapping(s: &str) -> Result<(String, u16), String> {
     let parts: Vec<&str> = s.splitn(2, '@').collect();
     if parts.len() == 2 {

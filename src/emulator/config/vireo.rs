@@ -64,8 +64,8 @@ impl DeviceModule for VireoModule {
         } else {
             bus_config
         };
-        let mut rom_data = super::memory::make_buffer(vireo::ROM_SIZE, config.fill);
-        let ram_data = super::memory::make_buffer(vireo::RAM_SIZE, config.ram_fill);
+        let mut rom_data = super::device::make_buffer(vireo::ROM_SIZE, config.fill);
+        let ram_data = super::device::make_buffer(vireo::RAM_SIZE, config.ram_fill);
         loader::load_image(&config.image, &mut rom_data, offset)
             .await
             .map_err(DeviceModuleError::Load)?;

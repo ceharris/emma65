@@ -286,7 +286,8 @@ impl DeviceModule for BlinkerModule {
 
 **Step 3** — Deserialize attributes from the `HashMap`. Follow the pattern
 used by
-`RamModule` and `RomModule` in `src/emulator/config/memory.rs`: define a serde
+`RamModule` in `src/emulator/config/ram.rs` (or `RomModule` in
+`src/emulator/config/rom.rs`): define a serde
 `Deserialize` struct, then extract it with `figment::Figment`:
 
 ```rust
