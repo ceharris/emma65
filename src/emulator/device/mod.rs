@@ -12,9 +12,7 @@ pub mod phoebe;
 pub mod pic_finch;
 pub mod protocol;
 pub mod r6551;
-pub mod ram;
 mod ring;
-pub mod rom;
 pub mod via6522;
 pub mod vireo;
 
@@ -27,8 +25,6 @@ pub use self::mc6850::Mc6850;
 pub use self::phoebe::Phoebe;
 pub use self::pic_finch::PicFinch;
 pub use self::r6551::R6551;
-pub use self::ram::Ram;
-pub use self::rom::Rom;
 pub use self::via6522::Via6522;
 pub use self::vireo::Vireo;
 pub use protocol::ptm::{
