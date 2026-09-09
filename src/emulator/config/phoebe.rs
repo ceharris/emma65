@@ -66,8 +66,8 @@ impl DeviceModule for PhoebeModule {
             bus_config
         };
 
-        let mut rom_data = super::memory::make_buffer(phoebe::ROM_SIZE, config.fill);
-        let ram_data = super::memory::make_buffer(phoebe::RAM_SIZE, config.ram_fill);
+        let mut rom_data = super::device::make_buffer(phoebe::ROM_SIZE, config.fill);
+        let ram_data = super::device::make_buffer(phoebe::RAM_SIZE, config.ram_fill);
         loader::load_image(&config.image, &mut rom_data, offset)
             .await
             .map_err(DeviceModuleError::Load)?;

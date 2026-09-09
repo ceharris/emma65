@@ -10,13 +10,14 @@ mod lfsr;
 pub mod loader;
 mod mc6840;
 mod mc6850;
-mod memory;
 mod palette;
 mod path;
 mod phoebe;
 mod pic_finch;
 mod r6551;
+mod ram;
 mod registry;
+mod rom;
 pub mod templates;
 mod transport;
 mod via6522;
@@ -33,16 +34,17 @@ pub use led_matrix::LedMatrixModule;
 pub use lfsr::LfsrModule;
 pub use mc6840::Mc6840Module;
 pub use mc6850::Mc6850Module;
-pub use memory::{RamModule, RomModule};
 pub use path::ExpandedPathBuf;
 pub use phoebe::PhoebeModule;
 pub use pic_finch::PicFinchModule;
 pub use r6551::R6551Module;
+pub use ram::RamModule;
 pub use registry::{
     DeviceRegistry, DisplayFrameSlot, DisplayGeometry, DisplayGeometrySlot, InstantiationContext,
     LcdDisplayFrameSlot, LcdDisplayGeometry, LcdDisplayGeometrySlot, LedMatrixFrameSlot,
     LedMatrixGeometry, LedMatrixGeometrySlot, TransportSlot,
 };
+pub use rom::RomModule;
 pub use transport::{TransportSpec, TransportSpecFormat};
 pub use via6522::Via6522Module;
 pub use vireo::VireoModule;

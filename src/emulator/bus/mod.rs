@@ -7,12 +7,11 @@ pub mod symbol;
 
 pub use interrupt::{DeviceInterruptState, InterruptController, IrqSource, MAX_IRQ_SOURCES};
 pub use loader::BusLoadTarget;
-use rand::RngExt;
 pub use region::{AddressRange, BusOp};
 pub use symbol::{SymbolSource, SymbolTable};
 
 use crate::emulator::cpu::vector::VectorResolver;
-use crate::emulator::device::{DeviceId, IoDevice};
+use crate::emulator::device::{DeviceId, IoDevice, Ram, Rom};
 use crate::emulator::error::{BusConfigError, BusError};
 
 /// Value returned on reads from unmapped addresses when `UnmappedPolicy::DefaultValue` is active.
@@ -36,35 +35,22 @@ pub enum RomWritePolicy {
     Error,
 }
 
-/// Internal representation of one region mapped on the bus.
-enum Region {
-    Ram {
-        range: AddressRange,
-        data: Vec<u8>,
-    },
-    Rom {
-        range: AddressRange,
-        data: Vec<u8>,
-        write_policy: RomWritePolicy,
-    },
-    Device {
-        range: AddressRange,
-        /// Index into the owning `Bus`/`BusConfig`'s `devices` vector.
-        ///
-        /// Stable because devices are only ever appended during `BusConfig`
-        /// construction; more than one `Region::Device` may share a `device_index`
-        /// when a device is mapped at more than one range via `extend_device()`.
-        device_index: usize,
-    },
+/// One region mapped on the bus, delegating to a registered device. RAM and ROM are
+/// themselves just built-in devices (see [`crate::emulator::device::ram`] and
+/// [`crate::emulator::device::rom`]) -- the bus has no special case for them.
+struct Region {
+    range: AddressRange,
+    /// Index into the owning `Bus`/`BusConfig`'s `devices` vector.
+    ///
+    /// Stable because devices are only ever appended during `BusConfig`
+    /// construction; more than one `Region` may share a `device_index`
+    /// when a device is mapped at more than one range via `extend_device()`.
+    device_index: usize,
 }
 
 impl Region {
     fn range(&self) -> AddressRange {
-        match self {
-            Region::Ram { range, .. } => *range,
-            Region::Rom { range, .. } => *range,
-            Region::Device { range, .. } => *range,
-        }
+        self.range
     }
 }
 
@@ -120,7 +106,7 @@ impl DeviceIdAllocator {
     }
 }
 
-/// The configurable memory bus with RAM, ROM, and IO device regions.
+/// The configurable memory bus with IO device regions (RAM and ROM included).
 pub struct Bus {
     regions: Vec<Region>,
     devices: Vec<(DeviceId, Box<dyn IoDevice>)>,
@@ -137,30 +123,19 @@ impl Bus {
 
     /// Reads one byte from `addr`, triggering device side effects if an IO device is mapped there.
     pub fn read(&mut self, addr: u16) -> Result<u8, BusError> {
-        let value = match self.find_region_mut(addr) {
-            Some(RegionMatch::Ram { data, offset }) => Ok(data[offset]),
-            Some(RegionMatch::Rom { data, offset, .. }) => Ok(data[offset]),
-            Some(RegionMatch::Device { device, addr }) => Ok(device.read(addr)),
+        match self.find_device_mut(addr) {
+            Some((device, addr)) => Ok(device.read(addr)),
             None => match self.unmapped_policy {
                 UnmappedPolicy::DefaultValue => Ok(UNMAPPED_READ_VALUE),
                 UnmappedPolicy::Error => Err(BusError::Unmapped { addr }),
             },
-        }?;
-        Ok(value)
+        }
     }
 
     /// Writes one byte to `addr`, triggering device side effects if an IO device is mapped there.
     pub fn write(&mut self, addr: u16, value: u8) -> Result<(), BusError> {
-        match self.find_region_mut(addr) {
-            Some(RegionMatch::Ram { data, offset }) => {
-                data[offset] = value;
-                Ok(())
-            }
-            Some(RegionMatch::Rom { write_policy, .. }) => match &write_policy {
-                RomWritePolicy::Ignore => Ok(()),
-                RomWritePolicy::Error => Err(BusError::RomWrite { addr }),
-            },
-            Some(RegionMatch::Device { device, addr }) => match device.check_writability(addr) {
+        match self.find_device_mut(addr) {
+            Some((device, addr)) => match device.check_writability(addr) {
                 Ok(()) => {
                     device.write(addr, value);
                     Ok(())
@@ -171,16 +146,13 @@ impl Bus {
                 UnmappedPolicy::DefaultValue => Ok(()),
                 UnmappedPolicy::Error => Err(BusError::Unmapped { addr }),
             },
-        }?;
-        Ok(())
+        }
     }
 
     /// Reads one byte from `addr` without triggering device side effects.
     pub fn peek(&self, addr: u16) -> Result<u8, BusError> {
-        match self.find_region(addr) {
-            Some(PeekMatch::Ram { data, offset }) => Ok(data[offset]),
-            Some(PeekMatch::Rom { data, offset }) => Ok(data[offset]),
-            Some(PeekMatch::Device { device, addr }) => Ok(device.peek(addr)),
+        match self.find_device(addr) {
+            Some((device, addr)) => Ok(device.peek(addr)),
             None => match self.unmapped_policy {
                 UnmappedPolicy::DefaultValue => Ok(UNMAPPED_READ_VALUE),
                 UnmappedPolicy::Error => Err(BusError::Unmapped { addr }),
@@ -203,22 +175,9 @@ impl Bus {
     /// Writes one byte to `addr`, bypassing ROM write restrictions and triggering device side
     /// effects if an I/O device is mapped there.
     pub fn patch(&mut self, addr: u16, value: u8) {
-        match self.find_region_mut(addr) {
-            Some(RegionMatch::Ram { data, offset }) => {
-                data[offset] = value;
-            }
-            Some(RegionMatch::Rom {
-                data,
-                offset,
-                write_policy: _write_policy,
-            }) => {
-                data[offset] = value;
-            }
-            Some(RegionMatch::Device { device, addr }) => {
-                device.patch(addr, value);
-            }
-            None => {}
-        };
+        if let Some((device, addr)) = self.find_device_mut(addr) {
+            device.patch(addr, value);
+        }
     }
 
     /// Calls `tick(cycles)` on every IO device mapped on the bus.
@@ -250,28 +209,19 @@ impl Bus {
             })
     }
 
-    /// Replaces the ROM data for the region starting at `range.start` with `data`.
+    /// Replaces the contents of the region mapped exactly over `range` with `data`, bypassing
+    /// write restrictions (e.g. a ROM's write policy).
     ///
-    /// `data.len()` must equal `range.len()`.  Useful for patching ROM after construction.
+    /// `data.len()` must equal `range.len()`. Useful for patching ROM after construction.
     pub fn load_rom(&mut self, range: AddressRange, data: &[u8]) -> Result<(), BusError> {
         let expected = range.len() as usize;
-        if data.len() != expected {
-            // Treat as unmapped — caller passed a range that isn't a ROM region.
+        if data.len() != expected || !self.regions.iter().any(|r| r.range == range) {
             return Err(BusError::Unmapped { addr: range.start });
         }
-        for region in &mut self.regions {
-            if let Region::Rom {
-                range: r,
-                data: rom_data,
-                ..
-            } = region
-                && *r == range
-            {
-                rom_data.copy_from_slice(data);
-                return Ok(());
-            }
+        for (i, &byte) in data.iter().enumerate() {
+            self.patch(range.start.wrapping_add(i as u16), byte);
         }
-        Err(BusError::Unmapped { addr: range.start })
+        Ok(())
     }
 
     // --- private helpers ---
@@ -281,51 +231,16 @@ impl Bus {
         self.resolved[addr as usize].map(|idx| idx as usize)
     }
 
-    fn find_region(&self, addr: u16) -> Option<PeekMatch<'_>> {
+    fn find_device(&self, addr: u16) -> Option<(&dyn IoDevice, u16)> {
         let idx = self.find_region_index(addr)?;
-        match &self.regions[idx] {
-            Region::Ram { range, data } => {
-                let offset = (addr - range.start) as usize;
-                Some(PeekMatch::Ram { data, offset })
-            }
-            Region::Rom { range, data, .. } => {
-                let offset = (addr - range.start) as usize;
-                Some(PeekMatch::Rom { data, offset })
-            }
-            Region::Device { device_index, .. } => Some(PeekMatch::Device {
-                device: self.devices[*device_index].1.as_ref(),
-                addr,
-            }),
-        }
+        let device_index = self.regions[idx].device_index;
+        Some((self.devices[device_index].1.as_ref(), addr))
     }
 
-    fn find_region_mut(&mut self, addr: u16) -> Option<RegionMatch<'_>> {
+    fn find_device_mut(&mut self, addr: u16) -> Option<(&mut dyn IoDevice, u16)> {
         let idx = self.find_region_index(addr)?;
-        let Bus {
-            regions, devices, ..
-        } = self;
-        match &mut regions[idx] {
-            Region::Ram { range, data } => {
-                let offset = (addr - range.start) as usize;
-                Some(RegionMatch::Ram { data, offset })
-            }
-            Region::Rom {
-                range,
-                data,
-                write_policy,
-            } => {
-                let offset = (addr - range.start) as usize;
-                Some(RegionMatch::Rom {
-                    data,
-                    offset,
-                    write_policy: *write_policy,
-                })
-            }
-            Region::Device { device_index, .. } => Some(RegionMatch::Device {
-                device: devices[*device_index].1.as_mut(),
-                addr,
-            }),
-        }
+        let device_index = self.regions[idx].device_index;
+        Some((self.devices[device_index].1.as_mut(), addr))
     }
 
     /// Returns a reference to the symbol table for this bus.
@@ -354,29 +269,6 @@ impl Drop for Bus {
     }
 }
 
-// Temporary match result types to avoid holding region borrows.
-enum PeekMatch<'a> {
-    Ram { data: &'a Vec<u8>, offset: usize },
-    Rom { data: &'a Vec<u8>, offset: usize },
-    Device { device: &'a dyn IoDevice, addr: u16 },
-}
-
-enum RegionMatch<'a> {
-    Ram {
-        data: &'a mut Vec<u8>,
-        offset: usize,
-    },
-    Rom {
-        data: &'a mut Vec<u8>,
-        offset: usize,
-        write_policy: RomWritePolicy,
-    },
-    Device {
-        device: &'a mut dyn IoDevice,
-        addr: u16,
-    },
-}
-
 /// Builder for constructing a `Bus`.
 pub struct BusConfig {
     regions: Vec<Region>,
@@ -389,6 +281,15 @@ pub struct BusConfig {
     /// Drained by [`take_vector_resolver`](Self::take_vector_resolver) and chained onto
     /// the `CpuBuilder` at construction time.
     vector_resolver: Option<Box<dyn VectorResolver>>,
+    /// Next device ID to assign to a RAM/ROM device created internally by
+    /// [`ram`](Self::ram)/[`ram_with_fill`](Self::ram_with_fill)/[`ram_with_data`](Self::ram_with_data)/
+    /// [`rom`](Self::rom)/[`rom_with_write_policy`](Self::rom_with_write_policy). These IDs are
+    /// never exposed to the caller, so they count down from `u32::MAX` rather than up from the
+    /// low end `DeviceIdAllocator` uses -- a caller may combine one of these convenience methods
+    /// with devices registered via [`device`](Self::device) using IDs from an independent,
+    /// externally-owned `DeviceIdAllocator` (as `DeviceModule::instantiate` implementations do),
+    /// and the two must never collide.
+    next_internal_device_id: u32,
 }
 
 impl BusConfig {
@@ -401,6 +302,7 @@ impl BusConfig {
             rom_write_policy: RomWritePolicy::Ignore,
             symbol_table: SymbolTable::new(),
             vector_resolver: None,
+            next_internal_device_id: u32::MAX,
         }
     }
 
@@ -422,39 +324,26 @@ impl BusConfig {
     }
 
     /// Maps a RAM region over `range`. Initial contents are random.
-    pub fn ram(mut self, range: AddressRange) -> Result<Self, BusConfigError> {
-        self.check_overlap(range)?;
-        let len = range.len() as usize;
-        let mut v = vec![0u8; len];
-        rand::rng().fill(&mut v[..]);
-        self.regions.push(Region::Ram { range, data: v });
-        Ok(self)
+    pub fn ram(self, range: AddressRange) -> Result<Self, BusConfigError> {
+        let device = Ram::new(range.start, range.len() as usize);
+        self.map_device(range, device)
     }
 
     /// Maps a RAM region over `range`, filling each cell with the specified value.
     pub fn ram_with_fill(
-        mut self,
+        self,
         range: AddressRange,
         fill_value: u8,
     ) -> Result<Self, BusConfigError> {
-        self.check_overlap(range)?;
-        let len = range.len() as usize;
-        self.regions.push(Region::Ram {
-            range,
-            data: vec![fill_value; len],
-        });
-        Ok(self)
+        let device = Ram::with_fill(range.start, range.len() as usize, fill_value);
+        self.map_device(range, device)
     }
 
     /// Maps a RAM region over `range`, pre-loaded with `data`.
     ///
     /// Unlike `rom()`, writes to this region succeed normally after construction.
     /// `data.len()` must equal `range.len()`.
-    pub fn ram_with_data(
-        mut self,
-        range: AddressRange,
-        data: Vec<u8>,
-    ) -> Result<Self, BusConfigError> {
+    pub fn ram_with_data(self, range: AddressRange, data: Vec<u8>) -> Result<Self, BusConfigError> {
         let expected = range.len() as usize;
         if data.len() != expected {
             return Err(BusConfigError::RomSizeMismatch {
@@ -463,9 +352,8 @@ impl BusConfig {
                 expected,
             });
         }
-        self.check_overlap(range)?;
-        self.regions.push(Region::Ram { range, data });
-        Ok(self)
+        let device = Ram::with_data(range.start, data);
+        self.map_device(range, device)
     }
 
     /// Maps a ROM region over `range`, pre-loaded with `data`.
@@ -483,7 +371,7 @@ impl BusConfig {
     ///
     /// `data.len()` must equal `range.len()`.
     pub fn rom_with_write_policy(
-        mut self,
+        self,
         range: AddressRange,
         data: Vec<u8>,
         write_policy: RomWritePolicy,
@@ -496,13 +384,22 @@ impl BusConfig {
                 expected,
             });
         }
-        self.check_overlap(range)?;
-        self.regions.push(Region::Rom {
-            range,
-            data,
-            write_policy,
-        });
-        Ok(self)
+        let device = Rom::new(range.start, data, write_policy);
+        self.map_device(range, device)
+    }
+
+    /// Maps `device` over `range`, allocating a device ID from this `BusConfig`'s private
+    /// device ID allocator. Used by the `ram`/`ram_with_fill`/`ram_with_data`/`rom`/
+    /// `rom_with_write_policy` convenience methods, whose callers have no need to address the
+    /// resulting device by ID.
+    fn map_device(
+        mut self,
+        range: AddressRange,
+        device: impl IoDevice + 'static,
+    ) -> Result<Self, BusConfigError> {
+        let id = DeviceId(self.next_internal_device_id);
+        self.next_internal_device_id -= 1;
+        self.device(range, id, Box::new(device))
     }
 
     /// Maps an IO device over `range`, registering it under `id`.
@@ -525,7 +422,7 @@ impl BusConfig {
         self.check_overlap(range)?;
         let device_index = self.devices.len();
         self.devices.push((id, device));
-        self.regions.push(Region::Device {
+        self.regions.push(Region {
             range,
             device_index,
         });
@@ -546,7 +443,7 @@ impl BusConfig {
             .position(|(existing, _)| *existing == id)
             .ok_or(BusConfigError::UnknownDeviceId(id))?;
         self.check_overlap(range)?;
-        self.regions.push(Region::Device {
+        self.regions.push(Region {
             range,
             device_index,
         });
@@ -635,13 +532,10 @@ impl BusConfig {
             candidates.sort_by_key(|&idx| (regions[idx as usize].range().len(), idx));
 
             let addr = a as u16;
-            resolved[a] = candidates
-                .iter()
-                .copied()
-                .find(|&idx| match &regions[idx as usize] {
-                    Region::Device { device_index, .. } => devices[*device_index].1.claims(addr),
-                    _ => true,
-                });
+            resolved[a] = candidates.iter().copied().find(|&idx| {
+                let device_index = regions[idx as usize].device_index;
+                devices[device_index].1.claims(addr)
+            });
         }
 
         resolved.into_boxed_slice()

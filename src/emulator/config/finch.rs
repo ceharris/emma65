@@ -67,7 +67,7 @@ impl DeviceModule for FinchModule {
             bus_config
         };
 
-        let mut data = super::memory::make_buffer(finch::MEMORY_SIZE, config.fill);
+        let mut data = super::device::make_buffer(finch::MEMORY_SIZE, config.fill);
         loader::load_image(&config.image, &mut data, offset)
             .await
             .map_err(DeviceModuleError::Load)?;
