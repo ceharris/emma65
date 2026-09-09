@@ -2,8 +2,7 @@ use super::device::{deserialize_size, make_buffer};
 use super::write_policy::WritePolicySpec;
 use super::{DeviceModule, DeviceModuleError, ExpandedPathBuf, InstantiationContext, loader};
 use crate::emulator::bus::{DeviceIdAllocator, symbol};
-use crate::emulator::device::Rom;
-use crate::emulator::{AddressRange, BusConfig, RomWritePolicy};
+use crate::emulator::{AddressRange, BusConfig};
 use figment::providers::Serialized;
 use figment::value::{Dict, Value};
 use serde::Deserialize;
@@ -51,7 +50,7 @@ impl DeviceModule for RomModule {
         address: u16,
         attributes: &HashMap<String, Value>,
         _context: &InstantiationContext,
-        id_allocator: Arc<Mutex<DeviceIdAllocator>>,
+        _id_allocator: Arc<Mutex<DeviceIdAllocator>>,
     ) -> Result<BusConfig, DeviceModuleError> {
         let config = RomAttributes::from_attributes(attributes)?;
         let range = AddressRange::new(address, address + (config.size - 1) as u16);
@@ -72,19 +71,14 @@ impl DeviceModule for RomModule {
                 .await
                 .map_err(DeviceModuleError::Load)?;
         }
-
-        let write_policy = config
-            .write_policy
-            .map_or(RomWritePolicy::Ignore, |spec| spec.to_rom_write_policy());
-
-        let device_id = id_allocator.lock().unwrap().next_available();
-        bus_config
-            .device(
-                range,
-                device_id,
-                Box::new(Rom::new(address, data, write_policy)),
-            )
-            .map_err(DeviceModuleError::BusConfig)
+        match config.write_policy {
+            Some(write_policy) => bus_config
+                .rom_with_write_policy(range, data, write_policy.to_rom_write_policy())
+                .map_err(DeviceModuleError::BusConfig),
+            None => bus_config
+                .rom(range, data)
+                .map_err(DeviceModuleError::BusConfig),
+        }
     }
 }
 

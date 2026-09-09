@@ -1,7 +1,6 @@
 use super::device::{deserialize_size, make_buffer};
 use super::{DeviceModule, DeviceModuleError, ExpandedPathBuf, InstantiationContext, loader};
 use crate::emulator::bus::{DeviceIdAllocator, symbol};
-use crate::emulator::device::Ram;
 use crate::emulator::{AddressRange, BusConfig};
 use figment::providers::Serialized;
 use figment::value::{Dict, Value};
@@ -48,7 +47,7 @@ impl DeviceModule for RamModule {
         address: u16,
         attributes: &HashMap<String, Value>,
         _context: &InstantiationContext,
-        id_allocator: Arc<Mutex<DeviceIdAllocator>>,
+        _id_allocator: Arc<Mutex<DeviceIdAllocator>>,
     ) -> Result<BusConfig, DeviceModuleError> {
         let config = RamAttributes::from_attributes(attributes)?;
         let range = AddressRange::new(address, address + (config.size - 1) as u16);
@@ -63,17 +62,21 @@ impl DeviceModule for RamModule {
             bus_config
         };
 
-        let mut data = make_buffer(config.size as usize, config.fill);
         if let Some(filename) = config.image {
+            let mut data = make_buffer(config.size as usize, config.fill);
             loader::load_image(&filename, &mut data, offset)
                 .await
                 .map_err(DeviceModuleError::Load)?;
+            bus_config
+                .ram_with_data(range, data)
+                .map_err(DeviceModuleError::BusConfig)
+        } else if let Some(fill) = config.fill {
+            bus_config
+                .ram_with_fill(range, fill)
+                .map_err(DeviceModuleError::BusConfig)
+        } else {
+            bus_config.ram(range).map_err(DeviceModuleError::BusConfig)
         }
-
-        let device_id = id_allocator.lock().unwrap().next_available();
-        bus_config
-            .device(range, device_id, Box::new(Ram::with_data(address, data)))
-            .map_err(DeviceModuleError::BusConfig)
     }
 }
 
