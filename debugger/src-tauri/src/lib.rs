@@ -69,6 +69,12 @@ mod stack;
 /// address, source, aliases) for the sortable/filterable Symbols panel.
 mod symbols;
 
+/// Memory Variables panel: named, typed views onto memory locations bound
+/// to a symbol-table entry; persists definitions to
+/// `memory-variables.json` and re-materializes `User`-sourced bindings on
+/// profile load.
+mod memory_variables;
+
 /// Terminal panel: console byte-stream bridge.
 mod terminal;
 
@@ -493,6 +499,20 @@ pub(crate) async fn load_or_reload_session(app: &AppHandle, profile_dir: &Path) 
                 .lock()
                 .unwrap() = Some(disasm);
 
+            // Re-materialize this profile's Memory Variables `User`-sourced bindings before
+            // any symbol-table snapshot is taken below, so watchpoint/breakpoint label
+            // resolution and the panel's own display both reflect them. A name a label file
+            // or the assembler already defines is left alone (see `materialize_bindings`).
+            let loaded_memory_variables = memory_variables::load_memory_variables_from(profile_dir);
+            memory_variables::materialize_bindings(
+                &loaded_memory_variables,
+                cpu.bus_mut().symbol_table_mut(),
+            );
+            *app.state::<memory_variables::MemoryVariablesState>()
+                .0
+                .lock()
+                .unwrap() = loaded_memory_variables;
+
             // Independent of session readiness: a bad watchpoints.emw is
             // reported inside the watchpoint panel, not via emit_status,
             // so it never blocks or fails the rest of the debugger.
@@ -798,6 +818,9 @@ pub fn run() {
         .manage(disassembly::SkipBreakpointPc(Mutex::new(None)))
         .manage(breakpoints::BreakpointState(Mutex::new(
             std::collections::BTreeMap::new(),
+        )))
+        .manage(memory_variables::MemoryVariablesState(Mutex::new(
+            Vec::new(),
         )))
         .manage(disassembly::LiveSnapshotRx(Mutex::new(None)))
         .manage(memory::MemoryViewAddr(Arc::new(AtomicU16::new(0))))
