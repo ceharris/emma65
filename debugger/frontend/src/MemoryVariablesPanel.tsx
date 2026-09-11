@@ -116,21 +116,20 @@ export default function MemoryVariablesPanel() {
     };
   }, [fetchRows]);
 
-  /** Cycles a row's radix and persists the choice via `edit_memory_variable`. */
+  /**
+   * Cycles a row's radix and persists the choice via
+   * `set_memory_variable_radix` — a dedicated command (rather than
+   * `edit_memory_variable`) because it doesn't need a live CPU/symbol table,
+   * so it keeps working while the CPU is free-running.
+   */
   const cycleRadix = useCallback((row: MemoryVariableRow) => {
     const cycle = radixCycleFor(row.data_type);
     const nextRadix = cycle[(cycle.indexOf(row.radix) + 1) % cycle.length];
-    invoke<MemoryVariableRow[]>("edit_memory_variable", {
-      oldName: row.name,
-      fields: {
-        name: row.name,
-        address: row.address,
-        data_type: row.data_type,
-        radix: nextRadix,
-      },
+    invoke<MemoryVariableRow[]>("set_memory_variable_radix", {
+      change: { name: row.name, radix: nextRadix },
     })
       .then(setRows)
-      .catch((e) => console.error("edit_memory_variable failed:", e));
+      .catch((e) => console.error("set_memory_variable_radix failed:", e));
   }, []);
 
   return (
@@ -160,9 +159,8 @@ export default function MemoryVariablesPanel() {
                 </span>
                 <span className="mv-col-radix">
                   {/* No control when there's nothing to cycle: Char/Bool have a
-                      fixed display, and an unresolved name has no address to
-                      persist a rebind against (edit_memory_variable requires
-                      one when the name doesn't already resolve). */}
+                      fixed display, and an unresolved name has no value to
+                      apply a radix to (it always renders "undefined"). */}
                   {isRadixType(row.data_type) && row.address !== null && (
                     <RadixButton radix={row.radix} onCycle={() => cycleRadix(row)} />
                   )}

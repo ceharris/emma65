@@ -1135,6 +1135,7 @@ pub fn run() {
             memory_variables::get_memory_variables,
             memory_variables::add_memory_variable,
             memory_variables::edit_memory_variable,
+            memory_variables::set_memory_variable_radix,
             memory_variables::remove_memory_variable,
             recent::clear_recent_profiles,
             menu::set_run_controls_enabled,

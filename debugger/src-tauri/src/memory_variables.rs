@@ -380,6 +380,61 @@ fn remove_variable(defs: &mut Vec<VariableDef>, name: &str) -> Result<(), String
     Ok(())
 }
 
+/// Updates only `radix` for the definition named `name`. Unlike
+/// `edit_variable`, this never touches the symbol table — radix is pure
+/// display metadata, not a binding — so the caller doesn't need a live `Cpu`
+/// at all, and the corresponding command works while the CPU is
+/// free-running (see `set_memory_variable_radix`).
+fn set_variable_radix(defs: &mut [VariableDef], name: &str, radix: Radix) -> Result<(), String> {
+    let def = defs
+        .iter_mut()
+        .find(|d| d.name == name)
+        .ok_or_else(|| format!("No memory variable named \"{name}\""))?;
+    def.radix = radix;
+    Ok(())
+}
+
+/// Resolves `defs` into display rows against whatever CPU state is currently
+/// available: a halted `Cpu` (via the live symbol table/bus, refreshing
+/// `resolved_addr_cache` as a side effect), or — while free-running, when
+/// `CpuState` is `None` — the last-known addresses in `resolved_addr_cache`
+/// plus `live_snapshot_rx`'s most recent `watched_values` (see
+/// `ResolvedAddrCache`). Returns an empty list only if the CPU has never been
+/// ready at all.
+fn resolve_rows_current(
+    defs: &[VariableDef],
+    cpu_state: &CpuState,
+    live_snapshot_rx: &LiveSnapshotRx,
+    resolved_addr_cache: &ResolvedAddrCache,
+) -> Vec<MemoryVariableRow> {
+    let cpu_guard = cpu_state.0.lock().unwrap();
+    if let Some(cpu) = cpu_guard.as_ref() {
+        let rows = resolve_rows(defs, cpu);
+        cache_resolved_addrs(&rows, &resolved_addr_cache.0);
+        return rows;
+    }
+    drop(cpu_guard);
+    let live = live_snapshot_rx
+        .0
+        .lock()
+        .unwrap()
+        .as_ref()
+        .and_then(|rx| rx.borrow().clone());
+    match live {
+        Some(snapshot) => {
+            let cache = resolved_addr_cache.0.lock().unwrap();
+            let bytes: HashMap<u16, u8> = snapshot.watched_values.into_iter().collect();
+            defs.iter()
+                .map(|def| {
+                    let addr = cache.get(&def.name).copied().flatten();
+                    resolve_row_from_snapshot(def, addr, &bytes)
+                })
+                .collect()
+        }
+        None => Vec::new(),
+    }
+}
+
 /// Returns a fresh snapshot of every loaded memory variable, resolved against
 /// live symbol-table and memory state.
 ///
@@ -399,33 +454,12 @@ pub fn get_memory_variables(
     resolved_addr_cache: State<ResolvedAddrCache>,
 ) -> Result<Vec<MemoryVariableRow>, String> {
     let defs = memory_variables_state.0.lock().unwrap();
-    let cpu_guard = cpu_state.0.lock().unwrap();
-    if let Some(cpu) = cpu_guard.as_ref() {
-        let rows = resolve_rows(&defs, cpu);
-        cache_resolved_addrs(&rows, &resolved_addr_cache.0);
-        return Ok(rows);
-    }
-    drop(cpu_guard);
-    let live = live_snapshot_rx
-        .0
-        .lock()
-        .unwrap()
-        .as_ref()
-        .and_then(|rx| rx.borrow().clone());
-    match live {
-        Some(snapshot) => {
-            let cache = resolved_addr_cache.0.lock().unwrap();
-            let bytes: HashMap<u16, u8> = snapshot.watched_values.into_iter().collect();
-            Ok(defs
-                .iter()
-                .map(|def| {
-                    let addr = cache.get(&def.name).copied().flatten();
-                    resolve_row_from_snapshot(def, addr, &bytes)
-                })
-                .collect())
-        }
-        None => Ok(Vec::new()),
-    }
+    Ok(resolve_rows_current(
+        &defs,
+        &cpu_state,
+        &live_snapshot_rx,
+        &resolved_addr_cache,
+    ))
 }
 
 /// A memory variable's user-editable fields, grouped into one struct so
@@ -507,6 +541,45 @@ pub fn edit_memory_variable(
     if renamed {
         app.emit("symbols-changed", ()).ok();
     }
+    Ok(rows)
+}
+
+/// A memory variable's name plus its new radix, grouped into one struct so
+/// `set_memory_variable_radix` stays under clippy's argument-count lint —
+/// the same convention `MemoryVariableFields` establishes for
+/// `add_memory_variable`/`edit_memory_variable`.
+#[derive(Deserialize)]
+pub struct MemoryVariableRadixChange {
+    pub name: String,
+    pub radix: Radix,
+}
+
+/// Changes only a memory variable's display radix, persists the updated
+/// definition list, and returns a fresh snapshot.
+///
+/// Deliberately separate from `edit_memory_variable`: that command needs a
+/// live `Cpu` to re-resolve/rebind the symbol table, so it (correctly)
+/// refuses to run while the CPU is free-running. Radix is pure display
+/// metadata — it never touches the symbol table — so gating it on a live CPU
+/// was an unnecessary restriction that made the panel's radix control appear
+/// to do nothing during a free-run (the frontend only logs the resulting
+/// `"CPU not ready"` error to the console). This command has no such
+/// dependency, so it works in every CPU state.
+#[tauri::command]
+pub fn set_memory_variable_radix(
+    change: MemoryVariableRadixChange,
+    cpu_state: State<CpuState>,
+    memory_variables_state: State<MemoryVariablesState>,
+    profile_dir: State<ProfileDirState>,
+    live_snapshot_rx: State<LiveSnapshotRx>,
+    resolved_addr_cache: State<ResolvedAddrCache>,
+    app: AppHandle,
+) -> Result<Vec<MemoryVariableRow>, String> {
+    let mut defs = memory_variables_state.0.lock().unwrap();
+    set_variable_radix(&mut defs, &change.name, change.radix)?;
+    save_memory_variables_to(&profile_dir.0.lock().unwrap().clone(), &defs)?;
+    let rows = resolve_rows_current(&defs, &cpu_state, &live_snapshot_rx, &resolved_addr_cache);
+    app.emit("memory-variables-changed", ()).ok();
     Ok(rows)
 }
 
@@ -940,5 +1013,23 @@ mod tests {
         let result = remove_variable(&mut defs, "nonexistent");
         assert!(result.is_err());
         assert_eq!(defs.len(), 1);
+    }
+
+    #[test]
+    fn set_variable_radix_updates_only_radix() {
+        let mut defs = vec![sample_def()];
+        set_variable_radix(&mut defs, "counter", Radix::Bin).unwrap();
+        assert_eq!(defs[0].radix, Radix::Bin);
+        assert_eq!(defs[0].name, "counter");
+        assert_eq!(defs[0].address, 0x0200);
+        assert_eq!(defs[0].data_type, VariableType::U8);
+    }
+
+    #[test]
+    fn set_variable_radix_errors_for_unknown_name() {
+        let mut defs = vec![sample_def()];
+        let result = set_variable_radix(&mut defs, "nonexistent", Radix::Bin);
+        assert!(result.is_err());
+        assert_eq!(defs[0].radix, Radix::Hex);
     }
 }
