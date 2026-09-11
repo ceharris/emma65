@@ -36,24 +36,38 @@ pub struct CpuLiveSnapshot {
     pub memory_page_addr: u16,
     /// 256 bytes of memory starting at `memory_page_addr`.
     pub memory_page: Vec<u8>,
+    /// `(address, value)` for every address in `watch_addrs` (see `run_from`),
+    /// refreshed every batch. Deliberately NOT a full 64KB copy: `Bus::peek_range`
+    /// dispatches per byte (no contiguous-RAM fast path), so a full-range read
+    /// costs low-single-digit milliseconds — long enough to measurably delay
+    /// this thread's interrupt servicing. Reading only the handful of specific
+    /// addresses a caller actually needs (e.g. the debugger's Memory Variables
+    /// panel) keeps this effectively free.
+    pub watched_values: Vec<(u16, u8)>,
 }
 
 /// Builds a [`CpuLiveSnapshot`] from the current state of `cpu`.
 ///
 /// `mem_addr` is the address currently displayed in the memory panel; it is
 /// paragraph-aligned (`& 0xfff0`) before the read so the stored page always
-/// starts on a paragraph boundary.
+/// starts on a paragraph boundary. `watch_addrs` is an arbitrary set of
+/// additional addresses to sample individually (see `watched_values`).
 fn build_live_snapshot(
     cpu: &Cpu,
     mem_addr: u16,
     start_cycles: u64,
     start_timestamp: Instant,
+    watch_addrs: &[u16],
 ) -> CpuLiveSnapshot {
     let mut stack_page = vec![0u8; 256];
     let _ = cpu.bus().peek_range(0x0100, &mut stack_page);
     let memory_page_addr = mem_addr & 0xfff0;
     let mut memory_page = vec![0u8; 256];
     let _ = cpu.bus().peek_range(memory_page_addr, &mut memory_page);
+    let watched_values = watch_addrs
+        .iter()
+        .map(|&addr| (addr, cpu.bus().peek(addr).unwrap_or(0)))
+        .collect();
     CpuLiveSnapshot {
         registers: *cpu.registers(),
         stack_page,
@@ -66,6 +80,7 @@ fn build_live_snapshot(
         cpu_waiting: cpu.is_waiting(),
         memory_page_addr,
         memory_page,
+        watched_values,
     }
 }
 
@@ -427,6 +442,7 @@ pub fn step_over_subroutine(
                 mem_view_addr.load(Ordering::Relaxed),
                 start_cycles,
                 start_timestamp,
+                &[],
             )));
         }
         match res {
@@ -520,6 +536,7 @@ pub fn step_return(
                 mem_view_addr.load(Ordering::Relaxed),
                 start_cycles,
                 start_timestamp,
+                &[],
             )));
         }
         match res {
@@ -548,7 +565,7 @@ pub fn step_return(
 /// match the target frequency. Throttling is batched over ~1000 instructions
 /// to avoid per-instruction syscall overhead.
 pub fn run(cpu: Cpu) -> RunHandle {
-    run_from(cpu, None, Arc::new(AtomicU16::new(0)), false)
+    run_from(cpu, None, Arc::new(AtomicU16::new(0)), Vec::new(), false)
 }
 
 /// Like [`run`], but skips the breakpoint/watch check at `skip_pc` on the
@@ -571,10 +588,18 @@ pub fn run(cpu: Cpu) -> RunHandle {
 /// on every WAI/STP would defeat the point of pressing Run. WAI resumes
 /// transparently (execution just continues); STP still halts the loop once
 /// serviced, via [`StepResult::Reset`], same as a manually-triggered reset.
+///
+/// `watch_addrs` is an arbitrary, fixed set of additional addresses sampled
+/// individually into each live snapshot's `watched_values` (see
+/// `CpuLiveSnapshot`) — for a caller that needs to track several scattered
+/// addresses (e.g. the debugger's Memory Variables panel) without paying for
+/// a full-address-space read. Fixed for the run's duration: pass `Vec::new()`
+/// if not needed.
 pub fn run_from(
     cpu: Cpu,
     skip_pc: Option<u16>,
     mem_view_addr: Arc<AtomicU16>,
+    watch_addrs: Vec<u16>,
     park_on_stall: bool,
 ) -> RunHandle {
     let (stop_tx, stop_rx) = watch::channel(false);
@@ -588,6 +613,7 @@ pub fn run_from(
             cpu,
             skip_pc,
             mem_view_addr,
+            watch_addrs,
             RunLoopChannels {
                 stop_rx,
                 cmd_rx,
@@ -623,6 +649,7 @@ fn run_loop(
     mut cpu: Cpu,
     skip_pc: Option<u16>,
     mem_view_addr: Arc<AtomicU16>,
+    watch_addrs: Vec<u16>,
     channels: RunLoopChannels,
     park_on_stall: bool,
 ) {
@@ -679,6 +706,7 @@ fn run_loop(
             mem_view_addr.load(Ordering::Relaxed),
             start_cycles,
             start_timestamp,
+            &watch_addrs,
         );
         let _ = live_tx.send(Some(snapshot));
 
@@ -797,6 +825,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn live_snapshot_reports_watched_addresses() {
+        let mut cpu = make_cpu_with_speed(ClockSpeed::unlimited());
+        cpu.bus_mut().write(0x0300, 0x42).unwrap();
+        let handle = run_from(cpu, None, Arc::new(AtomicU16::new(0)), vec![0x0300], false);
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        let snapshot = handle
+            .live_snapshot()
+            .expect("expected a published snapshot");
+        assert_eq!(snapshot.watched_values, vec![(0x0300, 0x42)]);
+        handle.take_cpu().await;
+    }
+
+    #[tokio::test]
     async fn breakpoint_during_free_run_returns_breakpoint_result() {
         let mut cpu = make_cpu_with_speed(ClockSpeed::unlimited());
         cpu.add_breakpoint(NOP_ADDR);
@@ -878,7 +919,7 @@ mod tests {
         write(&mut cpu, 0x0200, &[0xEA, 0xEA, 0xDB]); // NOP, NOP, STP
         cpu.add_breakpoint(0x0200);
 
-        let handle = run_from(cpu, Some(0x0200), no_mem(), false);
+        let handle = run_from(cpu, Some(0x0200), no_mem(), Vec::new(), false);
         let (result, cpu) = handle.take_cpu_with_result().await;
 
         assert!(
@@ -901,7 +942,7 @@ mod tests {
         // than handing the CPU back immediately.
         let mut cpu = make_cpu_at(0x0200);
         write(&mut cpu, 0x0200, &[0xDB]); // STP
-        let handle = run_from(cpu, None, no_mem(), true);
+        let handle = run_from(cpu, None, no_mem(), Vec::new(), true);
         let stopper = handle.stopper();
         // Give the parked poll loop time to run for a while without a reset.
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
@@ -937,7 +978,7 @@ mod tests {
         write(&mut cpu, 0x0300, &[0xA9, 0x42, 0x8D, 0x00, 0x00, 0x40]); // LDA #$42, STA $0000, RTI
         cpu.bus_mut().write(0xFFFE, 0x00).unwrap(); // IRQ vector lo -> $0300
         cpu.bus_mut().write(0xFFFF, 0x03).unwrap(); // IRQ vector hi
-        let handle = run_from(cpu, None, no_mem(), true);
+        let handle = run_from(cpu, None, no_mem(), Vec::new(), true);
         let stopper = handle.stopper();
         tokio::time::sleep(std::time::Duration::from_millis(2)).await;
         stopper.assert_irq(IrqSource(0));
@@ -958,7 +999,7 @@ mod tests {
         // 65C02 hardware.
         let mut cpu = make_cpu_at(0x0200);
         write(&mut cpu, 0x0200, &[0xCB]); // WAI
-        let handle = run_from(cpu, None, no_mem(), true);
+        let handle = run_from(cpu, None, no_mem(), Vec::new(), true);
         let stopper = handle.stopper();
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         stopper.trigger_reset();

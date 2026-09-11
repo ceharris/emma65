@@ -144,8 +144,8 @@ export default function MemoryVariablesPanel() {
           <div className="mv-header-row">
             <span className="mv-col-name">Name</span>
             <span className="mv-col-type">Type</span>
-            <span className="mv-col-radix">Radix</span>
             <span className="mv-col-address">Address</span>
+            <span className="mv-col-radix">Radix</span>
             <span className="mv-col-value">Value</span>
           </div>
           <div className="mv-body">
@@ -155,6 +155,9 @@ export default function MemoryVariablesPanel() {
                   {row.name}
                 </span>
                 <span className="mv-col-type">{TYPE_LABEL[row.data_type]}</span>
+                <span className="mv-col-address">
+                  {row.address !== null ? formatAddr(row.address) : "—"}
+                </span>
                 <span className="mv-col-radix">
                   {/* No control when there's nothing to cycle: Char/Bool have a
                       fixed display, and an unresolved name has no address to
@@ -163,9 +166,6 @@ export default function MemoryVariablesPanel() {
                   {isRadixType(row.data_type) && row.address !== null && (
                     <RadixButton radix={row.radix} onCycle={() => cycleRadix(row)} />
                   )}
-                </span>
-                <span className="mv-col-address">
-                  {row.address !== null ? formatAddr(row.address) : "—"}
                 </span>
                 <span className={`mv-col-value${row.value === null ? " mv-undefined" : ""}`}>
                   {formatValue(row)}

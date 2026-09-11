@@ -128,6 +128,7 @@ async fn main() -> ExitCode {
         cpu,
         None,
         Arc::new(std::sync::atomic::AtomicU16::new(0)),
+        Vec::new(),
         config.park_on_halt,
     );
     let (cpu_done_tx, mut cpu_done_rx) = tokio::sync::oneshot::channel::<StepResult>();

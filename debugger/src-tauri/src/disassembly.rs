@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use crate::CpuState;
 use crate::cpu_bus::{CpuBusCache, UiIrqSourceState, snapshot_cpu_bus};
 use crate::memory::MemoryViewAddr;
+use crate::memory_variables::{self, MemoryVariablesState, ResolvedAddrCache};
 use crate::registers::{ChangedFlagsState, RegisterSnapshot};
 use emma65::disassembler::Disassembler;
 use emma65::emulator::cpu::StepResult;
@@ -185,14 +186,33 @@ pub fn run_cpu(
     run_stopper_state: State<RunStopperState>,
     skip_breakpoint_pc: State<SkipBreakpointPc>,
     mem_view_addr: State<MemoryViewAddr>,
+    memory_variables_state: State<MemoryVariablesState>,
+    resolved_addr_cache: State<ResolvedAddrCache>,
 ) -> Result<(), String> {
     let cpu = cpu_state.0.lock().unwrap().take().ok_or("CPU not ready")?;
     let skip_pc = skip_breakpoint_pc.0.lock().unwrap().take();
     let mem_view_addr = Arc::clone(&mem_view_addr.0);
+    // Resolved once, here, rather than left to `get_memory_variables`'s cache:
+    // guarantees the run's tracked addresses are current even if the Memory
+    // Variables panel was never opened before Run was pressed. Safe to
+    // compute once for the whole run — nothing can rebind a name while
+    // running, since every command that touches the symbol table requires
+    // the CPU to be stopped first.
+    let watch_addrs = memory_variables::refresh_addr_cache_for_run(
+        &memory_variables_state.0.lock().unwrap(),
+        &cpu,
+        &resolved_addr_cache.0,
+    );
     // park_on_stall: true — Run should keep the CPU thread alive through WAI/STP
     // so a later device- or UI-triggered interrupt/reset resumes it without the
     // user having to press Run again.
-    let handle = exec_run_from(cpu, skip_pc, Arc::clone(&mem_view_addr), true);
+    let handle = exec_run_from(
+        cpu,
+        skip_pc,
+        Arc::clone(&mem_view_addr),
+        watch_addrs.clone(),
+        true,
+    );
     *run_stopper_state.0.lock().unwrap() = Some(handle.stopper());
     *app.state::<LiveSnapshotRx>().0.lock().unwrap() = Some(handle.subscribe_live());
 
@@ -207,7 +227,7 @@ pub fn run_cpu(
             clear_ui_interrupts_on_reset(&app, &mut cpu, &result);
             if matches!(result, Some(StepResult::Reset)) {
                 let _ = app.emit("debugger-halted", cpu.registers().pc);
-                handle = restart_run_after_reset(&app, cpu, &mem_view_addr);
+                handle = restart_run_after_reset(&app, cpu, &mem_view_addr, &watch_addrs);
                 continue;
             }
             let (cpu_stopped, cpu_waiting, breakpoint_hit, skip_pc) =
@@ -235,12 +255,23 @@ pub fn run_cpu(
 /// (clearing changed flags, the skip-breakpoint PC, and refreshing the
 /// CPU/bus cache) plus the `run_cpu`/`finish_run` bookkeeping needed to keep
 /// the new run's stopper and live-snapshot channel current.
-fn restart_run_after_reset(app: &AppHandle, cpu: Cpu, mem_view_addr: &Arc<AtomicU16>) -> RunHandle {
+fn restart_run_after_reset(
+    app: &AppHandle,
+    cpu: Cpu,
+    mem_view_addr: &Arc<AtomicU16>,
+    watch_addrs: &[u16],
+) -> RunHandle {
     *app.state::<ChangedFlagsState>().0.lock().unwrap() = 0;
     *app.state::<CpuBusCache>().0.lock().unwrap() = snapshot_cpu_bus(&cpu);
     *app.state::<SkipBreakpointPc>().0.lock().unwrap() = None;
 
-    let handle = exec_run_from(cpu, None, Arc::clone(mem_view_addr), true);
+    let handle = exec_run_from(
+        cpu,
+        None,
+        Arc::clone(mem_view_addr),
+        watch_addrs.to_vec(),
+        true,
+    );
     *app.state::<RunStopperState>().0.lock().unwrap() = Some(handle.stopper());
     *app.state::<LiveSnapshotRx>().0.lock().unwrap() = Some(handle.subscribe_live());
     handle

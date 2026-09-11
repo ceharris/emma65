@@ -6,6 +6,7 @@
 //! concept (walrus-assigned watch-expression runtime variables). See
 //! `plan/memory-variables-panel-plan.md`.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -14,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::CpuState;
+use crate::disassembly::LiveSnapshotRx;
 use crate::profile::ProfileDirState;
 use crate::symbols::format_source;
 
@@ -87,6 +89,62 @@ pub struct VariableDef {
 /// Tauri-managed state for the loaded profile's memory variable definitions.
 pub struct MemoryVariablesState(pub Mutex<Vec<VariableDef>>);
 
+/// Caches each memory variable's most recently resolved address, rebuilt in
+/// full every time `resolve_rows` runs against a halted CPU (`get_memory_variables`,
+/// `add_memory_variable`, `edit_memory_variable`, `remove_memory_variable`).
+///
+/// While the CPU is free-running, `CpuState` is `None` — `run_cpu` moves the
+/// `Cpu` (and with it, the `Bus`-owned symbol table) into the run thread for
+/// the run's duration — so `get_memory_variables` can't re-resolve names
+/// through the symbol table at all during that window. It falls back to this
+/// cache instead. That's safe because nothing can rebind a name while
+/// running: every command that touches the symbol table requires the CPU to
+/// be stopped first.
+pub struct ResolvedAddrCache(pub Mutex<HashMap<String, Option<u16>>>);
+
+/// Records `rows`' resolved addresses into `cache`, replacing whatever was
+/// there before (a stale entry from a since-removed variable should not
+/// linger).
+fn cache_resolved_addrs(rows: &[MemoryVariableRow], cache: &Mutex<HashMap<String, Option<u16>>>) {
+    let mut guard = cache.lock().unwrap();
+    guard.clear();
+    for row in rows {
+        guard.insert(row.name.clone(), row.address);
+    }
+}
+
+/// Resolves every definition's current address against `cpu`'s symbol table,
+/// refreshes `cache` to match, and returns the flat list of every byte
+/// address covered by a resolved definition — the `watch_addrs` to pass into
+/// `exec_run_from` so the run thread's live snapshot tracks exactly the bytes
+/// this panel needs (see `exec::CpuLiveSnapshot::watched_values`).
+///
+/// Called once, by `run_cpu`, right before the CPU is handed to the run
+/// thread — not by the halted-state commands, which already keep `cache`
+/// current as a side effect of `resolve_rows`. This call exists specifically
+/// so the cache (and thus the run's tracked addresses) is guaranteed fresh
+/// even if the panel was never opened before Run was pressed.
+pub fn refresh_addr_cache_for_run(
+    defs: &[VariableDef],
+    cpu: &emma65::emulator::Cpu,
+    cache: &Mutex<HashMap<String, Option<u16>>>,
+) -> Vec<u16> {
+    let table = cpu.bus().symbol_table();
+    let mut guard = cache.lock().unwrap();
+    guard.clear();
+    let mut watch_addrs = Vec::new();
+    for def in defs {
+        let addr = table.address_for(&def.name);
+        guard.insert(def.name.clone(), addr);
+        if let Some(a) = addr {
+            for i in 0..def.data_type.size_bytes() as u16 {
+                watch_addrs.push(a.wrapping_add(i));
+            }
+        }
+    }
+    watch_addrs
+}
+
 /// Loads `dir/memory-variables.json`: a JSON array of `VariableDef`. A
 /// missing or unparseable file means no variables, not an error — matching
 /// `breakpoints::load_breakpoints_from`.
@@ -141,17 +199,20 @@ pub struct MemoryVariableRow {
     pub value: Option<i64>,
 }
 
-/// Reads `data_type.size_bytes()` bytes starting at `addr` via `Bus::peek`
+/// Reads `data_type.size_bytes()` bytes starting at `addr` via `read_byte`
 /// (side-effect-free), assembles them little-endian, and sign-extends when
 /// `data_type.is_signed()` — the same wrapping-address, little-endian
 /// convention `watch::context`'s `FetchWord`/`FetchDWord` and
 /// `Cpu::read_mem_u32`/`read_mem_i32` already establish for this codebase.
-fn read_value(bus: &Bus, addr: u16, data_type: VariableType) -> i64 {
+///
+/// Takes a byte-reader closure rather than a `&Bus` directly so the same
+/// logic serves both a halted CPU's bus (`resolve_row`) and a free-running
+/// live snapshot's flat memory buffer (`resolve_row_from_snapshot`).
+fn read_value(mut read_byte: impl FnMut(u16) -> u8, addr: u16, data_type: VariableType) -> i64 {
     let width = data_type.size_bytes() as u16;
     let mut raw: u32 = 0;
     for i in 0..width {
-        let byte = bus.peek(addr.wrapping_add(i)).unwrap_or(0) as u32;
-        raw |= byte << (i * 8);
+        raw |= (read_byte(addr.wrapping_add(i)) as u32) << (i * 8);
     }
     if data_type.is_signed() {
         match width {
@@ -169,7 +230,7 @@ fn read_value(bus: &Bus, addr: u16, data_type: VariableType) -> i64 {
 fn resolve_row(def: &VariableDef, table: &SymbolTable, bus: &Bus) -> MemoryVariableRow {
     let address = table.address_for(&def.name);
     let source = address.and_then(|_| table.source_for(&def.name).map(|s| format_source(s).0));
-    let value = address.map(|addr| read_value(bus, addr, def.data_type));
+    let value = address.map(|addr| read_value(|a| bus.peek(a).unwrap_or(0), addr, def.data_type));
     MemoryVariableRow {
         name: def.name.clone(),
         data_type: def.data_type,
@@ -186,6 +247,32 @@ fn resolve_rows(defs: &[VariableDef], cpu: &emma65::emulator::Cpu) -> Vec<Memory
     defs.iter()
         .map(|def| resolve_row(def, table, cpu.bus()))
         .collect()
+}
+
+/// Resolves `def` into a display row using `addr` (the name's last-known
+/// address, from `ResolvedAddrCache`) and `bytes` (a live snapshot's
+/// `watched_values`, collected into a map), for use while the CPU is
+/// free-running and the symbol table is unreachable (see `ResolvedAddrCache`).
+/// A byte missing from `bytes` (shouldn't happen — `refresh_addr_cache_for_run`
+/// requests every byte a resolved definition covers — but `Bus::peek` also
+/// defaults to 0 for an unmapped address) reads as 0 rather than panicking.
+/// `source` is left `None` rather than recomputed — the panel doesn't
+/// currently display it, and there's no symbol table to recompute it from
+/// here anyway.
+fn resolve_row_from_snapshot(
+    def: &VariableDef,
+    addr: Option<u16>,
+    bytes: &HashMap<u16, u8>,
+) -> MemoryVariableRow {
+    let value = addr.map(|a| read_value(|b| bytes.get(&b).copied().unwrap_or(0), a, def.data_type));
+    MemoryVariableRow {
+        name: def.name.clone(),
+        data_type: def.data_type,
+        radix: def.radix,
+        address: addr,
+        source: None,
+        value,
+    }
 }
 
 /// Core logic for adding a new memory variable, factored out from the
@@ -294,18 +381,49 @@ fn remove_variable(defs: &mut Vec<VariableDef>, name: &str) -> Result<(), String
 }
 
 /// Returns a fresh snapshot of every loaded memory variable, resolved against
-/// live symbol-table and memory state. Returns an empty list (not an error)
-/// if the CPU isn't ready, since the panel should just render empty in that
-/// case rather than show an error state — matching `symbols::get_symbols`.
+/// live symbol-table and memory state.
+///
+/// While the CPU is free-running (`CpuState` is `None`), falls back to
+/// `ResolvedAddrCache` + the live snapshot channel's `watched_values`,
+/// mirroring `registers::get_registers`'s free-run fallback — except here the
+/// *names* can't be re-resolved live (see `ResolvedAddrCache`), only the
+/// *values* at their last-known addresses. Returns an empty list (not an
+/// error) only if the CPU has never been ready at all, since the panel should
+/// just render empty in that case rather than show an error state — matching
+/// `symbols::get_symbols`.
 #[tauri::command]
 pub fn get_memory_variables(
     cpu_state: State<CpuState>,
     memory_variables_state: State<MemoryVariablesState>,
+    live_snapshot_rx: State<LiveSnapshotRx>,
+    resolved_addr_cache: State<ResolvedAddrCache>,
 ) -> Result<Vec<MemoryVariableRow>, String> {
     let defs = memory_variables_state.0.lock().unwrap();
     let cpu_guard = cpu_state.0.lock().unwrap();
-    match cpu_guard.as_ref() {
-        Some(cpu) => Ok(resolve_rows(&defs, cpu)),
+    if let Some(cpu) = cpu_guard.as_ref() {
+        let rows = resolve_rows(&defs, cpu);
+        cache_resolved_addrs(&rows, &resolved_addr_cache.0);
+        return Ok(rows);
+    }
+    drop(cpu_guard);
+    let live = live_snapshot_rx
+        .0
+        .lock()
+        .unwrap()
+        .as_ref()
+        .and_then(|rx| rx.borrow().clone());
+    match live {
+        Some(snapshot) => {
+            let cache = resolved_addr_cache.0.lock().unwrap();
+            let bytes: HashMap<u16, u8> = snapshot.watched_values.into_iter().collect();
+            Ok(defs
+                .iter()
+                .map(|def| {
+                    let addr = cache.get(&def.name).copied().flatten();
+                    resolve_row_from_snapshot(def, addr, &bytes)
+                })
+                .collect())
+        }
         None => Ok(Vec::new()),
     }
 }
@@ -333,6 +451,7 @@ pub fn add_memory_variable(
     cpu_state: State<CpuState>,
     memory_variables_state: State<MemoryVariablesState>,
     profile_dir: State<ProfileDirState>,
+    resolved_addr_cache: State<ResolvedAddrCache>,
     app: AppHandle,
 ) -> Result<Vec<MemoryVariableRow>, String> {
     let mut defs = memory_variables_state.0.lock().unwrap();
@@ -348,6 +467,7 @@ pub fn add_memory_variable(
     )?;
     save_memory_variables_to(&profile_dir.0.lock().unwrap().clone(), &defs)?;
     let rows = resolve_rows(&defs, cpu);
+    cache_resolved_addrs(&rows, &resolved_addr_cache.0);
     app.emit("memory-variables-changed", ()).ok();
     if inserted_symbol {
         app.emit("symbols-changed", ()).ok();
@@ -365,6 +485,7 @@ pub fn edit_memory_variable(
     cpu_state: State<CpuState>,
     memory_variables_state: State<MemoryVariablesState>,
     profile_dir: State<ProfileDirState>,
+    resolved_addr_cache: State<ResolvedAddrCache>,
     app: AppHandle,
 ) -> Result<Vec<MemoryVariableRow>, String> {
     let mut defs = memory_variables_state.0.lock().unwrap();
@@ -381,6 +502,7 @@ pub fn edit_memory_variable(
     )?;
     save_memory_variables_to(&profile_dir.0.lock().unwrap().clone(), &defs)?;
     let rows = resolve_rows(&defs, cpu);
+    cache_resolved_addrs(&rows, &resolved_addr_cache.0);
     app.emit("memory-variables-changed", ()).ok();
     if renamed {
         app.emit("symbols-changed", ()).ok();
@@ -396,6 +518,7 @@ pub fn remove_memory_variable(
     cpu_state: State<CpuState>,
     memory_variables_state: State<MemoryVariablesState>,
     profile_dir: State<ProfileDirState>,
+    resolved_addr_cache: State<ResolvedAddrCache>,
     app: AppHandle,
 ) -> Result<Vec<MemoryVariableRow>, String> {
     let mut defs = memory_variables_state.0.lock().unwrap();
@@ -406,6 +529,7 @@ pub fn remove_memory_variable(
         Some(cpu) => resolve_rows(&defs, cpu),
         None => Vec::new(),
     };
+    cache_resolved_addrs(&rows, &resolved_addr_cache.0);
     app.emit("memory-variables-changed", ()).ok();
     Ok(rows)
 }
@@ -542,18 +666,71 @@ mod tests {
         let mut bus = make_bus();
         bus.write(0x0200, 0x34).unwrap();
         bus.write(0x0201, 0x12).unwrap();
-        assert_eq!(read_value(&bus, 0x0200, VariableType::U16), 0x1234);
+        assert_eq!(
+            read_value(|a| bus.peek(a).unwrap_or(0), 0x0200, VariableType::U16),
+            0x1234
+        );
     }
 
     #[test]
     fn read_value_sign_extends_negative_values() {
         let mut bus = make_bus();
         bus.write(0x0200, 0xFF).unwrap();
-        assert_eq!(read_value(&bus, 0x0200, VariableType::I8), -1);
+        assert_eq!(
+            read_value(|a| bus.peek(a).unwrap_or(0), 0x0200, VariableType::I8),
+            -1
+        );
 
         bus.write(0x0300, 0x00).unwrap();
         bus.write(0x0301, 0x80).unwrap();
-        assert_eq!(read_value(&bus, 0x0300, VariableType::I16), i16::MIN as i64);
+        assert_eq!(
+            read_value(|a| bus.peek(a).unwrap_or(0), 0x0300, VariableType::I16),
+            i16::MIN as i64
+        );
+    }
+
+    #[test]
+    fn resolve_row_from_snapshot_reads_from_watched_bytes() {
+        let bytes = HashMap::from([(0x0200u16, 0x34u8)]);
+        let def = sample_def();
+        let row = resolve_row_from_snapshot(&def, Some(0x0200), &bytes);
+        assert_eq!(row.address, Some(0x0200));
+        assert_eq!(row.value, Some(0x34));
+        assert_eq!(row.source, None);
+    }
+
+    #[test]
+    fn resolve_row_from_snapshot_is_undefined_without_a_cached_address() {
+        let bytes = HashMap::new();
+        let def = sample_def();
+        let row = resolve_row_from_snapshot(&def, None, &bytes);
+        assert_eq!(row.address, None);
+        assert_eq!(row.value, None);
+    }
+
+    #[test]
+    fn refresh_addr_cache_for_run_tracks_every_byte_a_resolved_variable_covers() {
+        use emma65::emulator::{AddressRange, Cpu, CpuVariant};
+        let bus = Bus::config()
+            .ram_with_fill(AddressRange::new(0x0000, 0xFFFF), 0)
+            .unwrap()
+            .build();
+        let mut cpu = Cpu::builder(CpuVariant::Wdc65C02).bus(bus).build().unwrap();
+        cpu.bus_mut().symbol_table_mut().insert_tagged(
+            "counter".to_string(),
+            0x0200,
+            SymbolSource::User,
+        );
+        let cache = Mutex::new(HashMap::new());
+        let defs = vec![VariableDef {
+            name: "counter".to_string(),
+            address: 0x0200,
+            data_type: VariableType::U16,
+            radix: Radix::Hex,
+        }];
+        let watch_addrs = refresh_addr_cache_for_run(&defs, &cpu, &cache);
+        assert_eq!(watch_addrs, vec![0x0200, 0x0201]);
+        assert_eq!(*cache.lock().unwrap().get("counter").unwrap(), Some(0x0200));
     }
 
     #[test]
