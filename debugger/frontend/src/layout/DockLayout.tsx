@@ -178,6 +178,7 @@ const DEFAULT_PANEL_POSITION: Partial<
   "led-matrix": { referencePanel: "memory" },
   "lcd-display": { referencePanel: "memory" },
   watchpoints: { referencePanel: "memory", direction: "below" },
+  "memory-variables": { referencePanel: "memory", direction: "below" },
   symbols: { referencePanel: "trace" },
   stack: { referencePanel: "registers", direction: "below" },
   breakpoints: { referencePanel: "stack", direction: "below" },
