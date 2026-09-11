@@ -303,15 +303,26 @@ pub fn get_memory_variables(
     }
 }
 
+/// A memory variable's user-editable fields, grouped into one struct so
+/// `add_memory_variable`/`edit_memory_variable` stay under clippy's
+/// argument-count lint instead of using `#[allow(clippy::too_many_arguments)]`
+/// — the same grouping `emulator::transport::pipe` uses for `run_pipe_task`
+/// (`PipeTaskIo`/`PipeTaskChannels`). Shared by both commands: for `add` it's
+/// the new variable's fields; for `edit` it's the target's new fields,
+/// alongside a separate `old_name` identifying which definition to edit.
+#[derive(Deserialize)]
+pub struct MemoryVariableFields {
+    pub name: String,
+    pub address: Option<u16>,
+    pub data_type: VariableType,
+    pub radix: Radix,
+}
+
 /// Adds a new memory variable, persists the updated definition list, and
 /// returns a fresh snapshot. See `add_variable` for the binding semantics.
 #[tauri::command]
-#[allow(clippy::too_many_arguments)] // one Tauri-managed State per dependency, like the sibling panels
 pub fn add_memory_variable(
-    name: String,
-    address: Option<u16>,
-    data_type: VariableType,
-    radix: Radix,
+    fields: MemoryVariableFields,
     cpu_state: State<CpuState>,
     memory_variables_state: State<MemoryVariablesState>,
     profile_dir: State<ProfileDirState>,
@@ -323,10 +334,10 @@ pub fn add_memory_variable(
     let inserted_symbol = add_variable(
         &mut defs,
         cpu.bus_mut().symbol_table_mut(),
-        name,
-        address,
-        data_type,
-        radix,
+        fields.name,
+        fields.address,
+        fields.data_type,
+        fields.radix,
     )?;
     save_memory_variables_to(&profile_dir.0.lock().unwrap().clone(), &defs)?;
     let rows = resolve_rows(&defs, cpu);
@@ -341,13 +352,9 @@ pub fn add_memory_variable(
 /// list, and returns a fresh snapshot. See `edit_variable` for the rename
 /// cleanup semantics.
 #[tauri::command]
-#[allow(clippy::too_many_arguments)] // one Tauri-managed State per dependency, like the sibling panels
 pub fn edit_memory_variable(
     old_name: String,
-    new_name: String,
-    address: Option<u16>,
-    data_type: VariableType,
-    radix: Radix,
+    fields: MemoryVariableFields,
     cpu_state: State<CpuState>,
     memory_variables_state: State<MemoryVariablesState>,
     profile_dir: State<ProfileDirState>,
@@ -360,10 +367,10 @@ pub fn edit_memory_variable(
         &mut defs,
         cpu.bus_mut().symbol_table_mut(),
         &old_name,
-        new_name,
-        address,
-        data_type,
-        radix,
+        fields.name,
+        fields.address,
+        fields.data_type,
+        fields.radix,
     )?;
     save_memory_variables_to(&profile_dir.0.lock().unwrap().clone(), &defs)?;
     let rows = resolve_rows(&defs, cpu);
