@@ -53,11 +53,18 @@ impl VariableType {
 /// Display radix for a memory variable's value, string-tagged to match the
 /// frontend's `DataRadix` literals (`RadixControl.tsx`) exactly, so no
 /// translation layer is needed at the Tauri boundary.
+///
+/// `UDec`/`SDec` need explicit `rename`s: plain `rename_all = "snake_case"`
+/// would serialize them as `"u_dec"`/`"s_dec"` (a word-boundary is inserted
+/// before the capitalized `Dec`), not the `"udec"`/`"sdec"` `DataRadix`
+/// actually uses.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Radix {
     Hex,
+    #[serde(rename = "udec")]
     UDec,
+    #[serde(rename = "sdec")]
     SDec,
     Oct,
     Bin,
@@ -422,6 +429,28 @@ mod tests {
             address: 0x0200,
             data_type: VariableType::U8,
             radix: Radix::Hex,
+        }
+    }
+
+    /// Regression check: `Radix` must serialize/deserialize using exactly the
+    /// frontend's `DataRadix` string literals (`"udec"`/`"sdec"`, not
+    /// `rename_all = "snake_case"`'s default `"u_dec"`/`"s_dec"`) — otherwise
+    /// a value round-tripped through `edit_memory_variable` from the
+    /// frontend's radix-cycle button fails to deserialize.
+    #[test]
+    fn radix_serializes_using_frontend_data_radix_literals() {
+        let cases = [
+            (Radix::Hex, "\"hex\""),
+            (Radix::UDec, "\"udec\""),
+            (Radix::SDec, "\"sdec\""),
+            (Radix::Oct, "\"oct\""),
+            (Radix::Bin, "\"bin\""),
+        ];
+        for (radix, expected) in cases {
+            let json = serde_json::to_string(&radix).unwrap();
+            assert_eq!(json, expected);
+            let back: Radix = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, radix);
         }
     }
 
