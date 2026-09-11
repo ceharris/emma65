@@ -47,9 +47,51 @@
 
 .mv-row {
   white-space: nowrap;
+  position: relative;
 
   &:hover {
     background-color: var(--color-bg-hover);
+  }
+
+  &.selected {
+    background-color: var(--color-bg-selected);
+
+    &:hover {
+      background-color: var(--color-bg-selected-hover);
+    }
+  }
+}
+
+// Positioned absolutely (rather than as a trailing flex child) so it overlays
+// the row's right edge without adding a column the header row doesn't have —
+// .mv-header-row and .mv-row must otherwise stay column-for-column aligned.
+.mv-remove-btn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  visibility: hidden;
+  background: var(--color-bg);
+  border: none;
+  color: var(--color-muted);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-mono);
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  border-radius: 3px;
+
+  .mv-row:hover &,
+  .mv-row.selected & {
+    visibility: visible;
+  }
+
+  &:hover:not(:disabled) {
+    color: var(--color-danger-strong);
+  }
+
+  &:disabled {
+    cursor: default;
   }
 }
 
@@ -85,5 +127,114 @@
   &.mv-undefined {
     color: var(--color-muted-2);
     font-style: italic;
+  }
+}
+
+.mv-add-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mv-add-dialog {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  padding: 16px;
+  min-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: var(--font-ui);
+}
+
+.mv-add-title {
+  font-size: var(--font-size-btn);
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-accent);
+}
+
+.mv-add-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .modal-label {
+    flex: 0 0 auto;
+    width: 70px;
+  }
+
+  .select-popover {
+    flex: 1;
+  }
+}
+
+.mv-add-input {
+  flex: 1;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-fg);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-mono);
+  padding: 3px 6px;
+  border-radius: 3px;
+  outline: none;
+
+  &:focus {
+    border-color: var(--color-accent);
+  }
+
+  &.invalid {
+    border-color: var(--color-danger-strong);
+  }
+}
+
+.mv-add-error {
+  font-size: var(--font-size-btn);
+  color: var(--color-danger-strong);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mv-add-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.mv-add-btn-action {
+  background: var(--color-btn-bg);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-fg);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-btn);
+  padding: 3px 12px;
+  cursor: pointer;
+  border-radius: 3px;
+
+  &:hover {
+    background: var(--color-border);
+    border-color: var(--color-accent);
+  }
+
+  &.mv-add-btn-ok {
+    color: var(--color-accent);
+  }
+
+  &:disabled {
+    color: var(--color-muted-2);
+    cursor: default;
+
+    &:hover {
+      background: var(--color-btn-bg);
+      border-color: var(--color-border-strong);
+    }
   }
 }
