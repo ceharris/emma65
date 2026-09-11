@@ -177,6 +177,21 @@ impl SymbolTable {
         best.map(|(_, address)| address)
     }
 
+    /// Gets the source of the highest-precedence live entry for `name` —
+    /// the same entry `address_for` resolves to (`User` > `Assembler` >
+    /// `File(_)`). Ties within the same tier resolve to whichever entry is
+    /// encountered first.
+    pub fn source_for(&self, name: &str) -> Option<&SymbolSource> {
+        let entries = self.by_name.get(name)?;
+        let mut best: Option<&(SymbolSource, u16)> = None;
+        for entry in entries {
+            if best.is_none_or(|b| entry.0.precedence() > b.0.precedence()) {
+                best = Some(entry);
+            }
+        }
+        best.map(|(source, _)| source)
+    }
+
     /// Gets an iterator for the names mapped to `address`, across every
     /// source with a live entry there — no precedence shadowing.
     pub fn names_for(&self, address: u16) -> impl Iterator<Item = &str> {
@@ -344,6 +359,26 @@ mod tests {
         table.insert_tagged("foo".to_string(), 0x3000, SymbolSource::User);
 
         assert_eq!(table.address_for("foo"), Some(0x3000));
+    }
+
+    #[test]
+    fn source_for_matches_address_for_precedence() {
+        let mut table = SymbolTable::default();
+        let file_source = SymbolSource::File(PathBuf::from("/some/labels.lbl"));
+        table.insert_tagged("foo".to_string(), 0x1000, file_source.clone());
+        assert_eq!(table.source_for("foo"), Some(&file_source));
+
+        table.insert_tagged("foo".to_string(), 0x2000, SymbolSource::Assembler);
+        assert_eq!(table.source_for("foo"), Some(&SymbolSource::Assembler));
+
+        table.insert_tagged("foo".to_string(), 0x3000, SymbolSource::User);
+        assert_eq!(table.source_for("foo"), Some(&SymbolSource::User));
+    }
+
+    #[test]
+    fn source_for_none_when_name_unknown() {
+        let table = SymbolTable::default();
+        assert_eq!(table.source_for("foo"), None);
     }
 
     #[test]

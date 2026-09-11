@@ -34,7 +34,10 @@ pub struct SymbolRow {
 /// Formats `source` for display, returning `(label, full_path)`. `label` is
 /// what the Source column shows; `full_path` is `Some` only for a
 /// `File`-sourced entry, for the frontend to use as a tooltip.
-fn format_source(source: &SymbolSource) -> (String, Option<String>) {
+///
+/// Shared with the Memory Variables panel (`memory_variables::resolve_row`)
+/// so both panels render a symbol's source identically.
+pub(crate) fn format_source(source: &SymbolSource) -> (String, Option<String>) {
     match source {
         SymbolSource::User => ("User".to_string(), None),
         SymbolSource::Assembler => ("Assembler".to_string(), None),
