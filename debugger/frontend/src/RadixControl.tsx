@@ -12,6 +12,9 @@ export const ADDR_RADIX_CYCLE: DataRadix[] = ["hex", "udec", "oct"];
 /** The 4-option cycle used by the stack view (no binary): hex, unsigned dec, signed dec, octal. */
 export const STACK_RADIX_CYCLE: DataRadix[] = ["hex", "udec", "sdec", "oct"];
 
+/** The 4-option cycle used for unsigned data values (no signed display): hex, unsigned dec, octal, binary. */
+export const UNSIGNED_DATA_RADIX_CYCLE: DataRadix[] = ["hex", "udec", "oct", "bin"];
+
 const DATA_RADIX_LABEL: Record<DataRadix, string> = {
   hex: "HEX",
   udec: "DEC",

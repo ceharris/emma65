@@ -7,6 +7,7 @@ import LcdDisplayPanel from "../LcdDisplayPanel";
 import LedMatrixPanel from "../LedMatrixPanel";
 import LogPanel from "../LogPanel";
 import MemoryPanel from "../MemoryPanel";
+import MemoryVariablesPanel from "../MemoryVariablesPanel";
 import RegisterPanel from "../RegisterPanel";
 import RunControlsPanel from "../RunControlsPanel";
 import StackPanel from "../StackPanel";
@@ -20,6 +21,7 @@ export type MainPanelId =
   | "registers"
   | "disassembly"
   | "memory"
+  | "memory-variables"
   | "display"
   | "led-matrix"
   | "lcd-display"
@@ -38,6 +40,7 @@ export const PANEL_TITLES: Record<MainPanelId, string> = {
   registers: "Registers",
   disassembly: "Disassembly",
   memory: "Memory",
+  "memory-variables": "Memory Variables",
   display: "Display",
   "led-matrix": "LED Matrix",
   "lcd-display": "LCD Display",
@@ -57,6 +60,7 @@ export const panelComponents: Record<MainPanelId, React.FC<IDockviewPanelProps>>
   registers: () => <RegisterPanel />,
   disassembly: () => <DisassemblyPanel />,
   memory: () => <MemoryPanel />,
+  "memory-variables": () => <MemoryVariablesPanel />,
   // Threads the dockview panel API down so the canvas can auto-focus itself whenever this tab
   // becomes the active one (see DisplayPanel.tsx) — same pattern as Terminal's dockPanelApi below.
   display: ({ api }) => <DisplayPanel dockPanelApi={api} />,

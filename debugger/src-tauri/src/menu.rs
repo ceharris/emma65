@@ -360,7 +360,7 @@ pub fn build_menu(app: &tauri::App) -> tauri::Result<MenuBuild> {
     // (issue #393), and Terminal's Ctrl+Shift+T and Display's Ctrl+Shift+D
     // remain the Window menu's detach/attach accelerators below, so reusing
     // either here would collide.
-    let view_panels: [(&str, &str); 15] = [
+    let view_panels: [(&str, &str); 16] = [
         ("assembler", "Assembler"),
         ("breakpoints", "Breakpoints"),
         ("disassembly", "Disassembly"),
@@ -369,6 +369,7 @@ pub fn build_menu(app: &tauri::App) -> tauri::Result<MenuBuild> {
         ("led-matrix", "LED Matrix"),
         ("log", "Log"),
         ("memory", "Memory"),
+        ("memory-variables", "Memory Variables"),
         ("registers", "Registers"),
         ("run-controls", "Run Controls"),
         ("stack", "Stack"),

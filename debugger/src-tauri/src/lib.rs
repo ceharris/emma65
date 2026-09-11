@@ -822,6 +822,9 @@ pub fn run() {
         .manage(memory_variables::MemoryVariablesState(Mutex::new(
             Vec::new(),
         )))
+        .manage(memory_variables::ResolvedAddrCache(Mutex::new(
+            std::collections::HashMap::new(),
+        )))
         .manage(disassembly::LiveSnapshotRx(Mutex::new(None)))
         .manage(memory::MemoryViewAddr(Arc::new(AtomicU16::new(0))))
         .manage(memory::MemoryViewSeq(AtomicU64::new(0)))
@@ -1132,6 +1135,7 @@ pub fn run() {
             memory_variables::get_memory_variables,
             memory_variables::add_memory_variable,
             memory_variables::edit_memory_variable,
+            memory_variables::set_memory_variable_radix,
             memory_variables::remove_memory_variable,
             recent::clear_recent_profiles,
             menu::set_run_controls_enabled,
