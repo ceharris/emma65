@@ -214,6 +214,7 @@ function NameAutocomplete({
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
         onKeyDown={(e) => {
           e.stopPropagation();
           if (e.key === "Enter") {
