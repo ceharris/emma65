@@ -145,6 +145,115 @@ function applyTypeChange<T extends VariableFormState>(state: T, dataType: Variab
   return { ...state, dataType, radix, error: "" };
 }
 
+const MAX_NAME_SUGGESTIONS = 8;
+
+interface NameAutocompleteProps {
+  id: string;
+  value: string;
+  invalid: boolean;
+  suggestions: string[];
+  onChange: (value: string) => void;
+  /** Enter with the suggestion list closed: commit the dialog. */
+  onCommit: () => void;
+  /** Escape with the suggestion list closed: dismiss the dialog. */
+  onCancel: () => void;
+}
+
+/**
+ * A plain-text input with a hand-rendered suggestion dropdown, filtered by
+ * substring against `suggestions` — deliberately NOT a native `<input
+ * list="...">` (HTML `<datalist>`): that renders as the same unstyleable,
+ * unreliable native list chrome under WebKitGTK that `SelectPopover`'s doc
+ * comment already documents for `<select>`, and here it went further and
+ * wedged the whole app (a stuck native popup/grab), per issue #646 unit 4
+ * UAT. Follows `SelectPopover`/`ColorPickerPopover`'s established
+ * click-outside/Escape popover pattern instead.
+ */
+function NameAutocomplete({
+  id,
+  value,
+  invalid,
+  suggestions,
+  onChange,
+  onCommit,
+  onCancel,
+}: NameAutocompleteProps) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  const needle = value.trim().toLowerCase();
+  const matches = needle
+    ? suggestions
+        .filter((s) => s.toLowerCase() !== needle && s.toLowerCase().includes(needle))
+        .slice(0, MAX_NAME_SUGGESTIONS)
+    : [];
+
+  return (
+    <div className="mv-name-combo" ref={containerRef}>
+      <input
+        id={id}
+        className={`mv-add-input${invalid ? " invalid" : ""}`}
+        autoFocus
+        spellCheck={false}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={open && matches.length > 0}
+        aria-autocomplete="list"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            setOpen(false);
+            onCommit();
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            if (open) setOpen(false);
+            else onCancel();
+          }
+        }}
+      />
+      {open && matches.length > 0 && (
+        <div className="mv-name-suggestions" role="listbox">
+          {matches.map((s) => (
+            <button
+              key={s}
+              type="button"
+              className="mv-name-suggestion"
+              role="option"
+              // mousedown (not click) fires before the input's blur, so the
+              // click-outside handler above never gets a chance to close
+              // this list out from under the selection.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange(s);
+                setOpen(false);
+              }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function MemoryVariablesPanel() {
   const { execState } = useExecutionContext();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -364,12 +473,6 @@ export default function MemoryVariablesPanel() {
 
   return (
     <div className="memory-variables-panel" ref={panelRef}>
-      <datalist id="mv-symbol-names">
-        {symbolNames.map((n) => (
-          <option key={n} value={n} />
-        ))}
-      </datalist>
-
       {rows === null ? (
         <span className="mv-empty">Waiting…</span>
       ) : rows.length === 0 ? (
@@ -440,27 +543,14 @@ export default function MemoryVariablesPanel() {
               <label className="modal-label" htmlFor="mv-add-name">
                 Name
               </label>
-              <input
+              <NameAutocomplete
                 id="mv-add-name"
-                className={`mv-add-input${addDialog.error ? " invalid" : ""}`}
-                autoFocus
-                spellCheck={false}
-                list="mv-symbol-names"
+                invalid={!!addDialog.error}
+                suggestions={symbolNames}
                 value={addDialog.name}
-                onChange={(e) =>
-                  setAddDialog((d) => d && { ...d, name: e.target.value, error: "" })
-                }
-                onKeyDown={(e) => {
-                  e.stopPropagation();
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    commitAddVariable();
-                  }
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    setAddDialog(null);
-                  }
-                }}
+                onChange={(name) => setAddDialog((d) => d && { ...d, name, error: "" })}
+                onCommit={commitAddVariable}
+                onCancel={() => setAddDialog(null)}
               />
             </div>
 
@@ -541,27 +631,14 @@ export default function MemoryVariablesPanel() {
               <label className="modal-label" htmlFor="mv-edit-name">
                 Name
               </label>
-              <input
+              <NameAutocomplete
                 id="mv-edit-name"
-                className={`mv-add-input${editDialog.error ? " invalid" : ""}`}
-                autoFocus
-                spellCheck={false}
-                list="mv-symbol-names"
+                invalid={!!editDialog.error}
+                suggestions={symbolNames}
                 value={editDialog.name}
-                onChange={(e) =>
-                  setEditDialog((d) => d && { ...d, name: e.target.value, error: "" })
-                }
-                onKeyDown={(e) => {
-                  e.stopPropagation();
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    commitEditVariable();
-                  }
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    setEditDialog(null);
-                  }
-                }}
+                onChange={(name) => setEditDialog((d) => d && { ...d, name, error: "" })}
+                onCommit={commitEditVariable}
+                onCancel={() => setEditDialog(null)}
               />
             </div>
 

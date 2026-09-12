@@ -196,6 +196,53 @@
   }
 }
 
+// Hand-rendered dropdown backing NameAutocomplete — deliberately not a
+// native <datalist>, which renders as unstyleable (and, on this app's
+// WebKitGTK webview, app-hanging) native list chrome. Its own .mv-add-input
+// fills the combo box via this wrapper's flex:1, same width as every other
+// field's input.
+.mv-name-combo {
+  position: relative;
+  flex: 1;
+  display: flex;
+
+  .mv-add-input {
+    width: 100%;
+  }
+}
+
+.mv-name-suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1001;
+  margin-top: 2px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 3px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.mv-name-suggestion {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--color-fg);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-mono);
+  padding: 3px 8px;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--color-bg-hover);
+  }
+}
+
 .mv-add-error {
   font-size: var(--font-size-btn);
   color: var(--color-danger-strong);
