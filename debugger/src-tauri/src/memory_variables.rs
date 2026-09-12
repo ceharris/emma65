@@ -19,46 +19,43 @@ use crate::disassembly::LiveSnapshotRx;
 use crate::profile::ProfileDirState;
 use crate::symbols::format_source;
 
-/// Scalar types a memory variable can be displayed/edited as.
+/// Storage width a memory variable is read/written as. Deliberately carries
+/// no signed/unsigned distinction — signedness is a `Radix` display concern
+/// only (see `Radix`), not a data-type one, since these variables are never
+/// used in an evaluation context where a scalar C-like type would matter.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VariableType {
-    I8,
-    U8,
-    I16,
-    U16,
-    I32,
-    U32,
-    Char,
-    Bool,
+    Byte,
+    Word,
+    #[serde(rename = "dword")]
+    DWord,
 }
 
 impl VariableType {
     /// Storage width in bytes.
     pub fn size_bytes(self) -> usize {
         match self {
-            VariableType::I8 | VariableType::U8 | VariableType::Char | VariableType::Bool => 1,
-            VariableType::I16 | VariableType::U16 => 2,
-            VariableType::I32 | VariableType::U32 => 4,
+            VariableType::Byte => 1,
+            VariableType::Word => 2,
+            VariableType::DWord => 4,
         }
-    }
-
-    /// True for the signed integer types.
-    pub fn is_signed(self) -> bool {
-        matches!(
-            self,
-            VariableType::I8 | VariableType::I16 | VariableType::I32
-        )
     }
 }
 
-/// Display radix for a memory variable's value, string-tagged to match the
-/// frontend's `DataRadix` literals (`RadixControl.tsx`) exactly, so no
-/// translation layer is needed at the Tauri boundary.
+/// Display format for a memory variable's value, string-tagged to match the
+/// frontend's own (Memory-Variables-specific) radix literals exactly, so no
+/// translation layer is needed at the Tauri boundary. Distinct from the
+/// frontend's shared `DataRadix` (`RadixControl.tsx`, used by registers/
+/// stack/etc.): no `Oct`/`Bin` here (not offered for memory variables), and
+/// `Bool`/`Char` replace what used to be `VariableType::Bool`/`Char` before
+/// signedness (and now boolean/character display) moved entirely out of the
+/// data type: interpreting the raw bytes as a boolean or character is a
+/// display choice, independent of the variable's storage width.
 ///
 /// `UDec`/`SDec` need explicit `rename`s: plain `rename_all = "snake_case"`
 /// would serialize them as `"u_dec"`/`"s_dec"` (a word-boundary is inserted
-/// before the capitalized `Dec`), not the `"udec"`/`"sdec"` `DataRadix`
+/// before the capitalized `Dec`), not the `"udec"`/`"sdec"` the frontend
 /// actually uses.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -68,8 +65,8 @@ pub enum Radix {
     UDec,
     #[serde(rename = "sdec")]
     SDec,
-    Oct,
-    Bin,
+    Bool,
+    Char,
 }
 
 /// One user-defined memory variable, identified by `name`.
@@ -193,17 +190,21 @@ pub struct MemoryVariableRow {
     /// Human-readable source label (`"User"`, `"Assembler"`, `"File: <basename>"`),
     /// formatted via the same helper the Symbols panel uses.
     pub source: Option<String>,
-    /// Widened into a single container big enough for every scalar type's
-    /// full range; `Char`/`Bool` are read exactly like `U8`, the frontend
-    /// applies their fixed display semantics.
+    /// Widened into a single container big enough for every storage width's
+    /// full unsigned range. Always the raw unsigned bit pattern — signed
+    /// display (the `Radix::SDec` case) is reinterpreted from these bits by
+    /// the frontend's `formatDataRadix`, the same way it already does for
+    /// every other panel's values.
     pub value: Option<i64>,
 }
 
 /// Reads `data_type.size_bytes()` bytes starting at `addr` via `read_byte`
-/// (side-effect-free), assembles them little-endian, and sign-extends when
-/// `data_type.is_signed()` — the same wrapping-address, little-endian
-/// convention `watch::context`'s `FetchWord`/`FetchDWord` and
-/// `Cpu::read_mem_u32`/`read_mem_i32` already establish for this codebase.
+/// (side-effect-free) and assembles them little-endian into a raw unsigned
+/// value — the same wrapping-address, little-endian convention
+/// `watch::context`'s `FetchWord`/`FetchDWord` and `Cpu::read_mem_u32`
+/// already establish for this codebase. Never sign-extends: signedness is a
+/// `Radix` display concern, applied later by the frontend, not a storage
+/// concern here.
 ///
 /// Takes a byte-reader closure rather than a `&Bus` directly so the same
 /// logic serves both a halted CPU's bus (`resolve_row`) and a free-running
@@ -214,16 +215,7 @@ fn read_value(mut read_byte: impl FnMut(u16) -> u8, addr: u16, data_type: Variab
     for i in 0..width {
         raw |= (read_byte(addr.wrapping_add(i)) as u32) << (i * 8);
     }
-    if data_type.is_signed() {
-        match width {
-            1 => (raw as u8 as i8) as i64,
-            2 => (raw as u16 as i16) as i64,
-            4 => raw as i32 as i64,
-            _ => raw as i64,
-        }
-    } else {
-        raw as i64
-    }
+    raw as i64
 }
 
 /// Resolves `def` against the live symbol table and memory into a display row.
@@ -624,30 +616,49 @@ mod tests {
         VariableDef {
             name: "counter".to_string(),
             address: 0x0200,
-            data_type: VariableType::U8,
+            data_type: VariableType::Byte,
             radix: Radix::Hex,
         }
     }
 
-    /// Regression check: `Radix` must serialize/deserialize using exactly the
-    /// frontend's `DataRadix` string literals (`"udec"`/`"sdec"`, not
-    /// `rename_all = "snake_case"`'s default `"u_dec"`/`"s_dec"`) — otherwise
-    /// a value round-tripped through `edit_memory_variable` from the
-    /// frontend's radix-cycle button fails to deserialize.
+    /// Regression check: `Radix`/`VariableType` must serialize/deserialize
+    /// using exactly the frontend's literals — otherwise a value
+    /// round-tripped through `edit_memory_variable` from the frontend's
+    /// radix-cycle button, or a saved `memory-variables.json`, fails to
+    /// deserialize. `UDec`/`SDec`/`DWord` need explicit `rename`s: plain
+    /// `rename_all = "snake_case"` would serialize them as `"u_dec"`/
+    /// `"s_dec"`/`"d_word"` (a word-boundary is inserted before the
+    /// capitalized second word), not the `"udec"`/`"sdec"`/`"dword"` the
+    /// frontend actually uses.
     #[test]
-    fn radix_serializes_using_frontend_data_radix_literals() {
+    fn radix_serializes_using_frontend_literals() {
         let cases = [
             (Radix::Hex, "\"hex\""),
             (Radix::UDec, "\"udec\""),
             (Radix::SDec, "\"sdec\""),
-            (Radix::Oct, "\"oct\""),
-            (Radix::Bin, "\"bin\""),
+            (Radix::Bool, "\"bool\""),
+            (Radix::Char, "\"char\""),
         ];
         for (radix, expected) in cases {
             let json = serde_json::to_string(&radix).unwrap();
             assert_eq!(json, expected);
             let back: Radix = serde_json::from_str(&json).unwrap();
             assert_eq!(back, radix);
+        }
+    }
+
+    #[test]
+    fn variable_type_serializes_using_frontend_literals() {
+        let cases = [
+            (VariableType::Byte, "\"byte\""),
+            (VariableType::Word, "\"word\""),
+            (VariableType::DWord, "\"dword\""),
+        ];
+        for (data_type, expected) in cases {
+            let json = serde_json::to_string(&data_type).unwrap();
+            assert_eq!(json, expected);
+            let back: VariableType = serde_json::from_str(&json).unwrap();
+            assert_eq!(back, data_type);
         }
     }
 
@@ -674,7 +685,7 @@ mod tests {
             VariableDef {
                 name: "score".to_string(),
                 address: 0x0300,
-                data_type: VariableType::I16,
+                data_type: VariableType::Word,
                 radix: Radix::SDec,
             },
         ];
@@ -683,10 +694,10 @@ mod tests {
         assert_eq!(reloaded.len(), defs.len());
         assert_eq!(reloaded[0].name, "counter");
         assert_eq!(reloaded[0].address, 0x0200);
-        assert_eq!(reloaded[0].data_type, VariableType::U8);
+        assert_eq!(reloaded[0].data_type, VariableType::Byte);
         assert_eq!(reloaded[0].radix, Radix::Hex);
         assert_eq!(reloaded[1].name, "score");
-        assert_eq!(reloaded[1].data_type, VariableType::I16);
+        assert_eq!(reloaded[1].data_type, VariableType::Word);
         assert_eq!(reloaded[1].radix, Radix::SDec);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -740,25 +751,38 @@ mod tests {
         bus.write(0x0200, 0x34).unwrap();
         bus.write(0x0201, 0x12).unwrap();
         assert_eq!(
-            read_value(|a| bus.peek(a).unwrap_or(0), 0x0200, VariableType::U16),
+            read_value(|a| bus.peek(a).unwrap_or(0), 0x0200, VariableType::Word),
             0x1234
         );
     }
 
+    /// Regression check: `read_value` must never sign-extend — a high-bit-set
+    /// byte reads as its raw unsigned value (255, not -1). Signed display is
+    /// entirely `Radix::SDec`'s concern on the frontend (`formatDataRadix`),
+    /// applied at render time from these raw bits, not baked in here.
     #[test]
-    fn read_value_sign_extends_negative_values() {
+    fn read_value_never_sign_extends() {
         let mut bus = make_bus();
         bus.write(0x0200, 0xFF).unwrap();
         assert_eq!(
-            read_value(|a| bus.peek(a).unwrap_or(0), 0x0200, VariableType::I8),
-            -1
+            read_value(|a| bus.peek(a).unwrap_or(0), 0x0200, VariableType::Byte),
+            0xFF
         );
 
         bus.write(0x0300, 0x00).unwrap();
         bus.write(0x0301, 0x80).unwrap();
         assert_eq!(
-            read_value(|a| bus.peek(a).unwrap_or(0), 0x0300, VariableType::I16),
-            i16::MIN as i64
+            read_value(|a| bus.peek(a).unwrap_or(0), 0x0300, VariableType::Word),
+            0x8000
+        );
+
+        bus.write(0x0400, 0x00).unwrap();
+        bus.write(0x0401, 0x00).unwrap();
+        bus.write(0x0402, 0x00).unwrap();
+        bus.write(0x0403, 0x80).unwrap();
+        assert_eq!(
+            read_value(|a| bus.peek(a).unwrap_or(0), 0x0400, VariableType::DWord),
+            0x80000000
         );
     }
 
@@ -798,7 +822,7 @@ mod tests {
         let defs = vec![VariableDef {
             name: "counter".to_string(),
             address: 0x0200,
-            data_type: VariableType::U16,
+            data_type: VariableType::Word,
             radix: Radix::Hex,
         }];
         let watch_addrs = refresh_addr_cache_for_run(&defs, &cpu, &cache);
@@ -849,7 +873,7 @@ mod tests {
             &mut table,
             "counter".to_string(),
             None,
-            VariableType::U8,
+            VariableType::Byte,
             Radix::Hex,
         )
         .unwrap();
@@ -868,7 +892,7 @@ mod tests {
             &mut table,
             "score".to_string(),
             Some(0x0300),
-            VariableType::I16,
+            VariableType::Word,
             Radix::SDec,
         )
         .unwrap();
@@ -886,7 +910,7 @@ mod tests {
             &mut table,
             "score".to_string(),
             None,
-            VariableType::I16,
+            VariableType::Word,
             Radix::SDec,
         );
         assert!(result.is_err());
@@ -901,7 +925,7 @@ mod tests {
             &mut table,
             "counter".to_string(),
             Some(0x0400),
-            VariableType::U8,
+            VariableType::Byte,
             Radix::Hex,
         );
         assert!(result.is_err());
@@ -919,7 +943,7 @@ mod tests {
             "counter",
             "total".to_string(),
             Some(0x0400),
-            VariableType::U8,
+            VariableType::Byte,
             Radix::Hex,
         )
         .unwrap();
@@ -940,7 +964,7 @@ mod tests {
             "counter",
             "total".to_string(),
             Some(0x0400),
-            VariableType::U8,
+            VariableType::Byte,
             Radix::Hex,
         )
         .unwrap();
@@ -961,12 +985,12 @@ mod tests {
             "counter",
             "counter".to_string(),
             None,
-            VariableType::I16,
+            VariableType::Word,
             Radix::SDec,
         )
         .unwrap();
         assert!(!renamed);
-        assert_eq!(defs[0].data_type, VariableType::I16);
+        assert_eq!(defs[0].data_type, VariableType::Word);
         assert_eq!(defs[0].radix, Radix::SDec);
         assert_eq!(table.iter().filter(|(n, _, _)| *n == "counter").count(), 1);
     }
@@ -981,7 +1005,7 @@ mod tests {
             VariableDef {
                 name: "score".to_string(),
                 address: 0x0300,
-                data_type: VariableType::I16,
+                data_type: VariableType::Word,
                 radix: Radix::SDec,
             },
         ];
@@ -991,7 +1015,7 @@ mod tests {
             "counter",
             "score".to_string(),
             None,
-            VariableType::U8,
+            VariableType::Byte,
             Radix::Hex,
         );
         assert!(result.is_err());
@@ -1018,17 +1042,17 @@ mod tests {
     #[test]
     fn set_variable_radix_updates_only_radix() {
         let mut defs = vec![sample_def()];
-        set_variable_radix(&mut defs, "counter", Radix::Bin).unwrap();
-        assert_eq!(defs[0].radix, Radix::Bin);
+        set_variable_radix(&mut defs, "counter", Radix::Char).unwrap();
+        assert_eq!(defs[0].radix, Radix::Char);
         assert_eq!(defs[0].name, "counter");
         assert_eq!(defs[0].address, 0x0200);
-        assert_eq!(defs[0].data_type, VariableType::U8);
+        assert_eq!(defs[0].data_type, VariableType::Byte);
     }
 
     #[test]
     fn set_variable_radix_errors_for_unknown_name() {
         let mut defs = vec![sample_def()];
-        let result = set_variable_radix(&mut defs, "nonexistent", Radix::Bin);
+        let result = set_variable_radix(&mut defs, "nonexistent", Radix::Char);
         assert!(result.is_err());
         assert_eq!(defs[0].radix, Radix::Hex);
     }
