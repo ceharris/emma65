@@ -1,85 +1,96 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useExecutionContext } from "./ExecutionContext";
-import {
-  DataRadix,
-  DATA_RADIX_CYCLE,
-  UNSIGNED_DATA_RADIX_CYCLE,
-  formatDataRadix,
-  RadixButton,
-} from "./RadixControl";
+import { formatDataRadix } from "./RadixControl";
 import { usePanelHeaderAction } from "./layout/panelHeaderActions";
 import SelectPopover from "./SelectPopover";
 import "./styles/memory-variables.scss";
 
-/** Mirrors `memory_variables::VariableType`'s snake_case serde tags. */
-type VariableType = "i8" | "u8" | "i16" | "u16" | "i32" | "u32" | "char" | "bool";
+/**
+ * Mirrors `memory_variables::VariableType`'s snake_case serde tags — storage
+ * width only. Deliberately carries no signed/unsigned distinction: these
+ * variables are never used in an evaluation context where a scalar type's
+ * signedness would matter, so signed-vs-unsigned is purely a display choice
+ * (see `MvRadix`), not a data-type one.
+ */
+type VariableType = "byte" | "word" | "dword";
+
+/**
+ * Display format for a memory variable's value. Distinct from the shared
+ * `DataRadix` (`RadixControl.tsx`, used by registers/stack/etc.): no
+ * octal/binary (not offered here), but adds `bool`/`char` — interpreting the
+ * raw bytes as a boolean or character, independent of `VariableType`'s
+ * width, in place of what used to be fixed-format *types*.
+ */
+type MvRadix = "hex" | "udec" | "sdec" | "bool" | "char";
 
 /** One row of the panel, as returned by `get_memory_variables`/`edit_memory_variable`. */
 interface MemoryVariableRow {
   name: string;
   data_type: VariableType;
-  radix: DataRadix;
+  radix: MvRadix;
   address: number | null;
   source: string | null;
   value: number | null;
 }
 
+/** Short labels for the table's Type column. */
 const TYPE_LABEL: Record<VariableType, string> = {
-  i8: "I8",
-  u8: "U8",
-  i16: "I16",
-  u16: "U16",
-  i32: "I32",
-  u32: "U32",
-  char: "Char",
-  bool: "Bool",
+  byte: "Byte",
+  word: "Word",
+  dword: "DWord",
 };
 
 const TYPE_WIDTH_BITS: Record<VariableType, number> = {
-  i8: 8,
-  u8: 8,
-  i16: 16,
-  u16: 16,
-  i32: 32,
-  u32: 32,
-  char: 8,
-  bool: 8,
+  byte: 8,
+  word: 16,
+  dword: 32,
+};
+
+/** Labels for the Data Type dropdown — spells out "Double Word" where the table column's `TYPE_LABEL` abbreviates. */
+const TYPE_OPTION_LABEL: Record<VariableType, string> = {
+  byte: "Byte",
+  word: "Word",
+  dword: "Double Word",
 };
 
 const TYPE_OPTIONS: { value: VariableType; label: string }[] = (
-  Object.keys(TYPE_LABEL) as VariableType[]
-).map((value) => ({ value, label: TYPE_LABEL[value] }));
+  Object.keys(TYPE_OPTION_LABEL) as VariableType[]
+).map((value) => ({ value, label: TYPE_OPTION_LABEL[value] }));
 
-const RADIX_LABEL: Record<DataRadix, string> = {
+/** The fixed 5-way display-format cycle, the same for every variable regardless of its `VariableType`. */
+const MV_RADIX_CYCLE: MvRadix[] = ["hex", "udec", "sdec", "bool", "char"];
+
+const RADIX_LABEL: Record<MvRadix, string> = {
   hex: "Hexadecimal",
   udec: "Unsigned Decimal",
   sdec: "Signed Decimal",
-  oct: "Octal",
-  bin: "Binary",
+  bool: "Boolean",
+  char: "Character",
 };
 
-function isSignedType(dataType: VariableType): boolean {
-  return dataType === "i8" || dataType === "i16" || dataType === "i32";
-}
+const RADIX_OPTIONS: { value: MvRadix; label: string }[] = MV_RADIX_CYCLE.map((value) => ({
+  value,
+  label: RADIX_LABEL[value],
+}));
 
-/** Char and Bool have fixed display semantics rather than a radix (plan §"Char/Bool have no radix control"). */
-function isRadixType(dataType: VariableType): boolean {
-  return dataType !== "char" && dataType !== "bool";
-}
-
-function radixCycleFor(dataType: VariableType): DataRadix[] {
-  return isSignedType(dataType) ? DATA_RADIX_CYCLE : UNSIGNED_DATA_RADIX_CYCLE;
-}
-
-/** Options for the Radix `SelectPopover`, matching the per-row cycle for `dataType`. */
-function radixOptionsFor(dataType: VariableType): { value: DataRadix; label: string }[] {
-  return radixCycleFor(dataType).map((value) => ({ value, label: RADIX_LABEL[value] }));
-}
+/** Short glyphs for the row's radix-cycle button — mirrors `RadixControl.tsx`'s `DATA_RADIX_LABEL` convention but covers this panel's own 5-way set. */
+const MV_RADIX_BUTTON_LABEL: Record<MvRadix, string> = {
+  hex: "HEX",
+  udec: "DEC",
+  sdec: "±DEC",
+  bool: "BOOL",
+  char: "CHAR",
+};
 
 function formatAddr(addr: number): string {
   return addr.toString(16).toUpperCase().padStart(4, "0");
+}
+
+/** Address field display for an already-resolved name: the symbol's live address, or blank if unknown. */
+function formatAddrOrBlank(addr: number | null): string {
+  return addr !== null ? formatAddr(addr) : "";
 }
 
 const HEX_DIGITS = /^[0-9a-fA-F]+$/;
@@ -98,21 +109,20 @@ function parseAddressInput(raw: string): number | null {
   return n >= 0 && n <= 0xffff ? n : null;
 }
 
-/** Quoted printable character, or a `\xNN` escape for a non-printable byte (0x20-0x7E is printable ASCII). */
-function formatChar(value: number): string {
-  const byte = value & 0xff;
-  return byte >= 0x20 && byte <= 0x7e
-    ? `'${String.fromCharCode(byte)}'`
-    : `\\x${byte.toString(16).toUpperCase().padStart(2, "0")}`;
+/** Quoted printable character (0x20-0x7E is printable ASCII), or the full raw value in hexadecimal otherwise. */
+function formatChar(value: number, widthBits: number): string {
+  return value >= 0x20 && value <= 0x7e
+    ? `'${String.fromCharCode(value)}'`
+    : formatDataRadix(value, "hex", widthBits);
 }
 
 function formatValue(row: MemoryVariableRow): string {
   if (row.value === null) return "undefined";
-  switch (row.data_type) {
+  switch (row.radix) {
     case "bool":
       return row.value !== 0 ? "true" : "false";
     case "char":
-      return formatChar(row.value);
+      return formatChar(row.value, TYPE_WIDTH_BITS[row.data_type]);
     default:
       return formatDataRadix(row.value, row.radix, TYPE_WIDTH_BITS[row.data_type]);
   }
@@ -124,7 +134,7 @@ interface VariableFormState {
   /** Controlled value of the address input; only consulted when `name` doesn't currently resolve. */
   address: string;
   dataType: VariableType;
-  radix: DataRadix;
+  radix: MvRadix;
   /** Validation or backend error; empty string means no error. */
   error: string;
 }
@@ -138,14 +148,10 @@ interface EditDialogState extends VariableFormState {
   originalName: string;
 }
 
-/** Clamps `radix` into `dataType`'s cycle when switching types (e.g. signed -> unsigned drops `sdec`). */
-function applyTypeChange<T extends VariableFormState>(state: T, dataType: VariableType): T {
-  const cycle = radixCycleFor(dataType);
-  const radix = cycle.includes(state.radix) ? state.radix : cycle[0];
-  return { ...state, dataType, radix, error: "" };
-}
-
 const MAX_NAME_SUGGESTIONS = 8;
+
+/** Idle time after the last keystroke before the suggestion list pops up, so typing a name the user already knows isn't interrupted mid-keystroke. */
+const NAME_SUGGESTION_DELAY_MS = 400;
 
 interface NameAutocompleteProps {
   id: string;
@@ -179,7 +185,25 @@ function NameAutocomplete({
   onCancel,
 }: NameAutocompleteProps) {
   const [open, setOpen] = useState(false);
+  // -1 means no suggestion is keyboard-highlighted.
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
+  const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelPendingOpen = useCallback(() => {
+    if (openTimerRef.current !== null) {
+      clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+  }, []);
+
+  // Clears the debounce timer on unmount (dialog closed mid-delay).
+  useEffect(() => () => cancelPendingOpen(), [cancelPendingOpen]);
+
+  // Drop any stale keyboard highlight once the list closes (for any reason).
+  useEffect(() => {
+    if (!open) setHighlightedIndex(-1);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -191,9 +215,14 @@ function NameAutocomplete({
   }, [open]);
 
   const needle = value.trim().toLowerCase();
+  // Prefix match (not substring): a symbol is a candidate completion only
+  // when the typed text is the start of its name. Exact matches (including
+  // single-character symbol names, where the first keystroke already is an
+  // exact match) are kept rather than excluded, so those names still appear.
   const matches = needle
     ? suggestions
-        .filter((s) => s.toLowerCase() !== needle && s.toLowerCase().includes(needle))
+        .filter((s) => s.toLowerCase().startsWith(needle))
+        .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
         .slice(0, MAX_NAME_SUGGESTIONS)
     : [];
 
@@ -210,19 +239,58 @@ function NameAutocomplete({
         aria-autocomplete="list"
         value={value}
         onChange={(e) => {
-          onChange(e.target.value);
-          setOpen(true);
+          const next = e.target.value;
+          onChange(next);
+          cancelPendingOpen();
+          setHighlightedIndex(-1);
+          if (!next.trim()) {
+            setOpen(false);
+            return;
+          }
+          // Debounced: only pop the list once the user pauses, not on every keystroke.
+          openTimerRef.current = setTimeout(() => setOpen(true), NAME_SUGGESTION_DELAY_MS);
         }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => setOpen(false)}
+        onBlur={() => {
+          cancelPendingOpen();
+          setOpen(false);
+        }}
         onKeyDown={(e) => {
           e.stopPropagation();
-          if (e.key === "Enter") {
+          if (e.key === "ArrowDown" && matches.length > 0) {
             e.preventDefault();
+            cancelPendingOpen();
+            if (!open) {
+              setOpen(true);
+              setHighlightedIndex(0);
+            } else {
+              setHighlightedIndex((i) => (i + 1) % matches.length);
+            }
+            return;
+          }
+          if (e.key === "ArrowUp" && matches.length > 0) {
+            e.preventDefault();
+            cancelPendingOpen();
+            if (!open) {
+              setOpen(true);
+              setHighlightedIndex(matches.length - 1);
+            } else {
+              setHighlightedIndex((i) => (i <= 0 ? matches.length - 1 : i - 1));
+            }
+            return;
+          }
+          if (e.key === "Enter") {
+            cancelPendingOpen();
+            e.preventDefault();
+            if (open && highlightedIndex >= 0 && highlightedIndex < matches.length) {
+              onChange(matches[highlightedIndex]);
+              setOpen(false);
+              return;
+            }
             setOpen(false);
             onCommit();
           }
           if (e.key === "Escape") {
+            cancelPendingOpen();
             e.preventDefault();
             if (open) setOpen(false);
             else onCancel();
@@ -231,17 +299,21 @@ function NameAutocomplete({
       />
       {open && matches.length > 0 && (
         <div className="mv-name-suggestions" role="listbox">
-          {matches.map((s) => (
+          {matches.map((s, i) => (
             <button
               key={s}
               type="button"
-              className="mv-name-suggestion"
+              className={`mv-name-suggestion${i === highlightedIndex ? " highlighted" : ""}`}
               role="option"
+              aria-selected={i === highlightedIndex}
+              // Keeps arrow-key and mouse highlighting in sync with each other.
+              onMouseEnter={() => setHighlightedIndex(i)}
               // mousedown (not click) fires before the input's blur, so the
               // click-outside handler above never gets a chance to close
               // this list out from under the selection.
               onMouseDown={(e) => {
                 e.preventDefault();
+                cancelPendingOpen();
                 onChange(s);
                 setOpen(false);
               }}
@@ -262,7 +334,8 @@ export default function MemoryVariablesPanel() {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [addDialog, setAddDialog] = useState<AddDialogState | null>(null);
   const [editDialog, setEditDialog] = useState<EditDialogState | null>(null);
-  const [symbolNames, setSymbolNames] = useState<string[]>([]);
+  const [symbols, setSymbols] = useState<{ name: string; address: number }[]>([]);
+  const symbolNames = useMemo(() => symbols.map((s) => s.name), [symbols]);
 
   const canEdit = execState === "stopped";
 
@@ -304,8 +377,8 @@ export default function MemoryVariablesPanel() {
    * so it keeps working while the CPU is free-running.
    */
   const cycleRadix = useCallback((row: MemoryVariableRow) => {
-    const cycle = radixCycleFor(row.data_type);
-    const nextRadix = cycle[(cycle.indexOf(row.radix) + 1) % cycle.length];
+    const nextRadix =
+      MV_RADIX_CYCLE[(MV_RADIX_CYCLE.indexOf(row.radix) + 1) % MV_RADIX_CYCLE.length];
     invoke<MemoryVariableRow[]>("set_memory_variable_radix", {
       change: { name: row.name, radix: nextRadix },
     })
@@ -313,17 +386,23 @@ export default function MemoryVariablesPanel() {
       .catch((e) => console.error("set_memory_variable_radix failed:", e));
   }, []);
 
-  /** Refreshes the symbol-name list backing the Name field's autocomplete. */
+  /** Refreshes the symbol list backing the Name field's autocomplete and address lookup. */
   const fetchSymbolNames = useCallback(() => {
-    invoke<{ name: string }[]>("get_symbols")
-      .then((symbols) => setSymbolNames(symbols.map((s) => s.name)))
+    invoke<{ name: string; address: number }[]>("get_symbols")
+      .then((rows) => setSymbols(rows.map((s) => ({ name: s.name, address: s.address }))))
       .catch((e) => console.error("get_symbols failed:", e));
   }, []);
 
-  /** True when `name` already resolves to a live symbol (so no address input is needed). */
+  /** True when `name` already resolves to a live symbol (so the address field is derived, not entered). */
   const nameResolves = useCallback(
-    (name: string) => symbolNames.includes(name.trim()),
-    [symbolNames],
+    (name: string) => symbols.some((s) => s.name === name.trim()),
+    [symbols],
+  );
+
+  /** The live address backing an already-resolved name, for display in the disabled Address field. */
+  const resolvedAddress = useCallback(
+    (name: string) => symbols.find((s) => s.name === name.trim())?.address ?? null,
+    [symbols],
   );
 
   /** Click on a row selects it. */
@@ -370,7 +449,7 @@ export default function MemoryVariablesPanel() {
   const openAddDialog = useCallback(() => {
     if (!canEdit) return;
     fetchSymbolNames();
-    setAddDialog({ name: "", address: "", dataType: "u8", radix: "hex", error: "" });
+    setAddDialog({ name: "", address: "", dataType: "byte", radix: "hex", error: "" });
   }, [canEdit, fetchSymbolNames]);
 
   /** Double-click on a row (outside the Value cell, reserved for inline value editing) opens the edit popover. */
@@ -493,42 +572,49 @@ export default function MemoryVariablesPanel() {
                 key={row.name}
                 className={`mv-row${selectedName === row.name ? " selected" : ""}`}
                 onClick={() => handleRowClick(row.name)}
+                onDoubleClick={(e) => {
+                  // Everywhere in the row opens Edit except the radix cycle
+                  // button and the remove button, which have their own click
+                  // behavior that a double-click would otherwise clobber.
+                  const target = e.target as Element;
+                  if (target.closest(".radix-btn") || target.closest(".mv-remove-btn")) return;
+                  openEditDialog(row);
+                }}
               >
-                <span
-                  className="mv-col-name"
-                  title={row.name}
-                  onDoubleClick={() => openEditDialog(row)}
-                >
+                <span className="mv-col-name" title={row.name}>
                   {row.name}
                 </span>
-                <span className="mv-col-type" onDoubleClick={() => openEditDialog(row)}>
-                  {TYPE_LABEL[row.data_type]}
-                </span>
-                <span className="mv-col-address" onDoubleClick={() => openEditDialog(row)}>
+                <span className="mv-col-type">{TYPE_LABEL[row.data_type]}</span>
+                <span className="mv-col-address">
                   {row.address !== null ? formatAddr(row.address) : "—"}
                 </span>
-                <span className="mv-col-radix" onDoubleClick={() => openEditDialog(row)}>
-                  {/* No control when there's nothing to cycle: Char/Bool have a
-                      fixed display, and an unresolved name has no value to
-                      apply a radix to (it always renders "undefined"). */}
-                  {isRadixType(row.data_type) && row.address !== null && (
-                    <RadixButton radix={row.radix} onCycle={() => cycleRadix(row)} />
+                <span className="mv-col-radix">
+                  {/* No control for an unresolved name: it has no value to apply a radix to (always renders "undefined"). */}
+                  {row.address !== null && (
+                    <button
+                      className="radix-btn"
+                      onClick={() => cycleRadix(row)}
+                      title="Cycle radix"
+                    >
+                      {MV_RADIX_BUTTON_LABEL[row.radix]}
+                    </button>
                   )}
                 </span>
                 <span className={`mv-col-value${row.value === null ? " mv-undefined" : ""}`}>
                   {formatValue(row)}
                 </span>
-                <button
-                  className="mv-remove-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeVariableAt(row.name);
-                  }}
-                  disabled={!canEdit}
-                  title={canEdit ? "Remove variable" : "Stop the CPU to edit memory variables"}
-                >
-                  ×
-                </button>
+                {canEdit && (
+                  <button
+                    className="mv-remove-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeVariableAt(row.name);
+                    }}
+                    title="Remove variable"
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -555,34 +641,37 @@ export default function MemoryVariablesPanel() {
               />
             </div>
 
-            {!nameResolves(addDialog.name) && (
-              <div className="mv-add-field">
-                <label className="modal-label" htmlFor="mv-add-address">
-                  Address
-                </label>
-                <input
-                  id="mv-add-address"
-                  className={`mv-add-input${addDialog.error ? " invalid" : ""}`}
-                  spellCheck={false}
-                  placeholder="e.g. $0200"
-                  value={addDialog.address}
-                  onChange={(e) =>
-                    setAddDialog((d) => d && { ...d, address: e.target.value, error: "" })
+            <div className="mv-add-field">
+              <label className="modal-label" htmlFor="mv-add-address">
+                Address
+              </label>
+              <input
+                id="mv-add-address"
+                className={`mv-add-input${addDialog.error ? " invalid" : ""}`}
+                spellCheck={false}
+                placeholder="e.g. $0200"
+                disabled={nameResolves(addDialog.name)}
+                value={
+                  nameResolves(addDialog.name)
+                    ? formatAddrOrBlank(resolvedAddress(addDialog.name))
+                    : addDialog.address
+                }
+                onChange={(e) =>
+                  setAddDialog((d) => d && { ...d, address: e.target.value, error: "" })
+                }
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitAddVariable();
                   }
-                  onKeyDown={(e) => {
-                    e.stopPropagation();
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      commitAddVariable();
-                    }
-                    if (e.key === "Escape") {
-                      e.preventDefault();
-                      setAddDialog(null);
-                    }
-                  }}
-                />
-              </div>
-            )}
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setAddDialog(null);
+                  }
+                }}
+              />
+            </div>
 
             <div className="mv-add-field">
               <label className="modal-label">Data Type</label>
@@ -590,21 +679,19 @@ export default function MemoryVariablesPanel() {
                 label="Data type"
                 value={addDialog.dataType}
                 options={TYPE_OPTIONS}
-                onChange={(dataType) => setAddDialog((d) => d && applyTypeChange(d, dataType))}
+                onChange={(dataType) => setAddDialog((d) => d && { ...d, dataType, error: "" })}
               />
             </div>
 
-            {isRadixType(addDialog.dataType) && (
-              <div className="mv-add-field">
-                <label className="modal-label">Radix</label>
-                <SelectPopover<DataRadix>
-                  label="Radix"
-                  value={addDialog.radix}
-                  options={radixOptionsFor(addDialog.dataType)}
-                  onChange={(radix) => setAddDialog((d) => d && { ...d, radix })}
-                />
-              </div>
-            )}
+            <div className="mv-add-field">
+              <label className="modal-label">Radix</label>
+              <SelectPopover<MvRadix>
+                label="Radix"
+                value={addDialog.radix}
+                options={RADIX_OPTIONS}
+                onChange={(radix) => setAddDialog((d) => d && { ...d, radix })}
+              />
+            </div>
 
             {addDialog.error && <div className="mv-add-error">{addDialog.error}</div>}
 
@@ -643,34 +730,37 @@ export default function MemoryVariablesPanel() {
               />
             </div>
 
-            {!nameResolves(editDialog.name) && (
-              <div className="mv-add-field">
-                <label className="modal-label" htmlFor="mv-edit-address">
-                  Address
-                </label>
-                <input
-                  id="mv-edit-address"
-                  className={`mv-add-input${editDialog.error ? " invalid" : ""}`}
-                  spellCheck={false}
-                  placeholder="e.g. $0200"
-                  value={editDialog.address}
-                  onChange={(e) =>
-                    setEditDialog((d) => d && { ...d, address: e.target.value, error: "" })
+            <div className="mv-add-field">
+              <label className="modal-label" htmlFor="mv-edit-address">
+                Address
+              </label>
+              <input
+                id="mv-edit-address"
+                className={`mv-add-input${editDialog.error ? " invalid" : ""}`}
+                spellCheck={false}
+                placeholder="e.g. $0200"
+                disabled={nameResolves(editDialog.name)}
+                value={
+                  nameResolves(editDialog.name)
+                    ? formatAddrOrBlank(resolvedAddress(editDialog.name))
+                    : editDialog.address
+                }
+                onChange={(e) =>
+                  setEditDialog((d) => d && { ...d, address: e.target.value, error: "" })
+                }
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitEditVariable();
                   }
-                  onKeyDown={(e) => {
-                    e.stopPropagation();
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      commitEditVariable();
-                    }
-                    if (e.key === "Escape") {
-                      e.preventDefault();
-                      setEditDialog(null);
-                    }
-                  }}
-                />
-              </div>
-            )}
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setEditDialog(null);
+                  }
+                }}
+              />
+            </div>
 
             <div className="mv-add-field">
               <label className="modal-label">Data Type</label>
@@ -678,21 +768,19 @@ export default function MemoryVariablesPanel() {
                 label="Data type"
                 value={editDialog.dataType}
                 options={TYPE_OPTIONS}
-                onChange={(dataType) => setEditDialog((d) => d && applyTypeChange(d, dataType))}
+                onChange={(dataType) => setEditDialog((d) => d && { ...d, dataType, error: "" })}
               />
             </div>
 
-            {isRadixType(editDialog.dataType) && (
-              <div className="mv-add-field">
-                <label className="modal-label">Radix</label>
-                <SelectPopover<DataRadix>
-                  label="Radix"
-                  value={editDialog.radix}
-                  options={radixOptionsFor(editDialog.dataType)}
-                  onChange={(radix) => setEditDialog((d) => d && { ...d, radix })}
-                />
-              </div>
-            )}
+            <div className="mv-add-field">
+              <label className="modal-label">Radix</label>
+              <SelectPopover<MvRadix>
+                label="Radix"
+                value={editDialog.radix}
+                options={RADIX_OPTIONS}
+                onChange={(radix) => setEditDialog((d) => d && { ...d, radix })}
+              />
+            </div>
 
             {editDialog.error && <div className="mv-add-error">{editDialog.error}</div>}
 

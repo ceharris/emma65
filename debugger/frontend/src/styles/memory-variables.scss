@@ -24,7 +24,10 @@
   display: flex;
   align-items: baseline;
   gap: 6px;
-  padding: 2px 10px;
+  // Right padding is wider than the left to reserve room for .mv-remove-btn
+  // clear of the Value column's right-aligned text — applied to both rows so
+  // header/data columns stay aligned with each other.
+  padding: 2px 28px 2px 10px;
 }
 
 .mv-header-row {
@@ -65,9 +68,11 @@
 // Positioned absolutely (rather than as a trailing flex child) so it overlays
 // the row's right edge without adding a column the header row doesn't have —
 // .mv-header-row and .mv-row must otherwise stay column-for-column aligned.
+// Sits within the extra right padding reserved above, clear of the Value
+// column's right-aligned text.
 .mv-remove-btn {
   position: absolute;
-  right: 4px;
+  right: 6px;
   top: 50%;
   transform: translateY(-50%);
   visibility: hidden;
@@ -103,7 +108,8 @@
 }
 
 .mv-col-type {
-  flex: 0 0 44px;
+  // Wide enough for "DWord", the longest of the three type labels.
+  flex: 0 0 52px;
   color: var(--color-muted);
 }
 
@@ -194,6 +200,11 @@
   &.invalid {
     border-color: var(--color-danger-strong);
   }
+
+  &:disabled {
+    color: var(--color-muted-2);
+    cursor: default;
+  }
 }
 
 // Hand-rendered dropdown backing NameAutocomplete — deliberately not a
@@ -238,7 +249,8 @@
   padding: 3px 8px;
   cursor: pointer;
 
-  &:hover {
+  &:hover,
+  &.highlighted {
     background: var(--color-bg-hover);
   }
 }
