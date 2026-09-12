@@ -128,6 +128,102 @@ function formatValue(row: MemoryVariableRow): string {
   }
 }
 
+// --- inline value editing ---
+
+const DEC_DIGITS = /^-?[0-9]+$/;
+const SIGNED_DEC = /^[+-][0-9]+$/;
+
+/** Parses `rest` as an integer in `base` if it matches `charset` exactly, else null. */
+function parseDigits(rest: string, charset: RegExp, base: number): number | null {
+  return rest.length > 0 && charset.test(rest) ? parseInt(rest, base) : null;
+}
+
+/**
+ * Parses a Value-cell edit's raw text into an integer, for the `hex`/`udec`/`sdec`
+ * radixes. Mirrors `RegisterPanel.tsx`'s `parseRegisterInput` (an explicit `$`/`0x`/
+ * `0d`/`.`/sign prefix overrides `defaultRadix`), minus the `oct`/`bin` cases this
+ * panel doesn't offer.
+ */
+function parseNumericValueInput(raw: string, defaultRadix: "hex" | "udec" | "sdec"): number | null {
+  const s = raw.trim();
+  if (s === "") return null;
+  if (s.startsWith("$")) return parseDigits(s.slice(1), HEX_DIGITS, 16);
+  const lower = s.toLowerCase();
+  if (lower.startsWith("0x")) return parseDigits(s.slice(2), HEX_DIGITS, 16);
+  if (lower.startsWith("0d")) return parseDigits(s.slice(2), DEC_DIGITS, 10);
+  if (s.startsWith(".")) return parseDigits(s.slice(1), DEC_DIGITS, 10);
+  if (s.startsWith("-") || s.startsWith("+")) return parseDigits(s, SIGNED_DEC, 10);
+  switch (defaultRadix) {
+    case "hex":
+      return parseDigits(s, HEX_DIGITS, 16);
+    case "udec":
+    case "sdec":
+      return parseDigits(s, DEC_DIGITS, 10);
+  }
+}
+
+/**
+ * Parses a `char`-radix Value-cell edit: either a single literal character (its
+ * code unit) or a `$`/`0x`-prefixed byte value. Multi-character input (anything
+ * else) is rejected.
+ */
+function parseCharValueInput(raw: string): number | null {
+  const s = raw.trim();
+  if (s.length === 1) return s.charCodeAt(0);
+  if (s.startsWith("$")) return parseDigits(s.slice(1), HEX_DIGITS, 16);
+  if (/^0x/i.test(s)) return parseDigits(s.slice(2), HEX_DIGITS, 16);
+  return null;
+}
+
+/**
+ * Validates a parsed integer against a `widthBits`-wide storage location and
+ * returns its unsigned representation, or null if out of range. Accepts the
+ * union of the unsigned range (0..2^widthBits-1) and the signed two's-complement
+ * range (-2^(widthBits-1)..-1), so e.g. typing `-1` for a byte means 0xFF.
+ *
+ * Uses plain arithmetic rather than `RegisterPanel.tsx`'s bitwise
+ * `toUnsignedInRange` (`1 << widthBits`/`value & max`): those operators coerce
+ * to 32-bit signed integers, which silently misbehaves at `widthBits === 32`
+ * (`dword` variables) — `1 << 32 === 1`, not 4294967296.
+ */
+function toUnsignedInRangeWide(value: number, widthBits: number): number | null {
+  if (!Number.isInteger(value)) return null;
+  const range = 2 ** widthBits;
+  const max = range - 1;
+  const min = -(range / 2);
+  if (value < min || value > max) return null;
+  return value >= 0 ? value : value + range;
+}
+
+/** Splits `value` into `sizeBytes` little-endian bytes for `write_memory`. */
+function toLittleEndianBytes(value: number, sizeBytes: number): number[] {
+  const bytes: number[] = [];
+  for (let i = 0; i < sizeBytes; i++) {
+    bytes.push((value >>> (i * 8)) & 0xff);
+  }
+  return bytes;
+}
+
+/**
+ * Seeds a Value-cell edit's text input with the row's current value, formatted
+ * without a radix prefix — parsed back via the row's own radix by default, the
+ * same convention `RegisterPanel.tsx`'s edit fields use. Not called for `bool`
+ * (a checkbox, no text) or an undefined row (nothing to edit).
+ */
+function formatValueEditText(row: MemoryVariableRow): string {
+  if (row.value === null) return "";
+  switch (row.radix) {
+    case "bool":
+      return "";
+    case "char":
+      return row.value >= 0x20 && row.value <= 0x7e
+        ? String.fromCharCode(row.value)
+        : `$${formatDataRadix(row.value, "hex", TYPE_WIDTH_BITS[row.data_type])}`;
+    default:
+      return formatDataRadix(row.value, row.radix, TYPE_WIDTH_BITS[row.data_type]);
+  }
+}
+
 /** Shared fields backing both the Add and Edit popovers. */
 interface VariableFormState {
   name: string;
@@ -335,6 +431,12 @@ export default function MemoryVariablesPanel() {
   const [addDialog, setAddDialog] = useState<AddDialogState | null>(null);
   const [editDialog, setEditDialog] = useState<EditDialogState | null>(null);
   const [symbols, setSymbols] = useState<{ name: string; address: number }[]>([]);
+  // Inline Value-cell editing (Unit 5): which row's value is being edited,
+  // and the text-input state backing every radix except `bool` (a checkbox
+  // commits immediately, with no separate text-editing state to hold).
+  const [editingValueName, setEditingValueName] = useState<string | null>(null);
+  const [valueEditText, setValueEditText] = useState("");
+  const [valueEditInvalid, setValueEditInvalid] = useState(false);
   const symbolNames = useMemo(() => symbols.map((s) => s.name), [symbols]);
 
   const canEdit = execState === "stopped";
@@ -436,7 +538,8 @@ export default function MemoryVariablesPanel() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (document.activeElement instanceof HTMLInputElement) return;
-      if (!canEdit || addDialog || editDialog || selectedName === null) return;
+      if (!canEdit || addDialog || editDialog || editingValueName !== null || selectedName === null)
+        return;
       if (e.key === "Delete") {
         e.preventDefault();
         removeVariableAt(selectedName);
@@ -444,7 +547,77 @@ export default function MemoryVariablesPanel() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [canEdit, addDialog, editDialog, selectedName, removeVariableAt]);
+  }, [canEdit, addDialog, editDialog, editingValueName, selectedName, removeVariableAt]);
+
+  /** Opens inline editing for a defined row's Value cell (CPU stopped only). */
+  const beginValueEdit = useCallback(
+    (row: MemoryVariableRow) => {
+      if (!canEdit || row.address === null || row.value === null) return;
+      setEditingValueName(row.name);
+      setValueEditText(formatValueEditText(row));
+      setValueEditInvalid(false);
+    },
+    [canEdit],
+  );
+
+  const cancelValueEdit = useCallback(() => {
+    setEditingValueName(null);
+    setValueEditInvalid(false);
+  }, []);
+
+  /**
+   * Writes `value` (already validated/range-checked) to `row`'s resolved
+   * address via the existing `write_memory` command — per the Unit 2 design,
+   * value edits never go through a memory-variables-specific backend command.
+   * `write_memory`'s resulting `memory-modified` event refreshes this panel
+   * via the listener already installed above, so no local row update is
+   * needed here on success.
+   */
+  const commitValueEdit = useCallback(async (row: MemoryVariableRow, value: number) => {
+    if (row.address === null) return;
+    try {
+      await invoke("write_memory", {
+        addr: row.address,
+        data: toLittleEndianBytes(value, TYPE_WIDTH_BITS[row.data_type] / 8),
+        patch: false,
+      });
+      setEditingValueName(null);
+      setValueEditInvalid(false);
+    } catch (e) {
+      console.error("write_memory failed:", e);
+      setValueEditInvalid(true);
+    }
+  }, []);
+
+  /** A `bool` row's checkbox commits immediately on toggle — no separate text-parse step. */
+  const commitBoolValueEdit = useCallback(
+    (row: MemoryVariableRow, checked: boolean) => {
+      commitValueEdit(row, checked ? 1 : 0);
+    },
+    [commitValueEdit],
+  );
+
+  /** Parses `valueEditText` per `row.radix` (every radix but `bool`) and commits it. */
+  const commitTextValueEdit = useCallback(
+    (row: MemoryVariableRow) => {
+      const widthBits = TYPE_WIDTH_BITS[row.data_type];
+      let parsed: number | null;
+      if (row.radix === "char") {
+        parsed = parseCharValueInput(valueEditText);
+      } else if (row.radix === "bool") {
+        return;
+      } else {
+        parsed = parseNumericValueInput(valueEditText, row.radix);
+      }
+      const value = parsed === null ? null : toUnsignedInRangeWide(parsed, widthBits);
+      if (value === null) {
+        setValueEditInvalid(true);
+        return;
+      }
+      commitValueEdit(row, value);
+    },
+    [valueEditText, commitValueEdit],
+  );
 
   const openAddDialog = useCallback(() => {
     if (!canEdit) return;
@@ -574,10 +747,16 @@ export default function MemoryVariablesPanel() {
                 onClick={() => handleRowClick(row.name)}
                 onDoubleClick={(e) => {
                   // Everywhere in the row opens Edit except the radix cycle
-                  // button and the remove button, which have their own click
-                  // behavior that a double-click would otherwise clobber.
+                  // button and the remove button (their own click behavior
+                  // that a double-click would otherwise clobber) and the
+                  // Value cell, which a double-click opens for inline value
+                  // editing instead (Unit 5) rather than the Edit popover.
                   const target = e.target as Element;
                   if (target.closest(".radix-btn") || target.closest(".mv-remove-btn")) return;
+                  if (target.closest(".mv-col-value")) {
+                    beginValueEdit(row);
+                    return;
+                  }
                   openEditDialog(row);
                 }}
               >
@@ -600,8 +779,56 @@ export default function MemoryVariablesPanel() {
                     </button>
                   )}
                 </span>
-                <span className={`mv-col-value${row.value === null ? " mv-undefined" : ""}`}>
-                  {formatValue(row)}
+                <span
+                  className={`mv-col-value${row.value === null ? " mv-undefined" : ""}${
+                    canEdit && row.value !== null ? " mv-value-editable" : ""
+                  }`}
+                  title={canEdit && row.value !== null ? "Double-click to edit" : undefined}
+                >
+                  {editingValueName === row.name && row.value !== null ? (
+                    row.radix === "bool" ? (
+                      <input
+                        type="checkbox"
+                        className="mv-value-checkbox"
+                        autoFocus
+                        checked={row.value !== 0}
+                        onChange={(e) => commitBoolValueEdit(row, e.target.checked)}
+                        onBlur={cancelValueEdit}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === "Escape") {
+                            e.preventDefault();
+                            cancelValueEdit();
+                          }
+                        }}
+                      />
+                    ) : (
+                      <input
+                        className={`mv-value-input${valueEditInvalid ? " invalid" : ""}`}
+                        autoFocus
+                        spellCheck={false}
+                        onFocus={(e) => e.target.select()}
+                        value={valueEditText}
+                        onChange={(e) => {
+                          setValueEditText(e.target.value);
+                          setValueEditInvalid(false);
+                        }}
+                        onKeyDown={(e) => {
+                          e.stopPropagation();
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            commitTextValueEdit(row);
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            cancelValueEdit();
+                          }
+                        }}
+                        onBlur={cancelValueEdit}
+                      />
+                    )
+                  ) : (
+                    formatValue(row)
+                  )}
                 </span>
                 {canEdit && (
                   <button
