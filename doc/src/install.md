@@ -5,7 +5,7 @@
 Install Rust via [rustup](https://www.rust-lang.org/tools/install):
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.org | sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
 This installs the latest stable toolchain; Emma65 uses the 2024 edition, which
