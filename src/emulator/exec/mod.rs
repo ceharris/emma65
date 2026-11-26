@@ -1,8 +1,9 @@
 //! Execution control; provides the main entry points for execution on the emulated CPU.
 
 use crate::emulator::bus::IrqSource;
-use crate::emulator::cpu::opcodes::DecodedOp;
-use crate::emulator::cpu::{Cpu, Registers, StepResult};
+use crate::emulator::error::ExecError;
+use crate::emulator::processor::Processor;
+use crate::watch::WatchError;
 use std::sync::{
     Arc,
     atomic::{AtomicU16, Ordering},
@@ -10,14 +11,48 @@ use std::sync::{
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot, watch};
 
+/// Result returned by [`Processor::step`] and by the stepping and run
+/// functions in this module. `Op` is the CPU's decoded-instruction type.
+pub enum StepResult<Op> {
+    /// Instruction executed normally.
+    Executed(Op),
+    /// PC matched a breakpoint; instruction was NOT executed.
+    Breakpoint(u16),
+    /// A watch expression triggered; instruction was NOT executed.
+    WatchTriggered { watch_index: usize, pc: u16 },
+    /// A watch expression evaluation failed; instruction was NOT executed.
+    WatchError {
+        watch_index: usize,
+        pc: u16,
+        error: WatchError,
+    },
+    /// CPU is parked waiting for an interrupt (the 6502's WAI).
+    Waiting,
+    /// CPU is parked until a reset (the 6502's STP); only a reset clears it.
+    Stopped,
+    /// CPU was reset via the interrupt controller
+    Reset,
+    /// A free run ended because the caller asked it to stop (via
+    /// [`RunHandle::stop`] or a [`RunStopper`]), not because of anything the
+    /// CPU did. Never returned by [`Processor::step`] itself.
+    StopRequested,
+    /// A fatal execution error occurred.
+    Error(ExecError),
+}
+
 /// A lightweight snapshot of CPU state published by the run loop after each
 /// instruction batch so callers can display live state without stopping the CPU.
+///
+/// `R` is the CPU's register type ([`Processor::Registers`]).
 #[derive(Clone)]
-pub struct CpuLiveSnapshot {
+pub struct CpuLiveSnapshot<R> {
     /// Register state at the end of the most recent instruction batch.
-    pub registers: Registers,
-    /// Full stack page (0x0100–0x01FF).
-    pub stack_page: Vec<u8>,
+    pub registers: R,
+    /// The memory window the CPU reports as its stack (see
+    /// [`Processor::stack_window`]); for the 6502, the whole of page 1.
+    pub stack: Vec<u8>,
+    /// Bus address of the first byte of `stack`.
+    pub stack_base: u16,
     /// Total cycles executed since the last reset.
     pub cycles: u64,
     /// Cycles since CPU was started snapshot
@@ -52,15 +87,16 @@ pub struct CpuLiveSnapshot {
 /// paragraph-aligned (`& 0xfff0`) before the read so the stored page always
 /// starts on a paragraph boundary. `watch_addrs` is an arbitrary set of
 /// additional addresses to sample individually (see `watched_values`).
-fn build_live_snapshot(
-    cpu: &Cpu,
+fn build_live_snapshot<P: Processor>(
+    cpu: &P,
     mem_addr: u16,
     start_cycles: u64,
     start_timestamp: Instant,
     watch_addrs: &[u16],
-) -> CpuLiveSnapshot {
-    let mut stack_page = vec![0u8; 256];
-    let _ = cpu.bus().peek_range(0x0100, &mut stack_page);
+) -> CpuLiveSnapshot<P::Registers> {
+    let (stack_base, stack_len) = cpu.stack_window();
+    let mut stack = vec![0u8; stack_len as usize];
+    let _ = cpu.bus().peek_range(stack_base, &mut stack);
     let memory_page_addr = mem_addr & 0xfff0;
     let mut memory_page = vec![0u8; 256];
     let _ = cpu.bus().peek_range(memory_page_addr, &mut memory_page);
@@ -70,7 +106,8 @@ fn build_live_snapshot(
         .collect();
     CpuLiveSnapshot {
         registers: *cpu.registers(),
-        stack_page,
+        stack,
+        stack_base,
         cycles: cpu.cycles(),
         cycles_delta: cpu.cycles() - start_cycles,
         elapsed: start_timestamp.elapsed(),
@@ -83,9 +120,6 @@ fn build_live_snapshot(
         watched_values,
     }
 }
-
-const JSR_OPCODE: u8 = 0x20;
-const JSR_BYTE_LEN: u16 = 3;
 
 const UNLIMITED_SENTINEL: u64 = 0;
 const BATCH_SIZE: u32 = 1000;
@@ -123,7 +157,7 @@ pub enum InterruptCommand {
 }
 
 /// Applies `cmd` to `cpu`'s interrupt controller.
-fn apply_interrupt_command(cpu: &mut Cpu, cmd: InterruptCommand) {
+fn apply_interrupt_command<P: Processor>(cpu: &mut P, cmd: InterruptCommand) {
     match cmd {
         InterruptCommand::AssertIrq(source) => cpu.interrupts_mut().assert_irq(source),
         InterruptCommand::AssertIrqPulse(source) => cpu.interrupts_mut().assert_irq_pulse(source),
@@ -134,7 +168,10 @@ fn apply_interrupt_command(cpu: &mut Cpu, cmd: InterruptCommand) {
 }
 
 /// Drains and applies all commands currently queued on `cmd_rx`, without blocking.
-fn drain_interrupt_commands(cpu: &mut Cpu, cmd_rx: &mut mpsc::UnboundedReceiver<InterruptCommand>) {
+fn drain_interrupt_commands<P: Processor>(
+    cpu: &mut P,
+    cmd_rx: &mut mpsc::UnboundedReceiver<InterruptCommand>,
+) {
     while let Ok(cmd) = cmd_rx.try_recv() {
         apply_interrupt_command(cpu, cmd);
     }
@@ -266,20 +303,20 @@ impl RunStopper {
 /// [`take_cpu`](RunHandle::take_cpu) will leave the CPU thread running until it
 /// stops on its own (breakpoint, watch trigger, error, or STP/WAI with no
 /// interrupt — unless started with `park_on_stall: true`, see [`run_from`]).
-pub struct RunHandle {
+pub struct RunHandle<P: Processor> {
     /// Sends `true` to ask the CPU thread to stop after the current instruction.
     stop_tx: watch::Sender<bool>,
     /// Sends [`InterruptCommand`]s to be applied between instructions.
     cmd_tx: mpsc::UnboundedSender<InterruptCommand>,
     /// Receives the `StepResult` that caused execution to stop.
-    result_rx: oneshot::Receiver<StepResult>,
+    result_rx: oneshot::Receiver<StepResult<P::Op>>,
     /// Receives ownership of the CPU after the thread exits.
-    cpu_rx: oneshot::Receiver<Cpu>,
+    cpu_rx: oneshot::Receiver<P>,
     /// Receives live CPU snapshots published by the run loop after each batch.
-    live_rx: watch::Receiver<Option<CpuLiveSnapshot>>,
+    live_rx: watch::Receiver<Option<CpuLiveSnapshot<P::Registers>>>,
 }
 
-impl RunHandle {
+impl<P: Processor> RunHandle<P> {
     /// Returns a [`RunStopper`] that shares the underlying stop and command channels.
     ///
     /// The stopper can be cloned and stored independently; calling any of its
@@ -300,16 +337,16 @@ impl RunHandle {
 
     /// Awaits the [`StepResult`] that caused execution to stop.
     ///
-    /// If execution was stopped via [`stop`](RunHandle::stop), the result is
-    /// `StepResult::Executed` for the last instruction that completed normally.
-    pub async fn wait(self) -> StepResult {
+    /// If execution was stopped via [`stop`](RunHandle::stop) or a
+    /// [`RunStopper`], the result is [`StepResult::StopRequested`].
+    pub async fn wait(self) -> StepResult<P::Op> {
         self.result_rx
             .await
             .expect("CPU thread exited without sending result")
     }
 
     /// Signals the CPU thread to stop and awaits the CPU being returned.
-    pub async fn take_cpu(self) -> Cpu {
+    pub async fn take_cpu(self) -> P {
         self.stop();
         self.cpu_rx
             .await
@@ -321,7 +358,7 @@ impl RunHandle {
     ///
     /// Use a [`RunStopper`] obtained from [`stopper`](RunHandle::stopper) to
     /// trigger a stop externally before awaiting here.
-    pub async fn take_cpu_with_result(self) -> (StepResult, Cpu) {
+    pub async fn take_cpu_with_result(self) -> (StepResult<P::Op>, P) {
         let result = self
             .result_rx
             .await
@@ -335,13 +372,13 @@ impl RunHandle {
 
     /// Returns the most recent live snapshot published by the run loop, or
     /// `None` if no batch has completed yet.
-    pub fn live_snapshot(&self) -> Option<CpuLiveSnapshot> {
+    pub fn live_snapshot(&self) -> Option<CpuLiveSnapshot<P::Registers>> {
         self.live_rx.borrow().clone()
     }
 
     /// Returns a cloned receiver for the live snapshot channel so the caller
     /// can poll it independently (e.g. from a background task).
-    pub fn subscribe_live(&self) -> watch::Receiver<Option<CpuLiveSnapshot>> {
+    pub fn subscribe_live(&self) -> watch::Receiver<Option<CpuLiveSnapshot<P::Registers>>> {
         self.live_rx.clone()
     }
 }
@@ -351,7 +388,7 @@ impl RunHandle {
 /// Halts before executing if PC matches a breakpoint or a watch expression triggers.
 /// Use [`step_over_breakpoint`] to advance past the breakpoint at the current PC without
 /// disabling it.
-pub fn step_into(cpu: &mut Cpu) -> StepResult {
+pub fn step_into<P: Processor>(cpu: &mut P) -> StepResult<P::Op> {
     let result = cpu.step(None, true);
     cpu.flush_trace();
     result
@@ -362,18 +399,19 @@ pub fn step_into(cpu: &mut Cpu) -> StepResult {
 /// Use this when the debugger is already halted at `skip_pc` (due to a breakpoint or
 /// watch trigger) and needs to advance past it without requiring the breakpoint to be
 /// disabled first. All other addresses are checked normally.
-pub fn step_over_breakpoint(cpu: &mut Cpu, skip_pc: u16) -> StepResult {
+pub fn step_over_breakpoint<P: Processor>(cpu: &mut P, skip_pc: u16) -> StepResult<P::Op> {
     let result = cpu.step(Some(skip_pc), true);
     cpu.flush_trace();
     result
 }
 
-/// Executes one logical step, treating JSR as atomic.
+/// Executes one logical step, treating a subroutine call as atomic.
 ///
-/// If the instruction at the current PC is JSR, sets a temporary breakpoint at
-/// `PC+3` and steps until that breakpoint is hit (or execution halts for any
-/// other reason). For all other instructions, behaves identically to
-/// [`Cpu::step`].
+/// If the instruction at the current PC is a subroutine call (as reported by
+/// [`Processor::subroutine_call_len`]; for the 6502, JSR), sets a temporary
+/// breakpoint just past it and steps until that breakpoint is hit (or
+/// execution halts for any other reason). For all other instructions, behaves
+/// identically to [`step_over_breakpoint`] at the current PC.
 ///
 /// The temporary breakpoint is always removed before returning, even if
 /// execution stops before reaching it. Any pre-existing breakpoint at the
@@ -390,27 +428,26 @@ pub fn step_over_breakpoint(cpu: &mut Cpu, skip_pc: u16) -> StepResult {
 /// (based on a fixed batch size) so callers can display live state while a long
 /// subroutine runs. `mem_view_addr` selects which 256-byte page is captured in
 /// each snapshot; pass `Arc::new(AtomicU16::new(0))` if not needed.
-pub fn step_over_subroutine(
-    cpu: &mut Cpu,
+pub fn step_over_subroutine<P: Processor>(
+    cpu: &mut P,
     stop_rx: &watch::Receiver<bool>,
     cmd_rx: &mut mpsc::UnboundedReceiver<InterruptCommand>,
-    live_tx: Option<&watch::Sender<Option<CpuLiveSnapshot>>>,
+    live_tx: Option<&watch::Sender<Option<CpuLiveSnapshot<P::Registers>>>>,
     mem_view_addr: &Arc<AtomicU16>,
-) -> Option<StepResult> {
-    let pc = cpu.registers().pc;
-    let opcode = cpu.bus().peek(pc).unwrap_or(0);
-    if opcode != JSR_OPCODE {
+) -> Option<StepResult<P::Op>> {
+    let pc = cpu.pc();
+    let Some(call_len) = cpu.subroutine_call_len(pc) else {
         return Some(step_over_breakpoint(cpu, pc));
-    }
+    };
 
-    let target = pc.wrapping_add(JSR_BYTE_LEN);
+    let target = pc.wrapping_add(call_len);
     let already_set = cpu.breakpoints().contains(&target);
     if !already_set {
         cpu.add_breakpoint(target);
     }
 
     // The first iteration skips the breakpoint/watch check at the current PC so
-    // that a breakpoint there does not immediately re-fire before JSR executes.
+    // that a breakpoint there does not immediately re-fire before the call executes.
     // Subsequent iterations use the normal step() path.
     let mut first = true;
     let mut steps = 0u32;
@@ -447,7 +484,7 @@ pub fn step_over_subroutine(
         }
         match res {
             StepResult::Executed(op) => {
-                if cpu.registers().pc == target {
+                if cpu.pc() == target {
                     break if already_set {
                         StepResult::Breakpoint(target)
                     } else {
@@ -479,11 +516,13 @@ pub fn step_over_subroutine(
     Some(result)
 }
 
-/// Runs until the stack pointer rises above its value at the time of the call.
+/// Runs until the current subroutine returns.
 ///
-/// This detects subroutine return: once `S` exceeds `initial_s` (using
-/// wrapping 8-bit arithmetic to handle stack pointer wraparound), the
-/// subroutine's stack frame has been unwound by `RTS` or `RTI`. Execution also
+/// Return is detected from the stack: a [`Processor::stack_mark`] is taken at
+/// the start, and execution halts after the first instruction once
+/// [`Processor::has_returned_from`] reports that the stack has unwound past it
+/// (for the 6502: `S` has risen above its starting value, using wrapping 8-bit
+/// arithmetic, after an `RTS` or `RTI`). Execution also
 /// halts on any non-[`StepResult::Executed`] result (breakpoint, watch trigger,
 /// error, STP, WAI stall).
 ///
@@ -498,14 +537,14 @@ pub fn step_over_subroutine(
 /// (based on a fixed batch size) so callers can display live state while a long
 /// subroutine runs. `mem_view_addr` selects which 256-byte page is captured in
 /// each snapshot; pass `Arc::new(AtomicU16::new(0))` if not needed.
-pub fn step_return(
-    cpu: &mut Cpu,
+pub fn step_return<P: Processor>(
+    cpu: &mut P,
     stop_rx: &watch::Receiver<bool>,
     cmd_rx: &mut mpsc::UnboundedReceiver<InterruptCommand>,
-    live_tx: Option<&watch::Sender<Option<CpuLiveSnapshot>>>,
+    live_tx: Option<&watch::Sender<Option<CpuLiveSnapshot<P::Registers>>>>,
     mem_view_addr: &Arc<AtomicU16>,
-) -> Option<StepResult> {
-    let initial_s = cpu.registers().s;
+) -> Option<StepResult<P::Op>> {
+    let mark = cpu.stack_mark();
     // The first iteration skips the breakpoint/watch check at the current PC so
     // that a breakpoint there does not immediately re-fire before the instruction executes.
     let mut first = true;
@@ -522,7 +561,7 @@ pub fn step_return(
             return None;
         }
         drain_interrupt_commands(cpu, cmd_rx);
-        let pc = cpu.registers().pc;
+        let pc = cpu.pc();
         let res = if first {
             first = false;
             cpu.step(Some(pc), true)
@@ -540,7 +579,7 @@ pub fn step_return(
             )));
         }
         match res {
-            StepResult::Executed(op) if (cpu.registers().s.wrapping_sub(initial_s) as i8) > 0 => {
+            StepResult::Executed(op) if cpu.has_returned_from(mark) => {
                 cpu.flush_trace();
                 return Some(StepResult::Executed(op));
             }
@@ -558,13 +597,13 @@ pub fn step_return(
 /// Returns a [`RunHandle`] immediately. The CPU thread runs `cpu.step()` in a
 /// tight loop, checking the stop signal between instructions. When execution
 /// halts (stop signal, breakpoint, watch trigger, error, STP, or WAI stall),
-/// both the final [`StepResult`] and the `Cpu` are sent back via the handle's
+/// both the final [`StepResult`] and the CPU are sent back via the handle's
 /// channels.
 ///
 /// When `cpu.clock_speed()` is not unlimited, the loop sleeps as needed to
 /// match the target frequency. Throttling is batched over ~1000 instructions
 /// to avoid per-instruction syscall overhead.
-pub fn run(cpu: Cpu) -> RunHandle {
+pub fn run<P: Processor>(cpu: P) -> RunHandle<P> {
     run_from(cpu, None, Arc::new(AtomicU16::new(0)), Vec::new(), false)
 }
 
@@ -595,13 +634,13 @@ pub fn run(cpu: Cpu) -> RunHandle {
 /// addresses (e.g. the debugger's Memory Variables panel) without paying for
 /// a full-address-space read. Fixed for the run's duration: pass `Vec::new()`
 /// if not needed.
-pub fn run_from(
-    cpu: Cpu,
+pub fn run_from<P: Processor>(
+    cpu: P,
     skip_pc: Option<u16>,
     mem_view_addr: Arc<AtomicU16>,
     watch_addrs: Vec<u16>,
     park_on_stall: bool,
-) -> RunHandle {
+) -> RunHandle<P> {
     let (stop_tx, stop_rx) = watch::channel(false);
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
     let (result_tx, result_rx) = oneshot::channel();
@@ -637,20 +676,22 @@ pub fn run_from(
 /// The channel endpoints [`run_loop`] reports through, counterparts to the ones [`RunHandle`]
 /// holds. Grouped into a struct because `run_loop` otherwise exceeds clippy's argument-count
 /// lint.
-struct RunLoopChannels {
+struct RunLoopChannels<P: Processor> {
     stop_rx: watch::Receiver<bool>,
     cmd_rx: mpsc::UnboundedReceiver<InterruptCommand>,
-    live_tx: watch::Sender<Option<CpuLiveSnapshot>>,
-    result_tx: oneshot::Sender<StepResult>,
-    cpu_tx: oneshot::Sender<Cpu>,
+    live_tx: watch::Sender<Option<CpuLiveSnapshot<P::Registers>>>,
+    result_tx: oneshot::Sender<StepResult<P::Op>>,
+    cpu_tx: oneshot::Sender<P>,
 }
 
-fn run_loop(
-    mut cpu: Cpu,
+/// The free-running loop behind [`run_from`]. Generic over `P`, so each CPU
+/// gets its own compiled copy and `cpu.step()` is a static call.
+fn run_loop<P: Processor>(
+    mut cpu: P,
     skip_pc: Option<u16>,
     mem_view_addr: Arc<AtomicU16>,
     watch_addrs: Vec<u16>,
-    channels: RunLoopChannels,
+    channels: RunLoopChannels<P>,
     park_on_stall: bool,
 ) {
     let RunLoopChannels {
@@ -730,19 +771,8 @@ fn run_loop(
         }
     };
 
-    // Synthesize an Executed result for a clean stop so the caller always gets
-    // a valid StepResult regardless of why the loop exited.
-    let step_result = final_result.unwrap_or_else(|| {
-        use crate::emulator::cpu::opcodes::{AddressingMode, Mnemonic};
-        StepResult::Executed(DecodedOp {
-            opcode: 0xEA,
-            mnemonic: Mnemonic::Nop,
-            mode: AddressingMode::Implied,
-            byte_len: 1,
-            base_cycles: 2,
-            is_valid: true,
-        })
-    });
+    // A clean stop (the loop broke out with `None`) is reported explicitly.
+    let step_result = final_result.unwrap_or(StepResult::StopRequested);
 
     // Flush once here, rather than after every instruction in the loop above:
     // this is the point at which the caller awaiting `RunHandle` resumes, and the
@@ -822,6 +852,35 @@ mod tests {
         let cpu = handle.take_cpu().await;
         // CPU executed NOPs; PC should still be in the NOP loop.
         assert!(cpu.cycles() > 0);
+    }
+
+    #[tokio::test]
+    async fn free_run_stop_reports_stop_requested() {
+        let cpu = make_cpu_with_speed(ClockSpeed::unlimited());
+        let handle = run(cpu);
+        let stopper = handle.stopper();
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        stopper.stop();
+        let (result, cpu) = handle.take_cpu_with_result().await;
+        assert!(matches!(result, StepResult::StopRequested));
+        assert!(cpu.cycles() > 0);
+    }
+
+    #[tokio::test]
+    async fn live_snapshot_stack_is_page_one() {
+        let mut cpu = make_cpu_with_speed(ClockSpeed::unlimited());
+        cpu.bus_mut().write(0x0100, 0x11).unwrap();
+        cpu.bus_mut().write(0x01FF, 0x22).unwrap();
+        let handle = run(cpu);
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        let snapshot = handle
+            .live_snapshot()
+            .expect("expected a published snapshot");
+        assert_eq!(snapshot.stack_base, 0x0100);
+        assert_eq!(snapshot.stack.len(), 256);
+        assert_eq!(snapshot.stack[0x00], 0x11);
+        assert_eq!(snapshot.stack[0xFF], 0x22);
+        handle.take_cpu().await;
     }
 
     #[tokio::test]

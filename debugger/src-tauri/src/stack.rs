@@ -42,8 +42,10 @@ pub fn get_stack(
         .as_ref()
         .and_then(|rx| rx.borrow().clone())
         .ok_or("CPU not ready")?;
+    // For the 6502 the live snapshot's stack window is the whole of page 1
+    // (`stack_base` 0x0100, 256 bytes), the same range the halted path reads.
     Ok(StackSnapshot {
         s: live.registers.s,
-        page: live.stack_page,
+        page: live.stack,
     })
 }

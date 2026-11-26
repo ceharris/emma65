@@ -1,6 +1,6 @@
 //! Emulated 6502 CPU; instruction fetch, decode, and execution
 //!
-//! See the [`exec`](crate::emulator::exec) module for the high level interface for
+//! See the [`exec`] module for the high level interface for
 //! executing 6502 instructions.
 
 pub mod alu;
@@ -12,8 +12,9 @@ pub mod vector;
 
 use crate::emulator::bus::{Bus, BusOp, InterruptController};
 use crate::emulator::error::{BusError, CpuBuildError, ExecError};
-use crate::emulator::exec::ClockSpeed;
+use crate::emulator::exec::{self, ClockSpeed};
 use crate::emulator::machine::MachineState;
+use crate::emulator::processor::{HaltState, Processor};
 use crate::emulator::{
     LogCategory, LogLevel, LogSender, TraceCallback, TraceKind, TraceRecord, log_msg,
 };
@@ -63,29 +64,20 @@ impl Registers {
     }
 }
 
-/// Result returned by [`Cpu::step()`].
-pub enum StepResult {
-    /// Instruction executed normally.
-    Executed(DecodedOp),
-    /// PC matched a breakpoint; instruction was NOT executed.
-    Breakpoint(u16),
-    /// A watch expression triggered; instruction was NOT executed.
-    WatchTriggered { watch_index: usize, pc: u16 },
-    /// A watch expression evaluation failed; instruction was NOT executed.
-    WatchError {
-        watch_index: usize,
-        pc: u16,
-        error: WatchError,
-    },
-    /// CPU is in WAI state, waiting for an interrupt.
-    Waiting,
-    /// CPU is in STP state; only reset() clears it.
-    Stopped,
-    /// CPU was reset via the interrupt controller
-    Reset,
-    /// A fatal execution error occurred.
-    Error(ExecError),
-}
+/// Result returned by [`Cpu::step()`]: [`exec::StepResult`] for the 6502's
+/// [`DecodedOp`].
+pub type StepResult = exec::StepResult<DecodedOp>;
+
+/// [`exec::RunHandle`] for the 6502 [`Cpu`].
+pub type RunHandle = exec::RunHandle<Cpu>;
+
+/// [`exec::CpuLiveSnapshot`] for the 6502's [`Registers`].
+pub type CpuLiveSnapshot = exec::CpuLiveSnapshot<Registers>;
+
+/// The 6502's JSR opcode, the only instruction step-over treats as a call.
+const JSR_OPCODE: u8 = 0x20;
+/// Length of a JSR instruction in bytes.
+const JSR_BYTE_LEN: u16 = 3;
 /// The 65C02 CPU: registers, bus, decode table, and execution state.
 pub struct Cpu {
     /// General-purpose and special-purpose registers (A, X, Y, S, PC, P).
@@ -1263,6 +1255,78 @@ impl WatchContext for CpuWatchContext<'_> {
             4 => self.read_mem_u32(addr, 4),
             _ => 0,
         }
+    }
+}
+
+impl Processor for Cpu {
+    type Registers = Registers;
+    type Op = DecodedOp;
+    /// The stack pointer `S`.
+    type StackMark = u8;
+
+    fn machine(&self) -> &MachineState {
+        &self.machine
+    }
+
+    fn machine_mut(&mut self) -> &mut MachineState {
+        &mut self.machine
+    }
+
+    #[inline]
+    fn step(&mut self, skip_pc: Option<u16>, check_breakpoints: bool) -> StepResult {
+        Cpu::step(self, skip_pc, check_breakpoints)
+    }
+
+    fn reset(&mut self) -> Result<(), ExecError> {
+        Cpu::reset(self)
+    }
+
+    fn registers(&self) -> &Registers {
+        &self.regs
+    }
+
+    fn pc(&self) -> u16 {
+        self.regs.pc
+    }
+
+    fn halt_state(&self) -> HaltState {
+        if self.stopped {
+            HaltState::Stopped
+        } else if self.waiting {
+            HaltState::Waiting
+        } else {
+            HaltState::Running
+        }
+    }
+
+    fn flush_trace(&mut self) {
+        Cpu::flush_trace(self)
+    }
+
+    fn subroutine_call_len(&self, pc: u16) -> Option<u16> {
+        (self.machine.bus.peek(pc).unwrap_or(0) == JSR_OPCODE).then_some(JSR_BYTE_LEN)
+    }
+
+    fn stack_mark(&self) -> u8 {
+        self.regs.s
+    }
+
+    /// `S` has risen above `mark`. The wrapping 8-bit comparison handles the
+    /// stack pointer wrapping around page 1.
+    fn has_returned_from(&self, mark: u8) -> bool {
+        (self.regs.s.wrapping_sub(mark) as i8) > 0
+    }
+
+    fn stack_window(&self) -> (u16, u16) {
+        (STACK_BASE, 256)
+    }
+
+    fn map_register_name(name: &str) -> Option<Operand> {
+        map_register_name(name)
+    }
+
+    fn map_flag_name(name: &str) -> Option<Operand> {
+        map_flag_name(name)
     }
 }
 
