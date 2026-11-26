@@ -3,7 +3,7 @@
 One line per memory file in this directory. See CLAUDE.md's "Agent memory" section for how to use and maintain it.
 
 ## Current work
-- [emma6k rename (in progress)](emma6k-rename.md) — branch chore/rename-emma6k: what's renamed or kept, remaining steps (GitHub repo rename, remote, CI image, PR); Linux host lacks gh and SDL2 -dev packages
+- [emma6k rename (in progress)](emma6k-rename.md) — branch chore/rename-emma6k: what's renamed or kept, remaining steps (GitHub repo rename, remote, CI image, PR); Linux checks pass from ~/git/emma6k; moved checkouts need a tauri `cargo clean`
 - [Multi-CPU effort](multi-cpu-effort.md) — 6809 support via a `Processor` trait in this repo; step 1 plan in plan/; user decisions (core crate: emma6k-core)
 - [Open issues](open-issues.md) — #646 epic (ask before closing) + follow-ons #656–659; frontend test coverage #559/#560
 
