@@ -16,5 +16,7 @@ Checked 2026-11-26; still open:
   - #657 and #658 share an open question: define a type once and reuse it, or declare it inline per variable. Settle it the same way for both.
 - **#559, #560: frontend test coverage** for `WatchpointPanel` and `SymbolsPanel`, follow-ups from #482. The xterm/canvas-heavy panels (Terminal, Display, LED Matrix, Memory, Assembler) were deliberately left out because jsdom can't render them. Tests for a hook throwing outside its provider should use `src/test/expectHookThrows.ts`, which keeps CI logs clean (#567).
 
+- **#667, unmapped-write warnings in the debugger** (filed 2026-11-26). Memory edit, fill, load and assembly into unmapped space silently do nothing: `Bus::patch` drops them, and so does `Bus::write` under the default `unmapped-policy = "ignore"`. The proposal is a debugger-side warning, per [[consumer-side-device-logging]]. **If the user reports that "writes have no effect", check the profile's memory map first.** Snake, for example, has only 4 KB of RAM, so nothing is mapped at `$1000–$DFFF`.
+
 **Why:** several older notes said to "ask before closing" issues that turned out to be closed already. This list holds only what was actually open on 2026-11-26.
 **How to apply:** re-check an issue's state before acting on it. Don't close an epic without asking.
