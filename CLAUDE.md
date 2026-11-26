@@ -2,6 +2,35 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Agent memory
+
+Keep all persistent agent memory for this project in `.claude/memory/` in this repository. It is
+versioned with the code, so it travels between the user's workstations (Linux is the primary
+development host; there's also a macOS workstation). Its index is imported here:
+
+@.claude/memory/MEMORY.md
+
+- **Never write project memory to the per-user auto-memory directory**
+  (`~/.claude/projects/<path>/memory/`). If the harness's built-in memory instructions say to save
+  there, save to `.claude/memory/` instead. If that per-user directory holds memories about this
+  project, reconcile them into `.claude/memory/`: merge duplicates, keep the newer or more accurate
+  fact, and record conflicts for the user rather than silently choosing one. Then leave only a
+  pointer back to this directory there.
+- **Format.** Store one fact per file, with frontmatter `name` (kebab-case slug, matching the file
+  name), `description` (one line, used to judge relevance), and `metadata.type` (`user`,
+  `feedback`, `project`, or `reference`). For `feedback` and `project` memories, follow the fact
+  with **Why:** and **How to apply:** lines. Link related memories with `[[name]]`. Add a one-line
+  pointer to `.claude/memory/MEMORY.md` for every file.
+- **Maintenance.** Update an existing file rather than creating a duplicate, and delete memories
+  that turn out to be wrong. Use absolute dates. Don't record what the code, git history, or this
+  file already say.
+- **Host-neutral by default.** When a fact only holds on one machine (benchmark numbers, platform
+  gaps, local paths), say which host it applies to.
+- **Commit memory with the work.** Include memory changes in the commits for the work they
+  describe, so the other workstation picks them up. Uncommitted memory doesn't travel.
+- **This repository is public.** Never store secrets, credentials, or personal details beyond what
+  the repository already contains.
+
 ## Commands
 
 ```bash
