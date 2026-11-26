@@ -33,7 +33,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 - [Consumer-side device logging](consumer-side-device-logging.md) — logging decisions live in DeviceEvent consumers, not devices or the Bus
 - [deny_unknown_fields on attributes](deny-unknown-fields-device-attributes.md) — every device *Attributes struct gets it
 - [Avoid side-effect caveats](avoid-side-effect-caveats.md) — a design needing a caveat is a cue to drop the capability
-- [macOS + Linux portability](macos-linux-portability.md) — Linux is primary; macOS port NOT complete (SDL2 doesn't link); no Linux-only APIs or paths
+- [macOS + Linux portability](macos-linux-portability.md) — Linux primary; no macOS CI, Linux CI cross-checks emma65 for darwin; Intel-only local builds; port plan plan/macos-port-plan.md, Unit 1 next; keep F-keys
 - [Clock bench baselines](clock-bench-baseline.md) — per host, both 2026-11-26 pre-refactor: Linux Ryzen ~36/~87 MHz accurate, macOS i9 ~26/~50 MHz
 
 ## Docs
