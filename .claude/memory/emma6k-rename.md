@@ -1,6 +1,6 @@
 ---
 name: emma6k-rename
-description: The project was renamed emma65 → emma6k (PR #661, merged 2026-11-26) — the naming rule, what deliberately kept the old name, and the macOS checkout follow-up still pending
+description: The project was renamed emma65 → emma6k (PR #661, merged 2026-11-26) — the naming rule, what deliberately kept the old name, and how each host moved its checkout
 metadata:
   type: project
 ---
@@ -25,9 +25,6 @@ The project was renamed to **emma6k** in PR #661, merged 2026-11-26, before the 
 
 **Linux workstation:** the checkout is at `~/git/emma6k`, and `origin` is `git@github.com:ceharris/emma6k.git`. The Ubuntu 24.04 → 26.04 upgrade (around 2026-11-14) removed `libgtk-3-dev` and `libwebkit2gtk-4.1-dev`, and the user reinstalled them. If the debugger fails to link with `unable to find library -lgdk-3`, they're missing again.
 
-**macOS workstation (in progress):**
-- Done 2026-11-26: created the per-user pointer directory `~/.claude/projects/-Users-ceharris-git-emma6k/memory/`. The old directory's transcripts were left behind on purpose (user).
-- Rename the checkout directory to `emma6k` (the user does this outside a session).
-- Run `git remote set-url origin git@github.com:ceharris/emma6k.git`.
-- Run the tauri `cargo clean` above.
-- Point `.vscode/mcp.json` at the macOS path. That file is committed on purpose, with the Linux path.
+**macOS workstation (done 2026-11-26):** the checkout is at `~/git/emma6k`, and `origin` is `git@github.com:ceharris/emma6k.git`. The per-user pointer directory `~/.claude/projects/-Users-ceharris-git-emma6k/memory/` exists. The old per-user directory's transcripts were left behind on purpose (user). After the tauri `cargo clean`, a few `target/debug/build/*/output` files still name the old path; they date from 2026-09, belong to stale build hashes, and don't break the build.
+
+**`.vscode/mcp.json`** uses `${workspaceFolder}` for CodeGraph's `--path`, so the one committed file works on both hosts. It used to hard-code the Linux path.
