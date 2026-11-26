@@ -30,7 +30,9 @@ metadata:
 - The core crate is versioned in lockstep with `emma65`.
 - PR 4's timing is decided only after PRs 1–3 are reviewed and merged.
 
-**Where we left off (2026-11-26):** PR 1 (`MachineState` extraction) is open as #664 on branch `refactor/extract-machine-state`, awaiting the user's UAT and review. Don't start PR 2 until the user says so ([[multi-unit-plan-workflow]]).
+**Where we left off (2026-11-26):** PR 1 (`MachineState` extraction) merged as #664 on 2026-11-26. PR 2 (the `Processor` trait and a generic `exec`) is next, but don't start it until the user says so ([[multi-unit-plan-workflow]]).
+
+**CI doesn't build the debugger or the SDL crates for `src/`-only changes.** Their jobs are path-filtered to their own directories (`debugger/**` and so on) even though they depend on the `emma65` library. In #664 they were skipped. For a refactor PR, run `cargo test --workspace` and the debugger's clippy command locally, and say in the PR that you did.
 
 Notes from PR 1 for PR 2:
 - **`check_halt` takes a closure**, `|bus| CpuWatchContext { regs, bus }`, not the plan's `&dyn WatchContext`. A context borrowing `machine.bus` can't coexist with `&mut self` on the same `MachineState`. The `Processor` trait should keep this shape.
