@@ -3,8 +3,8 @@
 One line per memory file in this directory. See CLAUDE.md's "Agent memory" section for how to use and maintain it.
 
 ## Current work
-- [emma6k rename](emma6k-rename.md) — merged in #661: naming rule, what kept the emma65 name, old tag prefixes, moved-checkout steps (per-user memory pointer, `cargo clean`); both hosts moved (2026-11-26)
-- [Multi-CPU effort](multi-cpu-effort.md) — NEXT UP: re-baseline benchmark, then step 1 PR 1 (`MachineState`); 6809 via a `Processor` trait; plan in plan/; user decisions
+- [emma6k rename](emma6k-rename.md) — merged in #661: naming rule, what kept the emma65 name, old tag prefixes, moved-checkout steps (per-user memory pointer, `cargo clean`); macOS checkout follow-up in progress
+- [Multi-CPU effort](multi-cpu-effort.md) — NEXT UP: step 1 PR 1 (`MachineState`); Linux baseline re-taken; 6809 via a `Processor` trait; plan in plan/; user decisions
 - [Open issues](open-issues.md) — #646 epic (ask before closing) + follow-ons #656–659; frontend test coverage #559/#560
 
 ## Workflow
@@ -34,7 +34,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 - [deny_unknown_fields on attributes](deny-unknown-fields-device-attributes.md) — every device *Attributes struct gets it
 - [Avoid side-effect caveats](avoid-side-effect-caveats.md) — a design needing a caveat is a cue to drop the capability
 - [macOS + Linux portability](macos-linux-portability.md) — Linux is primary; macOS port NOT complete (SDL2 doesn't link); no Linux-only APIs or paths
-- [Clock bench baselines](clock-bench-baseline.md) — per host: Linux Ryzen ~34/~85 MHz (2026-09, re-take on main), macOS i9 ~26/~50 MHz
+- [Clock bench baselines](clock-bench-baseline.md) — per host, both 2026-11-26 pre-refactor: Linux Ryzen ~36/~87 MHz accurate, macOS i9 ~26/~50 MHz
 
 ## Docs
 - [plan/ frozen, doc/ current](plan-frozen-doc-current.md) — never retrofit superseded plan docs; always keep the wiki current
