@@ -452,15 +452,17 @@ fn run_relay_thread(
     }
 }
 
+/// Creates an anonymous OS pipe with both ends marked close-on-exec.
+///
+/// `std::io::pipe` is used instead of `libc::pipe2` because `pipe2` is not
+/// available on macOS; std uses `pipe2(O_CLOEXEC)` where the platform has it
+/// and falls back to `pipe` + `fcntl(FD_CLOEXEC)` elsewhere.
 fn os_pipe() -> io::Result<(File, File)> {
-    let mut fds = [0i32; 2];
-    let rc = unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC) };
-    if rc != 0 {
-        return Err(io::Error::last_os_error());
-    }
-    let read_end = unsafe { File::from_raw_fd(fds[0]) };
-    let write_end = unsafe { File::from_raw_fd(fds[1]) };
-    Ok((read_end, write_end))
+    let (read_end, write_end) = io::pipe()?;
+    Ok((
+        File::from(OwnedFd::from(read_end)),
+        File::from(OwnedFd::from(write_end)),
+    ))
 }
 
 fn dup_fd(fd: RawFd) -> io::Result<RawFd> {
