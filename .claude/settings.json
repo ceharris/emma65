@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "mcp__codegraph__*"
+      "mcp__codegraph__*",
+      "Bash(git add .claude/memory/*)",
+      "Bash(git commit *)",
+      "Bash(git push origin main)",
+      "Bash(git push -q origin main)"
     ]
   },
   "hooks": {

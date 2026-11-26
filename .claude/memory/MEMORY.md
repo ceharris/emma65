@@ -5,6 +5,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 ## Current work
 - [emma6k rename](emma6k-rename.md) — merged in #661: naming rule, what kept the emma65 name, old tag prefixes, moved-checkout steps (per-user memory pointer, `cargo clean`); both hosts moved (2026-11-26)
 - [Multi-CPU effort](multi-cpu-effort.md) — step 1 PR 1 open as #664 (awaiting review; +14% speed, watch inlining in PR 2); 6809 via a `Processor` trait; plan in plan/; user decisions
+- [macOS port effort](macos-port-effort.md) — plan/macos-port-plan.md (#663); Unit 1 (SDL2 use-pkgconfig, cfg the 4 window_for_events clones, commit macOS-schema.json, install.md macOS) exact steps; run on the Mac; ask priority vs multi-CPU
 - [Open issues](open-issues.md) — #646 epic (ask before closing) + follow-ons #656–659; frontend test coverage #559/#560
 
 ## Workflow
@@ -33,7 +34,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 - [Consumer-side device logging](consumer-side-device-logging.md) — logging decisions live in DeviceEvent consumers, not devices or the Bus
 - [deny_unknown_fields on attributes](deny-unknown-fields-device-attributes.md) — every device *Attributes struct gets it
 - [Avoid side-effect caveats](avoid-side-effect-caveats.md) — a design needing a caveat is a cue to drop the capability
-- [macOS + Linux portability](macos-linux-portability.md) — Linux is primary; macOS port NOT complete (SDL2 doesn't link); no Linux-only APIs or paths
+- [macOS + Linux portability](macos-linux-portability.md) — Linux primary; no macOS CI, Linux CI cross-checks emma65 for darwin; Intel-only local builds; port progress in macos-port-effort; keep F-keys
 - [Clock bench baselines](clock-bench-baseline.md) — per host, both 2026-11-26 pre-refactor: Linux Ryzen ~36/~87 MHz accurate, macOS i9 ~26/~50 MHz
 
 ## Docs
