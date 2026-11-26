@@ -35,7 +35,7 @@ The project is being renamed to **emma6k** (decided by the user 2026-11-26) befo
 **Remaining steps:**
 1. ~~The user renames the GitHub repo to `ceharris/emma6k`.~~ Done 2026-11-26.
 2. The agent runs `git remote set-url origin git@github.com:ceharris/emma6k.git` on each host. Done on Linux 2026-11-26. **Still needed on macOS:** the user plans to rename that checkout's directory to `emma6k` and update its remote in a later session. Then run the tauri `cargo clean` described below, and point `.vscode/mcp.json` at the macOS path. That file is committed on purpose, with the Linux path.
-3. Dispatch `docker-ci-image.yml` on main (confirm with the user first) so `ghcr.io/ceharris/emma6k-ci` exists. CI pulls `ghcr.io/${{ github.repository }}-ci`, so until then every CI job on the PR fails to find its image.
+3. ~~Dispatch `docker-ci-image.yml` on main~~ Done 2026-11-26 (run 45822007561 published `ghcr.io/ceharris/emma6k-ci:latest`). Originally: (confirm with the user first) so `ghcr.io/ceharris/emma6k-ci` exists. CI pulls `ghcr.io/${{ github.repository }}-ci`, so until then every CI job on the PR fails to find its image.
 4. Open the PR. The branch was committed and pushed from the macOS workstation on 2026-11-26; open the PR only after steps 1–3.
 
 **Verified on Linux (2026-11-26, from the renamed `~/git/emma6k` checkout):**
