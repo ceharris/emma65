@@ -43,9 +43,12 @@ How step 1 ended up, for step 2:
 
 **CI doesn't build the debugger or the SDL crates for `src/`- or `core/`-only changes.** Their jobs are path-filtered to their own directories (`debugger/**` and so on) even though they depend on `emma65` and `emma6k-core`. In #664 they were skipped. For a refactor PR, run `cargo test --workspace` and the debugger's clippy command locally, and say in the PR that you did.
 
-Notes from PR 1 for PR 2:
-- **`check_halt` takes a closure**, `|bus| CpuWatchContext { regs, bus }`, not the plan's `&dyn WatchContext`. A context borrowing `machine.bus` can't coexist with `&mut self` on the same `MachineState`. The `Processor` trait should keep this shape.
-- **PR 1 made the 6502 about 14% faster** on the minimal complement and about 4% on the default one (A/B on Linux, minimal top speed 90 → 103 MHz). `nm` showed why: `Cpu::execute` stopped being a separate function and was inlined into `step`. That's an LLVM size heuristic, so PR 2's generic `run_loop`/`step` could undo it. Compare PR 2 against PR 1's numbers, not `main`'s, and re-check with `nm -C target/release/examples/clock_bench_minimal | grep 'Cpu>::'`.
-- `finish_cycle` stays out-of-line, both before and after the move, despite `#[inline]`. `bus_read`/`bus_write`/`push`/`pop` were out-of-line on `main` too.
+**Open offer (2026-11-26, not yet answered):** add `src/**`, `core/**` and the root `Cargo.toml` to the path filters of CI's debugger and SDL jobs, so changes to the libraries they depend on build them. Raise it again if the user doesn't. Do it as its own small PR, not inside a refactor PR.
 
-**How to apply:** follow the notes above. Benchmark each PR against [[clock-bench-baseline]] for the current host. The step 1 plan document already uses `emma6k-core`.
+**To resume in a new session:**
+1. Run `gh pr view 668 --json state`. If it's still open, wait for the user's review feedback and address it on `refactor/extract-core-crate`.
+2. If it merged, fast-forward `main`, delete the local branch, and update this file on `main` to say step 1 is complete (#664–668). There's no PR left, so commit it straight to `main` per [[git-workflow]].
+3. Ask the user what's next: step 2 (the 6809), the CI path-filter fix above, issue #667, or the macOS port ([[macos-port-effort]]).
+4. For step 2, write a plan document first (`plan/multi-cpu-step2-...md`), as was done for step 1. The step 1 plan's "Not in step 1" section lists its scope: a 6809 crate, the `cpu = "..."` selector, an enum choosing the session at startup, FIRQ/HALT interrupt lines, trace format v3, and a 6809 template. Check its unit split for compile dependencies ([[multi-unit-plan-workflow]]) and get the user's decisions before implementing.
+
+**How to apply:** follow the resume steps above. A/B-benchmark every PR that touches a hot path against `main`, alternating builds, using [[clock-bench-baseline]]'s post-step-1 row for the current host. Re-check `nm` for `Cpu::execute` staying inlined into `step`: PR 1's ~14% gain came from that, and every later PR kept it.
