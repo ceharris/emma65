@@ -7,7 +7,7 @@
         "serve",
         "--mcp",
         "--path",
-        "/home/ceharris/git/emma6k"
+        "${workspaceFolder}"
       ]
     }
   }
