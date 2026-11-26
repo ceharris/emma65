@@ -30,7 +30,14 @@ metadata:
 - The core crate is versioned in lockstep with `emma65`.
 - PR 4's timing is decided only after PRs 1–3 are reviewed and merged.
 
-**Where we left off (2026-11-26):** PR 1 (`MachineState` extraction) merged as #664 on 2026-11-26. PR 2 (the `Processor` trait and a generic `exec`) is next, but don't start it until the user says so ([[multi-unit-plan-workflow]]).
+**Where we left off (2026-11-26):** PR 1 merged as #664. PR 2 (the `Processor` trait and a generic `exec`) is open as #665 on branch `refactor/processor-trait`, awaiting the user's UAT and review. Don't start PR 3 until the user says so ([[multi-unit-plan-workflow]]).
+
+Notes for PR 3:
+- **`check_halt` takes a closure**, `|bus| CpuWatchContext { regs, bus }`, not the plan's `&dyn WatchContext`. A context borrowing `machine.bus` can't coexist with `&mut self` on the same `MachineState`.
+- **Aliases keep existing paths working.** The generic types live at `exec::{StepResult<Op>, RunHandle<P>, CpuLiveSnapshot<R>}`. The 6502 module defines aliases with the old names, and `emma65::emulator::*` re-exports the aliases. When PR 3 moves `cpu/` to `mos6502/`, move the aliases with it and keep the re-exports.
+- **`Cpu` keeps inherent accessors** that duplicate the trait's defaults, so concrete callers don't need `use Processor`. This was the user-facing choice in #665; keep it unless the user says otherwise.
+- **Performance:** PR 1 made the 6502 about 14% faster because `Cpu::execute` became inlined into `step`. PR 2 kept it inlined and benchmarked level with PR 1 (minimal ~104 MHz, default ~39 MHz on Linux, rustc 1.100.0). In each PR, A/B against `main`, and re-check `nm -C target/release/examples/clock_bench_minimal | grep 'Cpu>::'` for `execute`.
+- **Toolchain:** rustc 1.100.0 was installed on Linux on 2026-11-26, matching CI's stable. Benchmark numbers from before that date used an older compiler. Don't let a rustup update or a heavy build overlap a benchmark run.
 
 **CI doesn't build the debugger or the SDL crates for `src/`-only changes.** Their jobs are path-filtered to their own directories (`debugger/**` and so on) even though they depend on the `emma65` library. In #664 they were skipped. For a refactor PR, run `cargo test --workspace` and the debugger's clippy command locally, and say in the PR that you did.
 
