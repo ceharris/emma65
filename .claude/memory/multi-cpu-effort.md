@@ -30,10 +30,11 @@ metadata:
 - The core crate is versioned in lockstep with `emma65`.
 - PR 4's timing is decided only after PRs 1–3 are reviewed and merged.
 
-**Where we left off (2026-11-26, end of session):** the rename is done ([[emma6k-rename]]). After the #661 merge (`6ee4814`), `main` has only memory commits. The working tree is clean, and no branch or PR is open. No step 1 code has been written. To resume:
-1. ~~**On Linux,** re-take the benchmark baseline on current `main`.~~ Done 2026-11-26; see [[clock-bench-baseline]]. The plan's "Performance baseline" table holds the macOS numbers, and the plan is frozen ([[plan-frozen-doc-current]]), so keep per-host numbers in the memory file.
-2. **On macOS,** do the checkout follow-up from [[emma6k-rename]] first. Its baseline at `afba63f` still stands, because the rename didn't touch the hot path.
-3. Cut a branch from a freshly fetched `origin/main` ([[branch-from-origin-main]]) and implement PR 1 (`MachineState` extraction) following the plan's "PR 1" section. Then do the plan's "Verification for each PR" checklist. Before starting, check that each of the four PRs compiles on its own ([[multi-unit-plan-workflow]]).
-4. Open PR 1, then stop for the user's review before starting PR 2.
+**Where we left off (2026-11-26):** PR 1 (`MachineState` extraction) is open as #664 on branch `refactor/extract-machine-state`, awaiting the user's UAT and review. Don't start PR 2 until the user says so ([[multi-unit-plan-workflow]]).
 
-**How to apply:** follow the steps above. Benchmark each PR against [[clock-bench-baseline]] for the current host. The step 1 plan document already uses `emma6k-core`.
+Notes from PR 1 for PR 2:
+- **`check_halt` takes a closure**, `|bus| CpuWatchContext { regs, bus }`, not the plan's `&dyn WatchContext`. A context borrowing `machine.bus` can't coexist with `&mut self` on the same `MachineState`. The `Processor` trait should keep this shape.
+- **PR 1 made the 6502 about 14% faster** on the minimal complement and about 4% on the default one (A/B on Linux, minimal top speed 90 → 103 MHz). `nm` showed why: `Cpu::execute` stopped being a separate function and was inlined into `step`. That's an LLVM size heuristic, so PR 2's generic `run_loop`/`step` could undo it. Compare PR 2 against PR 1's numbers, not `main`'s, and re-check with `nm -C target/release/examples/clock_bench_minimal | grep 'Cpu>::'`.
+- `finish_cycle` stays out-of-line, both before and after the move, despite `#[inline]`. `bus_read`/`bus_write`/`push`/`pop` were out-of-line on `main` too.
+
+**How to apply:** follow the notes above. Benchmark each PR against [[clock-bench-baseline]] for the current host. The step 1 plan document already uses `emma6k-core`.
