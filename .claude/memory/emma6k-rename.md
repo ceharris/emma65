@@ -38,6 +38,14 @@ The project is being renamed to **emma6k** (decided by the user 2026-11-26) befo
 3. Dispatch `docker-ci-image.yml` on main (confirm with the user first) so `ghcr.io/ceharris/emma6k-ci` exists. CI pulls `ghcr.io/${{ github.repository }}-ci`, so until then every CI job on the PR fails to find its image.
 4. Open the PR. The branch was committed and pushed from the macOS workstation on 2026-11-26; open the PR only after steps 1–3.
 
+**Linux workstation state (2026-11-26):** `origin` is already SSH. Two things are missing before step 4 and the Linux checks can run:
+- `gh` isn't installed, so it can't open the PR or dispatch workflows.
+- Only the SDL2 *runtime* libraries are installed, not `libsdl2-dev`/`libsdl2-gfx-dev`, so the SDL crates won't link.
+
+Install them with a script the user runs ([[sudo-via-script]]).
+
+**Old GHCR images:** the CI image name follows the repo name. The `emma65-rust` → `emma65` rename (2026-09-07) left `ghcr.io/ceharris/emma65-rust-ci` orphaned, and this rename will orphan `ghcr.io/ceharris/emma65-ci`. Delete them only if the user asks. Links in `plan/` docs keep the old repo names on purpose ([[plan-frozen-doc-current]]); GitHub redirects renamed-repo URLs, but not Pages URLs.
+
 **User-facing breakage to call out in the PR:**
 - `pipe:` transports configured with `emma65-display`, `emma65-led-matrix` or `emma65-lcd-display` must use the new binary names.
 - The docs site moves to `ceharris.github.io/emma6k`; GitHub likely won't redirect the old Pages URL.

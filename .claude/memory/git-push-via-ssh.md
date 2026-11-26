@@ -9,4 +9,4 @@ Use SSH for git with GitHub. `origin` was switched from HTTPS to `git@github.com
 
 **Why:** the old HTTPS origin had no stored credential, so pushes failed with "could not read Username". The user said "You can use ssh with git".
 
-**How to apply:** push normally (`git push -u origin <branch>`). If a push asks for HTTPS credentials, check `git remote -v` rather than working around it with credential-helper tricks. These notes came from the macOS workstation; confirm with `git remote -v` that the current host is set up the same way.
+**How to apply:** push normally (`git push -u origin <branch>`). If a push asks for HTTPS credentials, check `git remote -v` rather than working around it with credential-helper tricks. Both workstations have `origin` on SSH; the Linux one was confirmed 2026-11-26. The Linux workstation doesn't have `gh` installed as of 2026-11-26 ([[emma6k-rename]]).
