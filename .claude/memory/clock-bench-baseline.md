@@ -25,5 +25,7 @@ On that Mac, the skill's default minimal sweep range (70–100 MHz) sits entirel
 
 These are about 5–6% above the 2026-09-09 figures (~34 / 34.15 MHz and ~80–85 / 87.1 MHz, PR #644 branch, Ubuntu 24.04), which is within run-to-run noise or slightly better. The docs' ~34 / ~85 MHz figures still hold as conservative values. The skill's default sweep ranges fit this host. Expect single noisy points near the ceiling: in one run, 36 MHz read −4.64% while 37 MHz read −2.64%.
 
+**Power mode barely matters on Linux.** The same day, with the platform profile and governor set to `performance`, two more runs gave a default complement accurate to ~36–38 MHz (top speed 35.9–39.1 MHz) and a minimal complement accurate to ~88 MHz (top speed 92.9–93.1 MHz). That's within about 2% of the `powersave`/`balanced` numbers, so compare runs across either mode. Record the mode anyway.
+
 **Why:** the user asked for a baseline on the current hardware before the multi-CPU refactor, because the documented figures came from different hardware (the Linux workstation).
 **How to apply:** run the `clock-speed-benchmark` skill on each refactor PR. Compare against this file's row for the current host; a consistent drop of more than about 5–10% is a regression. Don't edit the docs' baseline table without asking the user.
