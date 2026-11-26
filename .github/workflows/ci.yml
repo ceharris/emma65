@@ -41,6 +41,9 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          # For the macOS cross-check step below.
+          targets: x86_64-apple-darwin
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -63,6 +66,16 @@ jobs:
 
       - name: Test
         run: cargo test -p emma65
+
+      # There's no macOS runner (too costly), so this type-checks and lints
+      # emma65 against the Intel macOS target from Linux instead. It catches
+      # Linux-only APIs (e.g. libc::pipe2, #660) and warnings that appear only
+      # on macOS, such as a variable used only inside a cfg(target_os = "linux")
+      # block. It doesn't link or run anything, and it doesn't cover the
+      # debugger or the SDL2 peripherals, whose build scripts need a macOS SDK
+      # or pkg-config for the target. See plan/macos-port-plan.md §3.1.
+      - name: Clippy (macOS cross-check)
+        run: cargo clippy -p emma65 --all-targets --no-deps --target x86_64-apple-darwin -- -D warnings
 
   ci-debugger:
     name: Debugger Build and Clippy
