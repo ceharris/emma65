@@ -30,7 +30,7 @@ metadata:
 - The core crate is versioned in lockstep with `emma65`.
 - PR 4's timing is decided only after PRs 1–3 are reviewed and merged.
 
-**Where we left off (2026-11-26, end of session):** the rename is done ([[emma6k-rename]]). `main` is at `5adc11f` with a clean working tree, and no branch or PR is open. No step 1 code has been written. To resume:
+**Where we left off (2026-11-26, end of session):** the rename is done ([[emma6k-rename]]). After the #661 merge (`6ee4814`), `main` has only memory commits. The working tree is clean, and no branch or PR is open. No step 1 code has been written. To resume:
 1. **On Linux,** re-take the benchmark baseline on current `main` before writing any code ([[clock-bench-baseline]]). Its Linux row dates from 2026-09. The plan's "Performance baseline" table holds the macOS numbers, and the plan is frozen ([[plan-frozen-doc-current]]), so record new numbers in the memory file, not the plan.
 2. **On macOS,** do the checkout follow-up from [[emma6k-rename]] first. Its baseline at `afba63f` still stands, because the rename didn't touch the hot path.
 3. Cut a branch from a freshly fetched `origin/main` ([[branch-from-origin-main]]) and implement PR 1 (`MachineState` extraction) following the plan's "PR 1" section. Then do the plan's "Verification for each PR" checklist. Before starting, check that each of the four PRs compiles on its own ([[multi-unit-plan-workflow]]).
