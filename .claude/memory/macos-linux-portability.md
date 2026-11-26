@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-The user develops on two workstations. The **Linux** one has been the primary development host for this project, and CI runs only on Linux. The **macOS** workstation (Intel i9-9880H, Homebrew at `/usr/local`) is secondary. On 2026-11-26 the user stated explicitly that **the macOS port has NOT been completed**. The plan for porting the debugger and peripherals is `plan/macos-port-plan.md` (written 2026-11-26). It has six units, and Unit 1 is next. As of 2026-11-26, on that Mac:
+The user develops on two workstations. The **Linux** one has been the primary development host for this project, and CI runs only on Linux. The **macOS** workstation (Intel i9-9880H, Homebrew at `/usr/local`) is secondary. On 2026-11-26 the user stated explicitly that **the macOS port has NOT been completed**. The plan for porting the debugger and peripherals is `plan/macos-port-plan.md` (merged in #663, 2026-11-26). Progress and the resume point are in [[macos-port-effort]]. As of 2026-11-26, on that Mac:
 
 - The SDL2 crates (`emma6k-display`, `emma6k-led-matrix`, `emma6k-lcd-display`) compile but fail to link with `ld: library 'SDL2' not found`. The cause is that `sdl2-sys` emits a bare `-lSDL2` with no search path. Enabling the `sdl2` crate's `use-pkgconfig` feature for macOS only fixes it (tried and reverted). `LIBRARY_PATH=/usr/local/lib` is the stopgap until that lands. Homebrew's `sdl2` is now `sdl2-compat`, which runs on SDL3.
 - The debugger builds with four `unused variable: window_for_events` warnings (`terminal.rs`, `display.rs`, `led_matrix.rs`, `lcd_display.rs`). They're on main and only show up on macOS, so CI's debugger clippy command fails there.
