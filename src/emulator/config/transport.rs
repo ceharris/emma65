@@ -424,10 +424,10 @@ mod tests {
 
     #[test]
     fn from_str_with_pipe_and_executable_only() {
-        let spec = TransportSpec::from_str("pipe:/usr/bin/cat").unwrap();
+        let spec = TransportSpec::from_str("pipe:/bin/cat").unwrap();
         match spec {
             TransportSpec::Pipe { command } => {
-                assert_eq!(command, vec!["/usr/bin/cat".to_string()]);
+                assert_eq!(command, vec!["/bin/cat".to_string()]);
             }
             _ => panic!("expected Pipe transport"),
         }

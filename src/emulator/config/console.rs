@@ -187,7 +187,7 @@ mod tests {
         let (slot, _reporter, _remote) = injected_slot();
         let mut attributes = HashMap::new();
         // pipe transport is the only variant we can create without an OS resource in a unit test
-        attributes.insert("transport".to_string(), Value::from("pipe:/usr/bin/cat"));
+        attributes.insert("transport".to_string(), Value::from("pipe:/bin/cat"));
         let context = InstantiationContext {
             console_transport: Some(Arc::clone(&slot)),
             ..Default::default()

@@ -277,7 +277,7 @@ mod tests {
     #[tokio::test]
     async fn attaches_pipe_transport_and_sends_header_immediately() {
         let mut attributes = HashMap::new();
-        attributes.insert("transport".to_string(), Value::from("pipe:/usr/bin/cat"));
+        attributes.insert("transport".to_string(), Value::from("pipe:/bin/cat"));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
         let result = CharDisplayModule

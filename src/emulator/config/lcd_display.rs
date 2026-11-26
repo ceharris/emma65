@@ -875,7 +875,7 @@ mod tests {
     #[tokio::test]
     async fn attaches_pipe_transport_and_sends_header_immediately() {
         let mut attributes = HashMap::new();
-        attributes.insert("transport".to_string(), Value::from("pipe:/usr/bin/cat"));
+        attributes.insert("transport".to_string(), Value::from("pipe:/bin/cat"));
         let id_allocator = Arc::new(Mutex::new(DeviceIdAllocator::new()));
 
         let result = LcdDisplayModule
@@ -915,7 +915,7 @@ mod tests {
         let reporter = crate::emulator::TransportReporter::pending(Some(sender));
 
         let spec = TransportSpec::Pipe {
-            command: vec!["/usr/bin/cat".to_string()],
+            command: vec!["/bin/cat".to_string()],
         };
         let (mut transport, _relay) = spec
             .to_transport_with_reporter_and_capacity(reporter, |_| {}, Some(capacity))

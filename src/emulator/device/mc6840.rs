@@ -729,21 +729,21 @@ impl Mc6840 {
     }
 
     fn tick_timers(&mut self, cycles: u32) {
-        for timer_id in 0..3 {
-            self.timers[timer_id].tick_batch(cycles);
+        for timer in &mut self.timers {
+            timer.tick_batch(cycles);
         }
     }
 
     fn internal_reset(&mut self) {
-        for i in 0..3 {
-            self.timers[i].init();
+        for timer in &mut self.timers {
+            timer.init();
         }
     }
 
     fn status(&self) -> u8 {
         let mut status = 0;
-        for timer_id in 0..3 {
-            if self.timers[timer_id].irq_active() {
+        for (timer_id, timer) in self.timers.iter().enumerate() {
+            if timer.irq_active() {
                 status |= 1 << timer_id as u8
             }
         }
