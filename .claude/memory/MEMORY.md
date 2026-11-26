@@ -4,7 +4,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 
 ## Current work
 - [emma6k rename](emma6k-rename.md) — merged in #661: naming rule, what kept the emma65 name, old tag prefixes, moved-checkout steps (per-user memory pointer, `cargo clean`); both hosts moved (2026-11-26)
-- [Multi-CPU effort](multi-cpu-effort.md) — NEXT UP: step 1 PR 1 (`MachineState`); Linux baseline re-taken; 6809 via a `Processor` trait; plan in plan/; user decisions
+- [Multi-CPU effort](multi-cpu-effort.md) — step 1 PR 1 open as #664 (awaiting review; +14% speed, watch inlining in PR 2); 6809 via a `Processor` trait; plan in plan/; user decisions
 - [Open issues](open-issues.md) — #646 epic (ask before closing) + follow-ons #656–659; frontend test coverage #559/#560
 
 ## Workflow
