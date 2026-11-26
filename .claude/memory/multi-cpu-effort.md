@@ -25,9 +25,9 @@ metadata:
 
 **User decisions (2026-11-26):**
 - Core crate name `emma6k-core`. It was first chosen as `emma-core`, then changed on 2026-11-26 to follow the rename's prefix rule.
-- Rename the project to emma6k. That is in progress and must happen before the refactor; see [[emma6k-rename]].
+- Rename the project to emma6k before the refactor. Done in #661, merged 2026-11-26; see [[emma6k-rename]].
 - The clean stop is reported as an explicit `StepResult::StopRequested` variant, not a synthesized NOP.
 - The core crate is versioned in lockstep with `emma65`.
 - PR 4's timing is decided only after PRs 1–3 are reviewed and merged.
 
-**How to apply:** finish [[emma6k-rename]] first. Then start PR 1, benchmarking each PR against [[clock-bench-baseline]] for the current host. The step 1 plan document already uses `emma6k-core`.
+**How to apply:** the rename is done ([[emma6k-rename]]), so PR 1 can start. Benchmark each PR against [[clock-bench-baseline]] for the current host. The step 1 plan document already uses `emma6k-core`.
