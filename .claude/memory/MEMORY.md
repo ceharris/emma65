@@ -3,7 +3,7 @@
 One line per memory file in this directory. See CLAUDE.md's "Agent memory" section for how to use and maintain it.
 
 ## Current work
-- [emma6k rename](emma6k-rename.md) — merged in #661: naming rule, what kept the emma65 name, old tag prefixes, moved-checkout `cargo clean`; macOS checkout follow-up pending
+- [emma6k rename](emma6k-rename.md) — merged in #661: naming rule, what kept the emma65 name, old tag prefixes, moved-checkout steps (per-user memory pointer, `cargo clean`); macOS checkout follow-up in progress
 - [Multi-CPU effort](multi-cpu-effort.md) — NEXT UP: re-baseline benchmark, then step 1 PR 1 (`MachineState`); 6809 via a `Processor` trait; plan in plan/; user decisions
 - [Open issues](open-issues.md) — #646 epic (ask before closing) + follow-ons #656–659; frontend test coverage #559/#560
 

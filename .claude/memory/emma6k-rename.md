@@ -20,13 +20,14 @@ The project was renamed to **emma6k** in PR #661, merged 2026-11-26, before the 
 **Old GHCR images:** `ghcr.io/ceharris/emma65-rust-ci` and `ghcr.io/ceharris/emma65-ci` are orphaned. Delete them only if the user asks.
 
 **Moving a checkout to a new directory** has two consequences:
-- **Claude Code's per-user memory path** is derived from the directory name, so it changes.
+- **Claude Code's per-user memory path** is derived from the directory name, so it changes. Before renaming, create the new per-user directory (for example `~/.claude/projects/-Users-ceharris-git-emma6k/memory/` on macOS) with a `MEMORY.md` that holds only a pointer to the repo's `.claude/memory/MEMORY.md`. Otherwise the first session in the new directory starts with an empty per-user memory, and the built-in memory instructions may save there. Past session transcripts stay in the old per-user directory and don't show up in `/resume` from the new path, unless you copy them over.
 - **Cargo build-script outputs in `target/` keep the old absolute path.** Cargo doesn't re-run those build scripts after the move, so the debugger build fails with `failed to read plugin permissions: … <old path>/target/…`. Fix it with `cargo clean -p tauri -p tauri-plugin-clipboard-manager -p tauri-plugin-dialog -p tauri-plugin-fs -p tauri-plugin-log -p tauri-plugin-opener`, and repeat with `--release`.
 
 **Linux workstation:** the checkout is at `~/git/emma6k`, and `origin` is `git@github.com:ceharris/emma6k.git`. The Ubuntu 24.04 → 26.04 upgrade (around 2026-11-14) removed `libgtk-3-dev` and `libwebkit2gtk-4.1-dev`, and the user reinstalled them. If the debugger fails to link with `unable to find library -lgdk-3`, they're missing again.
 
-**macOS workstation (pending):** the user plans to do this in a later session.
-- Rename the checkout directory to `emma6k`.
+**macOS workstation (in progress):**
+- Done 2026-11-26: created the per-user pointer directory `~/.claude/projects/-Users-ceharris-git-emma6k/memory/`. The old directory's transcripts were left behind on purpose (user).
+- Rename the checkout directory to `emma6k` (the user does this outside a session).
 - Run `git remote set-url origin git@github.com:ceharris/emma6k.git`.
 - Run the tauri `cargo clean` above.
 - Point `.vscode/mcp.json` at the macOS path. That file is committed on purpose, with the Linux path.
