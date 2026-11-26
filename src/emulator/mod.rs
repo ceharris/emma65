@@ -7,6 +7,7 @@ pub mod device;
 pub mod error;
 pub mod exec;
 mod logging;
+mod machine;
 mod session;
 pub mod transport;
 

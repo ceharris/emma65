@@ -13,6 +13,7 @@ pub mod vector;
 use crate::emulator::bus::{Bus, BusOp, InterruptController};
 use crate::emulator::error::{BusError, CpuBuildError, ExecError};
 use crate::emulator::exec::ClockSpeed;
+use crate::emulator::machine::MachineState;
 use crate::emulator::{
     LogCategory, LogLevel, LogSender, TraceCallback, TraceKind, TraceRecord, log_msg,
 };
@@ -89,24 +90,16 @@ pub enum StepResult {
 pub struct Cpu {
     /// General-purpose and special-purpose registers (A, X, Y, S, PC, P).
     regs: Registers,
-    /// The memory bus; owns all RAM, ROM, and IO device regions.
-    bus: Bus,
-    /// Interrupt controller; tracks IRQ sources and pending NMI.
-    interrupts: InterruptController,
-    /// Watch expression evaluator; owns watchpoints and variable storage.
-    evaluator: WatchEvaluator,
-    /// PC addresses that trigger a `StepResult::Breakpoint` before execution.
-    breakpoints: HashSet<u16>,
+    /// Machine state shared with every CPU: bus, interrupt controller, watch
+    /// evaluator, breakpoints, clock speed, cycle count, vector resolver, and
+    /// log sender.
+    machine: MachineState,
     /// Pre-built 256-entry decode table for the active variant; indexed by opcode byte.
     table: [DecodedOp; 256],
     /// Selects the instruction set (CMOS 65C02 or WDC 65C02).
     variant: CpuVariant,
     /// Governs how unrecognized or variant-invalid opcodes are handled.
     invalid_opcode_policy: InvalidOpcodePolicy,
-    /// Target clock frequency; used by free-running mode to throttle execution.
-    clock_speed: ClockSpeed,
-    /// Cumulative clock cycles elapsed since the last `reset()`.
-    cycles: u64,
     /// True when a WAI instruction has been executed and the CPU is waiting for an interrupt.
     waiting: bool,
     /// True when a STP instruction has been executed; only `reset()` clears this.
@@ -117,13 +110,6 @@ pub struct Cpu {
     trace_state: TraceState,
     /// Optional callback invoked on every `read()` and `write()` (not `peek`).
     trace_callback: Option<Box<dyn TraceCallback>>,
-    /// Resolves the effective address for a RESET/NMI/IRQ/BRK vector fetch.
-    /// Defaults to [`IdentityVectorResolver`] unless a custom resolver was
-    /// supplied via [`CpuBuilder::vector_resolver`].
-    vector_resolver: Box<dyn VectorResolver>,
-    /// Sender for structured diagnostic messages (e.g. `reset()`). Defaults to a
-    /// `log`-crate-backed sender unless overridden via [`CpuBuilder::log_sender`].
-    log_sender: LogSender,
 }
 
 impl Cpu {
@@ -144,22 +130,22 @@ impl Cpu {
 
     /// Returns a reference to the bus.
     pub fn bus(&self) -> &Bus {
-        &self.bus
+        &self.machine.bus
     }
 
     /// Returns a mutable reference to the bus.
     pub fn bus_mut(&mut self) -> &mut Bus {
-        &mut self.bus
+        &mut self.machine.bus
     }
 
     /// Returns a reference to the interrupt controller.
     pub fn interrupts(&self) -> &InterruptController {
-        &self.interrupts
+        &self.machine.interrupts
     }
 
     /// Returns a mutable reference to the interrupt controller.
     pub fn interrupts_mut(&mut self) -> &mut InterruptController {
-        &mut self.interrupts
+        &mut self.machine.interrupts
     }
 
     /// Returns `true` if the CPU is in WAI state, waiting for an interrupt.
@@ -174,18 +160,18 @@ impl Cpu {
 
     /// Returns a reference to the watch evaluator.
     pub fn evaluator(&self) -> &WatchEvaluator {
-        &self.evaluator
+        &self.machine.evaluator
     }
 
     /// Returns a mutable reference to the watch evaluator.
     pub fn evaluator_mut(&mut self) -> &mut WatchEvaluator {
-        &mut self.evaluator
+        &mut self.machine.evaluator
     }
 
     /// Evaluates each of `evaluator`'s watchpoints against this CPU's current
     /// register and (peek-only, side-effect-free) bus state.
     ///
-    /// Independent of `self.evaluator` — the CPU's own watch-triggered
+    /// Independent of `self.machine.evaluator` — the CPU's own watch-triggered
     /// halting evaluator used by `step()` — and does not affect execution.
     /// For a caller-owned evaluator driving a display-only watchpoint view.
     pub fn evaluate_watchpoints(
@@ -194,29 +180,29 @@ impl Cpu {
     ) -> Vec<Result<Operand, WatchError>> {
         let ctx = CpuWatchContext {
             regs: &self.regs,
-            bus: &self.bus,
+            bus: &self.machine.bus,
         };
         evaluator.evaluate_each(&ctx)
     }
 
     /// Adds `addr` to the breakpoint set.
     pub fn add_breakpoint(&mut self, addr: u16) {
-        self.breakpoints.insert(addr);
+        self.machine.breakpoints.insert(addr);
     }
 
     /// Removes `addr` from the breakpoint set. Returns `true` if it was present.
     pub fn remove_breakpoint(&mut self, addr: u16) -> bool {
-        self.breakpoints.remove(&addr)
+        self.machine.breakpoints.remove(&addr)
     }
 
     /// Clears all breakpoints.
     pub fn clear_breakpoints(&mut self) {
-        self.breakpoints.clear();
+        self.machine.breakpoints.clear();
     }
 
     /// Returns the current breakpoint set.
     pub fn breakpoints(&self) -> &HashSet<u16> {
-        &self.breakpoints
+        &self.machine.breakpoints
     }
 
     /// Returns the CPU variant.
@@ -226,12 +212,12 @@ impl Cpu {
 
     /// Returns the configured target clock speed.
     pub fn clock_speed(&self) -> ClockSpeed {
-        self.clock_speed
+        self.machine.clock_speed
     }
 
     /// Returns the total number of clock cycles elapsed since construction or the last reset.
     pub fn cycles(&self) -> u64 {
-        self.cycles
+        self.machine.cycles
     }
 
     /// Installs a trace callback. Pass `None` to remove an existing callback.
@@ -244,7 +230,7 @@ impl Cpu {
 
     /// Installs a sender for structured diagnostic messages (e.g. `reset()`).
     pub fn set_log_sender(&mut self, sender: LogSender) {
-        self.log_sender = sender;
+        self.machine.log_sender = sender;
     }
 
     /// Flushes the trace callback, if one is installed, making every record
@@ -262,32 +248,26 @@ impl Cpu {
     /// initializes registers. Clears WAI/STP state.
     pub fn reset(&mut self) -> Result<(), ExecError> {
         self.bus_reset();
-        let vector_addr = self.vector_resolver.resolve(RESET_VECTOR, &self.interrupts);
+        let vector_addr = self
+            .machine
+            .vector_resolver
+            .resolve(RESET_VECTOR, &self.machine.interrupts);
         let lo = self.bus_read(vector_addr)?;
         let hi = self.bus_read(vector_addr + 1)?;
         self.regs.pc = u16::from_le_bytes([lo, hi]);
         self.regs.s = 0xFF;
         self.regs.p = StatusRegister::UNUSED | StatusRegister::I;
-        self.cycles = 0;
-        self.log_sender.set_cycles(0);
+        self.machine.cycles = 0;
+        self.machine.log_sender.set_cycles(0);
         self.waiting = false;
         self.stopped = false;
         log_msg!(
-            self.log_sender,
+            self.machine.log_sender,
             LogLevel::Info,
             LogCategory::Cpu,
             "6502 CPU reset"
         );
         Ok(())
-    }
-
-    /// Returns `true` if at least one currently-active IRQ source is recognized by the
-    /// installed [`VectorResolver`] (i.e. not masked out via
-    /// [`VectorResolver::irq_mask`]). Unlike [`InterruptController::irq_active`], which
-    /// reflects the raw physical IRQ line, this is what actually gates IRQ servicing and
-    /// WAI wake-up — a source can assert the line without being recognized here.
-    fn irq_recognized(&self) -> bool {
-        self.interrupts.active_sources_mask() & self.vector_resolver.irq_mask() != 0
     }
 
     /// Fetches, decodes, and executes one instruction. Returns the step result.
@@ -296,10 +276,8 @@ impl Cpu {
         if self.stopped {
             // Tick devices and poll for a device-triggered reset; unlike WAI, only
             // RESET wakes STP — real 65C02 hardware ignores IRQ/NMI while stopped.
-            self.bus.tick_devices(1);
-            self.interrupts
-                .poll_devices(self.bus.device_interrupt_states());
-            if !self.interrupts.reset_pending() {
+            self.machine.tick_idle();
+            if !self.machine.interrupts.reset_pending() {
                 return StepResult::Stopped;
             }
             // Fall through to service the reset below.
@@ -308,18 +286,16 @@ impl Cpu {
         if self.waiting {
             // Tick devices and poll for interrupts; stay in WAI until one arrives.
             // RESET wakes WAI too, same as real 65C02 hardware.
-            self.bus.tick_devices(1);
-            self.interrupts
-                .poll_devices(self.bus.device_interrupt_states());
-            if !self.interrupts.reset_pending()
-                && !self.irq_recognized()
-                && !self.interrupts.nmi_pending()
+            self.machine.tick_idle();
+            if !self.machine.interrupts.reset_pending()
+                && !self.machine.irq_recognized()
+                && !self.machine.interrupts.nmi_pending()
             {
                 return StepResult::Waiting;
             }
             self.waiting = false;
             log_msg!(
-                self.log_sender,
+                self.machine.log_sender,
                 LogLevel::Info,
                 LogCategory::Cpu,
                 "CPU resumed from WAI at 0x{:04x}",
@@ -336,41 +312,18 @@ impl Cpu {
 
         // Breakpoint and watch checks — skipped for skip_pc so the debugger can
         // advance past an address it is already halted at.
-        if check_breakpoints && skip_pc != Some(pc) {
-            if !self.breakpoints.is_empty() && self.breakpoints.contains(&pc) {
-                return StepResult::Breakpoint(pc);
-            }
-
-            if !self.evaluator.is_empty() {
-                let watch_result = {
-                    let ctx = CpuWatchContext {
-                        regs: &self.regs,
-                        bus: &self.bus,
-                    };
-                    self.evaluator.evaluate_all(&ctx)
-                };
-
-                match watch_result {
-                    Ok(Some(index)) => {
-                        return StepResult::WatchTriggered {
-                            watch_index: index,
-                            pc,
-                        };
-                    }
-                    Err((index, error)) => {
-                        return StepResult::WatchError {
-                            watch_index: index,
-                            pc,
-                            error,
-                        };
-                    }
-                    Ok(None) => {}
-                }
+        if check_breakpoints {
+            let regs = &self.regs;
+            if let Some(halt) = self
+                .machine
+                .check_halt(pc, skip_pc, |bus| CpuWatchContext { regs, bus })
+            {
+                return halt;
             }
         }
 
         // RESET takes priority over NMI and IRQ
-        if self.interrupts.take_reset() {
+        if self.machine.interrupts.take_reset() {
             return if let Err(e) = self.reset() {
                 StepResult::Error(e)
             } else {
@@ -378,13 +331,13 @@ impl Cpu {
             };
         }
         // NMI takes priority over IRQ.
-        if self.interrupts.take_nmi() {
+        if self.machine.interrupts.take_nmi() {
             let interrupt_result = self.service_interrupt(NMI_VECTOR, false);
             return self.map_interrupt_result(interrupt_result);
         }
-        if self.irq_recognized() && !self.regs.p.contains(StatusRegister::I) {
+        if self.machine.irq_recognized() && !self.regs.p.contains(StatusRegister::I) {
             let interrupt_result = self.service_interrupt(IRQ_VECTOR, false);
-            self.interrupts.consume_irq_pulses();
+            self.machine.interrupts.consume_irq_pulses();
             return self.map_interrupt_result(interrupt_result);
         }
 
@@ -399,7 +352,7 @@ impl Cpu {
             match self.invalid_opcode_policy {
                 InvalidOpcodePolicy::Nop => {
                     self.regs.pc = self.regs.pc.wrapping_add(decoded.byte_len as u16);
-                    self.finish_cycle(decoded.base_cycles);
+                    self.machine.finish_cycle(decoded.base_cycles);
                     self.emit_cycles_trace(decoded.base_cycles);
                     return StepResult::Executed(decoded);
                 }
@@ -411,7 +364,7 @@ impl Cpu {
 
         match self.execute(decoded) {
             Ok((result, cycles)) => {
-                self.finish_cycle(cycles);
+                self.machine.finish_cycle(cycles);
                 self.emit_cycles_trace(cycles);
                 result
             }
@@ -784,7 +737,7 @@ impl Cpu {
             Mnemonic::Wai => {
                 self.waiting = true;
                 log_msg!(
-                    self.log_sender,
+                    self.machine.log_sender,
                     LogLevel::Info,
                     LogCategory::Cpu,
                     "WAI executed at 0x{pc:04x}; CPU waiting for interrupt"
@@ -793,7 +746,7 @@ impl Cpu {
             Mnemonic::Stp => {
                 self.stopped = true;
                 log_msg!(
-                    self.log_sender,
+                    self.machine.log_sender,
                     LogLevel::Info,
                     LogCategory::Cpu,
                     "STP executed at 0x{pc:04x}; CPU stopped"
@@ -1058,7 +1011,7 @@ impl Cpu {
     fn map_interrupt_result(&mut self, interrupt_result: Result<u8, ExecError>) -> StepResult {
         match interrupt_result {
             Ok(cycles) => {
-                self.finish_cycle(cycles);
+                self.machine.finish_cycle(cycles);
                 self.emit_cycles_trace(cycles);
                 StepResult::Executed(self.table[0x00])
             }
@@ -1083,23 +1036,14 @@ impl Cpu {
         self.push(p)?;
         self.regs.p.insert(StatusRegister::I);
         self.regs.p.remove(StatusRegister::D);
-        let resolved_addr = self.vector_resolver.resolve(vector_addr, &self.interrupts);
+        let resolved_addr = self
+            .machine
+            .vector_resolver
+            .resolve(vector_addr, &self.machine.interrupts);
         let lo = self.bus_read(resolved_addr)?;
         let hi = self.bus_read(resolved_addr + 1)?;
         self.regs.pc = u16::from_le_bytes([lo, hi]);
         Ok(7)
-    }
-
-    /// Advances cumulative cycle count, ticks all bus devices, and re-polls
-    /// interrupt state. Called once per step after cycles for that step are known,
-    /// regardless of which path (interrupt service, invalid opcode, normal
-    /// execution) produced them.
-    fn finish_cycle(&mut self, cycles: u8) {
-        self.cycles += cycles as u64;
-        self.log_sender.set_cycles(self.cycles);
-        self.bus.tick_devices(cycles as u32);
-        self.interrupts
-            .poll_devices(self.bus.device_interrupt_states());
     }
 
     // --- status flag helpers ---
@@ -1112,7 +1056,7 @@ impl Cpu {
     // --- bus helpers ---
 
     fn bus_read(&mut self, addr: u16) -> Result<u8, ExecError> {
-        let result = self.bus.read(addr).map_err(|e| match e {
+        let result = self.machine.bus.read(addr).map_err(|e| match e {
             BusError::Unmapped { addr } => ExecError::UnmappedAddress {
                 addr,
                 op: BusOp::Read,
@@ -1129,7 +1073,7 @@ impl Cpu {
     }
 
     fn bus_write(&mut self, addr: u16, value: u8) -> Result<(), ExecError> {
-        let result = self.bus.write(addr, value).map_err(|e| match e {
+        let result = self.machine.bus.write(addr, value).map_err(|e| match e {
             BusError::Unmapped { addr } => ExecError::UnmappedAddress {
                 addr,
                 op: BusOp::Write,
@@ -1143,7 +1087,7 @@ impl Cpu {
     }
 
     fn bus_reset(&mut self) {
-        self.bus.reset_devices();
+        self.machine.bus.reset_devices();
     }
 
     fn emit_trace(&mut self, addr: u16, value: u8, op: BusOp) {
@@ -1383,26 +1327,24 @@ impl CpuBuilder {
     pub fn build(self) -> Result<Cpu, CpuBuildError> {
         let bus = self.bus.ok_or(CpuBuildError::NoBus)?;
         let table = decode_table(self.variant);
+        let machine = MachineState::new(
+            bus,
+            self.clock_speed,
+            self.vector_resolver
+                .unwrap_or_else(|| Box::new(IdentityVectorResolver)),
+            self.log_sender,
+        );
         Ok(Cpu {
             regs: Registers::new(),
-            bus,
-            interrupts: InterruptController::new(),
-            evaluator: WatchEvaluator::new(),
-            breakpoints: HashSet::new(),
+            machine,
             table,
             variant: self.variant,
             invalid_opcode_policy: self.invalid_opcode_policy,
-            clock_speed: self.clock_speed,
-            cycles: 0,
             waiting: false,
             stopped: false,
             tracing: false,
             trace_state: TraceState::new(),
             trace_callback: None,
-            vector_resolver: self
-                .vector_resolver
-                .unwrap_or_else(|| Box::new(IdentityVectorResolver)),
-            log_sender: self.log_sender,
         })
     }
 }
@@ -1428,7 +1370,7 @@ mod tests {
 
     fn write_program(cpu: &mut Cpu, addr: u16, bytes: &[u8]) {
         for (i, &b) in bytes.iter().enumerate() {
-            cpu.bus.write(addr + i as u16, b).unwrap();
+            cpu.machine.bus.write(addr + i as u16, b).unwrap();
         }
     }
 
@@ -1470,7 +1412,7 @@ mod tests {
     #[test]
     fn zeropage_mode() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(0x0042, 0xAB).unwrap();
+        cpu.machine.bus.write(0x0042, 0xAB).unwrap();
         write_program(&mut cpu, 0x0200, &[0xA5, 0x42]); // LDA $42
         cpu.step(None, true);
         assert_eq!(cpu.regs.a, 0xAB);
@@ -1480,7 +1422,7 @@ mod tests {
     fn zeropage_x_mode() {
         let mut cpu = make_cpu(0x0200);
         cpu.regs.x = 0x05;
-        cpu.bus.write(0x0047, 0xCC).unwrap();
+        cpu.machine.bus.write(0x0047, 0xCC).unwrap();
         write_program(&mut cpu, 0x0200, &[0xB5, 0x42]); // LDA $42,X
         cpu.step(None, true);
         assert_eq!(cpu.regs.a, 0xCC);
@@ -1490,7 +1432,7 @@ mod tests {
     fn zeropage_y_mode() {
         let mut cpu = make_cpu(0x0200);
         cpu.regs.y = 0x03;
-        cpu.bus.write(0x0045, 0x77).unwrap();
+        cpu.machine.bus.write(0x0045, 0x77).unwrap();
         write_program(&mut cpu, 0x0200, &[0xB6, 0x42]); // LDX $42,Y
         cpu.step(None, true);
         assert_eq!(cpu.regs.x, 0x77);
@@ -1499,7 +1441,7 @@ mod tests {
     #[test]
     fn absolute_mode() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(0x1234, 0x99).unwrap();
+        cpu.machine.bus.write(0x1234, 0x99).unwrap();
         write_program(&mut cpu, 0x0200, &[0xAD, 0x34, 0x12]); // LDA $1234
         cpu.step(None, true);
         assert_eq!(cpu.regs.a, 0x99);
@@ -1509,7 +1451,7 @@ mod tests {
     fn absolute_x_mode() {
         let mut cpu = make_cpu(0x0200);
         cpu.regs.x = 0x10;
-        cpu.bus.write(0x1244, 0x55).unwrap();
+        cpu.machine.bus.write(0x1244, 0x55).unwrap();
         write_program(&mut cpu, 0x0200, &[0xBD, 0x34, 0x12]); // LDA $1234,X
         cpu.step(None, true);
         assert_eq!(cpu.regs.a, 0x55);
@@ -1519,7 +1461,7 @@ mod tests {
     fn absolute_y_mode() {
         let mut cpu = make_cpu(0x0200);
         cpu.regs.y = 0x04;
-        cpu.bus.write(0x1238, 0x44).unwrap();
+        cpu.machine.bus.write(0x1238, 0x44).unwrap();
         write_program(&mut cpu, 0x0200, &[0xB9, 0x34, 0x12]); // LDA $1234,Y
         cpu.step(None, true);
         assert_eq!(cpu.regs.a, 0x44);
@@ -1529,8 +1471,8 @@ mod tests {
     fn indirect_mode() {
         let mut cpu = make_cpu(0x0200);
         // JMP ($0300): ptr at $0300/$0301 holds $0400
-        cpu.bus.write(0x0300, 0x00).unwrap();
-        cpu.bus.write(0x0301, 0x04).unwrap();
+        cpu.machine.bus.write(0x0300, 0x00).unwrap();
+        cpu.machine.bus.write(0x0301, 0x04).unwrap();
         write_program(&mut cpu, 0x0200, &[0x6C, 0x00, 0x03]); // JMP ($0300)
         cpu.step(None, true);
         assert_eq!(cpu.regs.pc, 0x0400);
@@ -1541,9 +1483,9 @@ mod tests {
         let mut cpu = make_cpu(0x0200);
         cpu.regs.x = 0x04;
         // (indirect,X): zp+X = $10, ptr at $10/$11 holds $0500
-        cpu.bus.write(0x0010, 0x00).unwrap();
-        cpu.bus.write(0x0011, 0x05).unwrap();
-        cpu.bus.write(0x0500, 0xBB).unwrap();
+        cpu.machine.bus.write(0x0010, 0x00).unwrap();
+        cpu.machine.bus.write(0x0011, 0x05).unwrap();
+        cpu.machine.bus.write(0x0500, 0xBB).unwrap();
         write_program(&mut cpu, 0x0200, &[0xA1, 0x0C]); // LDA ($0C,X)
         cpu.step(None, true);
         assert_eq!(cpu.regs.a, 0xBB);
@@ -1554,9 +1496,9 @@ mod tests {
         let mut cpu = make_cpu(0x0200);
         cpu.regs.y = 0x02;
         // (indirect),Y: ptr at $10/$11 holds base $0500, +Y = $0502
-        cpu.bus.write(0x0010, 0x00).unwrap();
-        cpu.bus.write(0x0011, 0x05).unwrap();
-        cpu.bus.write(0x0502, 0xDD).unwrap();
+        cpu.machine.bus.write(0x0010, 0x00).unwrap();
+        cpu.machine.bus.write(0x0011, 0x05).unwrap();
+        cpu.machine.bus.write(0x0502, 0xDD).unwrap();
         write_program(&mut cpu, 0x0200, &[0xB1, 0x10]); // LDA ($10),Y
         cpu.step(None, true);
         assert_eq!(cpu.regs.a, 0xDD);
@@ -1565,9 +1507,9 @@ mod tests {
     #[test]
     fn zeropage_indirect_mode() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(0x0020, 0x00).unwrap();
-        cpu.bus.write(0x0021, 0x06).unwrap();
-        cpu.bus.write(0x0600, 0xEE).unwrap();
+        cpu.machine.bus.write(0x0020, 0x00).unwrap();
+        cpu.machine.bus.write(0x0021, 0x06).unwrap();
+        cpu.machine.bus.write(0x0600, 0xEE).unwrap();
         write_program(&mut cpu, 0x0200, &[0xB2, 0x20]); // LDA ($20)
         cpu.step(None, true);
         assert_eq!(cpu.regs.a, 0xEE);
@@ -1578,8 +1520,8 @@ mod tests {
         let mut cpu = make_cpu(0x0200);
         cpu.regs.x = 0x02;
         // JMP ($0300,X): ptr at $0302 holds $0500
-        cpu.bus.write(0x0302, 0x00).unwrap();
-        cpu.bus.write(0x0303, 0x05).unwrap();
+        cpu.machine.bus.write(0x0302, 0x00).unwrap();
+        cpu.machine.bus.write(0x0303, 0x05).unwrap();
         write_program(&mut cpu, 0x0200, &[0x7C, 0x00, 0x03]); // JMP ($0300,X)
         cpu.step(None, true);
         assert_eq!(cpu.regs.pc, 0x0500);
@@ -1590,12 +1532,12 @@ mod tests {
         let mut cpu = make_cpu(0x0200);
         cpu.regs.x = 0xFF;
         // LDA $0201,X crosses from page 02 to page 03
-        cpu.bus.write(0x0300, 0x42).unwrap();
+        cpu.machine.bus.write(0x0300, 0x42).unwrap();
         write_program(&mut cpu, 0x0200, &[0xBD, 0x01, 0x02]); // LDA $0201,X
-        let cycles_before = cpu.cycles;
+        let cycles_before = cpu.machine.cycles;
         cpu.step(None, true);
         // base is 4, +1 for page cross
-        assert_eq!(cpu.cycles - cycles_before, 5);
+        assert_eq!(cpu.machine.cycles - cycles_before, 5);
     }
 
     // --- loads/stores ---
@@ -1624,16 +1566,16 @@ mod tests {
         cpu.regs.a = 0x42;
         write_program(&mut cpu, 0x0200, &[0x85, 0x50]); // STA $50
         cpu.step(None, true);
-        assert_eq!(cpu.bus.read(0x0050).unwrap(), 0x42);
+        assert_eq!(cpu.machine.bus.read(0x0050).unwrap(), 0x42);
     }
 
     #[test]
     fn stz_stores_zero() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(0x0050, 0xFF).unwrap();
+        cpu.machine.bus.write(0x0050, 0xFF).unwrap();
         write_program(&mut cpu, 0x0200, &[0x64, 0x50]); // STZ $50
         cpu.step(None, true);
-        assert_eq!(cpu.bus.read(0x0050).unwrap(), 0x00);
+        assert_eq!(cpu.machine.bus.read(0x0050).unwrap(), 0x00);
     }
 
     // --- transfers ---
@@ -1782,8 +1724,8 @@ mod tests {
     #[test]
     fn brk_pushes_pc_and_p_reads_irq_vector() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(IRQ_VECTOR, 0x00).unwrap();
-        cpu.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR, 0x00).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
         cpu.regs.p = StatusRegister::UNUSED;
         write_program(&mut cpu, 0x0200, &[0x00, 0xEA]); // BRK (pad byte)
         let s_before = cpu.regs.s;
@@ -1793,6 +1735,7 @@ mod tests {
         assert_eq!(cpu.regs.s, s_before.wrapping_sub(3));
         // B and UNUSED set in pushed P
         let pushed_p = cpu
+            .machine
             .bus
             .read(STACK_BASE | s_before.wrapping_sub(2) as u16)
             .unwrap();
@@ -1806,11 +1749,13 @@ mod tests {
         let mut cpu = make_cpu(0x0200);
         // Manually push: PC=$0300 (hi then lo), P=$C5
         let s = cpu.regs.s;
-        cpu.bus.write(STACK_BASE | s as u16, 0x03).unwrap(); // PC hi
-        cpu.bus
+        cpu.machine.bus.write(STACK_BASE | s as u16, 0x03).unwrap(); // PC hi
+        cpu.machine
+            .bus
             .write(STACK_BASE | s.wrapping_sub(1) as u16, 0x00)
             .unwrap(); // PC lo
-        cpu.bus
+        cpu.machine
+            .bus
             .write(STACK_BASE | s.wrapping_sub(2) as u16, 0xC5)
             .unwrap(); // P
         cpu.regs.s = s.wrapping_sub(3);
@@ -2068,19 +2013,19 @@ mod tests {
     #[test]
     fn rmb_clears_bit() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(0x0050, 0xFF).unwrap();
+        cpu.machine.bus.write(0x0050, 0xFF).unwrap();
         write_program(&mut cpu, 0x0200, &[0x07, 0x50]); // RMB0 $50
         cpu.step(None, true);
-        assert_eq!(cpu.bus.read(0x0050).unwrap(), 0xFE);
+        assert_eq!(cpu.machine.bus.read(0x0050).unwrap(), 0xFE);
     }
 
     #[test]
     fn smb_sets_bit() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(0x0050, 0x00).unwrap();
+        cpu.machine.bus.write(0x0050, 0x00).unwrap();
         write_program(&mut cpu, 0x0200, &[0x87, 0x50]); // SMB0 $50
         cpu.step(None, true);
-        assert_eq!(cpu.bus.read(0x0050).unwrap(), 0x01);
+        assert_eq!(cpu.machine.bus.read(0x0050).unwrap(), 0x01);
     }
 
     // --- WDC: BBR / BBS ---
@@ -2088,7 +2033,7 @@ mod tests {
     #[test]
     fn bbr_branches_when_bit_clear() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(0x0050, 0xFE).unwrap(); // bit 0 clear
+        cpu.machine.bus.write(0x0050, 0xFE).unwrap(); // bit 0 clear
         // BBR0 $50, +4
         write_program(&mut cpu, 0x0200, &[0x0F, 0x50, 0x04]);
         cpu.step(None, true);
@@ -2099,7 +2044,7 @@ mod tests {
     #[test]
     fn bbr_not_taken_when_bit_set() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(0x0050, 0x01).unwrap(); // bit 0 set
+        cpu.machine.bus.write(0x0050, 0x01).unwrap(); // bit 0 set
         write_program(&mut cpu, 0x0200, &[0x0F, 0x50, 0x04]);
         cpu.step(None, true);
         assert_eq!(cpu.regs.pc, 0x0203); // not taken
@@ -2110,7 +2055,7 @@ mod tests {
         // See `not_taken_branch_still_reads_offset_byte`: BBRn/BBSn are
         // 3-byte instructions and must always fetch all 3 bytes via the bus.
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(0x0050, 0x01).unwrap(); // bit 0 set -> not taken
+        cpu.machine.bus.write(0x0050, 0x01).unwrap(); // bit 0 set -> not taken
         write_program(&mut cpu, 0x0200, &[0x0F, 0x50, 0x04]); // BBR0 $50, +4
 
         let cb = Box::new(CapturingCallback(Vec::new()));
@@ -2133,7 +2078,7 @@ mod tests {
     #[test]
     fn bbs_branches_when_bit_set() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(0x0050, 0x01).unwrap(); // bit 0 set
+        cpu.machine.bus.write(0x0050, 0x01).unwrap(); // bit 0 set
         // BBS0 $50, +4
         write_program(&mut cpu, 0x0200, &[0x8F, 0x50, 0x04]);
         cpu.step(None, true);
@@ -2167,8 +2112,8 @@ mod tests {
     #[test]
     fn irq_with_i_clear_vectors_through_irq_vector() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(IRQ_VECTOR, 0x00).unwrap();
-        cpu.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR, 0x00).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
         cpu.regs.p.remove(StatusRegister::I);
         cpu.interrupts_mut()
             .assert_irq(crate::emulator::bus::IrqSource(1));
@@ -2192,8 +2137,8 @@ mod tests {
     #[test]
     fn irq_pushes_correct_state() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(IRQ_VECTOR, 0x00).unwrap();
-        cpu.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR, 0x00).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
         cpu.regs.p = StatusRegister::UNUSED | StatusRegister::C; // I clear, C set
         let s_before = cpu.regs.s;
         cpu.interrupts_mut()
@@ -2202,14 +2147,16 @@ mod tests {
         // 3 bytes pushed: PC hi, PC lo, P
         assert_eq!(cpu.regs.s, s_before.wrapping_sub(3));
         // Pushed PC should be 0x0200 (PC at time of IRQ)
-        let pushed_pc_hi = cpu.bus.read(STACK_BASE | s_before as u16).unwrap();
+        let pushed_pc_hi = cpu.machine.bus.read(STACK_BASE | s_before as u16).unwrap();
         let pushed_pc_lo = cpu
+            .machine
             .bus
             .read(STACK_BASE | s_before.wrapping_sub(1) as u16)
             .unwrap();
         assert_eq!(u16::from_le_bytes([pushed_pc_lo, pushed_pc_hi]), 0x0200);
         // Pushed P should not have B set
         let pushed_p = cpu
+            .machine
             .bus
             .read(STACK_BASE | s_before.wrapping_sub(2) as u16)
             .unwrap();
@@ -2219,8 +2166,8 @@ mod tests {
     #[test]
     fn irq_pulse_auto_releases_after_service() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(IRQ_VECTOR, 0x00).unwrap();
-        cpu.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR, 0x00).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
         cpu.regs.p.remove(StatusRegister::I);
         cpu.interrupts_mut()
             .assert_irq_pulse(crate::emulator::bus::IrqSource(1));
@@ -2236,8 +2183,8 @@ mod tests {
     fn irq_pulse_does_not_release_other_manually_asserted_sources() {
         let mut cpu = make_cpu(0x0200);
         use crate::emulator::bus::IrqSource;
-        cpu.bus.write(IRQ_VECTOR, 0x00).unwrap();
-        cpu.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR, 0x00).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
         cpu.regs.p.remove(StatusRegister::I);
         cpu.interrupts_mut().assert_irq(IrqSource(1));
         cpu.interrupts_mut().assert_irq_pulse(IrqSource(2));
@@ -2265,8 +2212,8 @@ mod tests {
     #[test]
     fn reset_returns_expected_step_result() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(RESET_VECTOR, 0x00).unwrap();
-        cpu.bus.write(RESET_VECTOR + 1, 0x03).unwrap();
+        cpu.machine.bus.write(RESET_VECTOR, 0x00).unwrap();
+        cpu.machine.bus.write(RESET_VECTOR + 1, 0x03).unwrap();
         cpu.interrupts_mut().signal_reset();
         let result = cpu.step(None, true);
         assert_eq!(cpu.regs.pc, 0x0300);
@@ -2279,8 +2226,8 @@ mod tests {
     #[test]
     fn nmi_vectors_through_nmi_vector() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(NMI_VECTOR, 0x00).unwrap();
-        cpu.bus.write(NMI_VECTOR + 1, 0x03).unwrap();
+        cpu.machine.bus.write(NMI_VECTOR, 0x00).unwrap();
+        cpu.machine.bus.write(NMI_VECTOR + 1, 0x03).unwrap();
         cpu.regs.p.insert(StatusRegister::I); // I set — NMI ignores it
         cpu.interrupts_mut().signal_nmi();
         cpu.step(None, true);
@@ -2291,8 +2238,8 @@ mod tests {
     #[test]
     fn nmi_pushes_correct_state() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(NMI_VECTOR, 0x00).unwrap();
-        cpu.bus.write(NMI_VECTOR + 1, 0x03).unwrap();
+        cpu.machine.bus.write(NMI_VECTOR, 0x00).unwrap();
+        cpu.machine.bus.write(NMI_VECTOR + 1, 0x03).unwrap();
         cpu.regs.p = StatusRegister::UNUSED | StatusRegister::C;
         let s_before = cpu.regs.s;
         cpu.interrupts_mut().signal_nmi();
@@ -2300,6 +2247,7 @@ mod tests {
         assert_eq!(cpu.regs.s, s_before.wrapping_sub(3));
         // Pushed P should not have B set
         let pushed_p = cpu
+            .machine
             .bus
             .read(STACK_BASE | s_before.wrapping_sub(2) as u16)
             .unwrap();
@@ -2309,10 +2257,10 @@ mod tests {
     #[test]
     fn nmi_has_priority_over_simultaneous_irq() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(NMI_VECTOR, 0x00).unwrap();
-        cpu.bus.write(NMI_VECTOR + 1, 0x03).unwrap();
-        cpu.bus.write(IRQ_VECTOR, 0x00).unwrap();
-        cpu.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
+        cpu.machine.bus.write(NMI_VECTOR, 0x00).unwrap();
+        cpu.machine.bus.write(NMI_VECTOR + 1, 0x03).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR, 0x00).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
         cpu.regs.p.remove(StatusRegister::I);
         cpu.interrupts_mut().signal_nmi();
         cpu.interrupts_mut()
@@ -2327,8 +2275,8 @@ mod tests {
     #[test]
     fn default_resolver_is_identity_for_reset() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(RESET_VECTOR, 0x00).unwrap();
-        cpu.bus.write(RESET_VECTOR + 1, 0x03).unwrap();
+        cpu.machine.bus.write(RESET_VECTOR, 0x00).unwrap();
+        cpu.machine.bus.write(RESET_VECTOR + 1, 0x03).unwrap();
         cpu.reset().unwrap();
         assert_eq!(cpu.regs.pc, 0x0300);
     }
@@ -2372,10 +2320,10 @@ mod tests {
             },
         );
         // Decoy at the nominal address proves redirection, not coincidence.
-        cpu.bus.write(RESET_VECTOR, 0xAD).unwrap();
-        cpu.bus.write(RESET_VECTOR + 1, 0xDE).unwrap();
-        cpu.bus.write(0x0500, 0x00).unwrap();
-        cpu.bus.write(0x0501, 0x06).unwrap();
+        cpu.machine.bus.write(RESET_VECTOR, 0xAD).unwrap();
+        cpu.machine.bus.write(RESET_VECTOR + 1, 0xDE).unwrap();
+        cpu.machine.bus.write(0x0500, 0x00).unwrap();
+        cpu.machine.bus.write(0x0501, 0x06).unwrap();
         cpu.reset().unwrap();
         assert_eq!(cpu.regs.pc, 0x0600);
     }
@@ -2390,10 +2338,10 @@ mod tests {
             },
         );
         cpu.reset().unwrap();
-        cpu.bus.write(NMI_VECTOR, 0xAD).unwrap();
-        cpu.bus.write(NMI_VECTOR + 1, 0xDE).unwrap();
-        cpu.bus.write(0x0500, 0x00).unwrap();
-        cpu.bus.write(0x0501, 0x06).unwrap();
+        cpu.machine.bus.write(NMI_VECTOR, 0xAD).unwrap();
+        cpu.machine.bus.write(NMI_VECTOR + 1, 0xDE).unwrap();
+        cpu.machine.bus.write(0x0500, 0x00).unwrap();
+        cpu.machine.bus.write(0x0501, 0x06).unwrap();
         cpu.interrupts_mut().signal_nmi();
         cpu.step(None, true);
         assert_eq!(cpu.regs.pc, 0x0600);
@@ -2409,10 +2357,10 @@ mod tests {
             },
         );
         cpu.reset().unwrap();
-        cpu.bus.write(IRQ_VECTOR, 0xAD).unwrap();
-        cpu.bus.write(IRQ_VECTOR + 1, 0xDE).unwrap();
-        cpu.bus.write(0x0500, 0x00).unwrap();
-        cpu.bus.write(0x0501, 0x06).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR, 0xAD).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR + 1, 0xDE).unwrap();
+        cpu.machine.bus.write(0x0500, 0x00).unwrap();
+        cpu.machine.bus.write(0x0501, 0x06).unwrap();
         cpu.regs.p.remove(StatusRegister::I);
         cpu.interrupts_mut()
             .assert_irq(crate::emulator::bus::IrqSource(1));
@@ -2430,10 +2378,10 @@ mod tests {
             },
         );
         cpu.reset().unwrap();
-        cpu.bus.write(IRQ_VECTOR, 0xAD).unwrap();
-        cpu.bus.write(IRQ_VECTOR + 1, 0xDE).unwrap();
-        cpu.bus.write(0x0500, 0x00).unwrap();
-        cpu.bus.write(0x0501, 0x06).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR, 0xAD).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR + 1, 0xDE).unwrap();
+        cpu.machine.bus.write(0x0500, 0x00).unwrap();
+        cpu.machine.bus.write(0x0501, 0x06).unwrap();
         write_program(&mut cpu, 0x0200, &[0x00, 0xEA]); // BRK (pad byte)
         cpu.step(None, true);
         assert_eq!(cpu.regs.pc, 0x0600);
@@ -2444,8 +2392,8 @@ mod tests {
     #[test]
     fn wai_returns_waiting_until_irq() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(IRQ_VECTOR, 0x00).unwrap();
-        cpu.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR, 0x00).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
         cpu.regs.p.remove(StatusRegister::I);
         write_program(&mut cpu, 0x0200, &[0xCB]); // WAI
         cpu.step(None, true); // execute WAI — sets waiting=true
@@ -2462,8 +2410,8 @@ mod tests {
         let (sender, rx) = crate::emulator::logging::test_channel_sender(8);
         let mut cpu = make_cpu(0x0200);
         cpu.set_log_sender(sender);
-        cpu.bus.write(IRQ_VECTOR, 0x00).unwrap();
-        cpu.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR, 0x00).unwrap();
+        cpu.machine.bus.write(IRQ_VECTOR + 1, 0x04).unwrap();
         cpu.regs.p.remove(StatusRegister::I);
         write_program(&mut cpu, 0x0200, &[0xCB]); // WAI
         cpu.step(None, true); // execute WAI — sets waiting=true, logs "WAI executed..."
@@ -2480,8 +2428,8 @@ mod tests {
     #[test]
     fn wai_wakes_on_nmi() {
         let mut cpu = make_cpu(0x0200);
-        cpu.bus.write(NMI_VECTOR, 0x00).unwrap();
-        cpu.bus.write(NMI_VECTOR + 1, 0x03).unwrap();
+        cpu.machine.bus.write(NMI_VECTOR, 0x00).unwrap();
+        cpu.machine.bus.write(NMI_VECTOR + 1, 0x03).unwrap();
         cpu.regs.p.insert(StatusRegister::I); // I set — NMI still wakes
         write_program(&mut cpu, 0x0200, &[0xCB]); // WAI
         cpu.step(None, true); // execute WAI
@@ -3000,7 +2948,7 @@ mod tests {
     fn step_emits_cycles_record_matching_total_cycle_count() {
         let mut cpu = make_cpu(0x0200);
         cpu.regs.x = 0xFF;
-        cpu.bus.write(0x0300, 0x42).unwrap();
+        cpu.machine.bus.write(0x0300, 0x42).unwrap();
         // NOP = 2 cycles; LDA $0201,X crosses a page (base 4 + 1 extra = 5 cycles).
         write_program(&mut cpu, 0x0200, &[0xEA, 0xBD, 0x01, 0x02]);
 
