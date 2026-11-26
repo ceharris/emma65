@@ -4,7 +4,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 
 ## Current work
 - [emma6k rename](emma6k-rename.md) — merged in #661: naming rule, what kept the emma65 name, old tag prefixes, moved-checkout `cargo clean`; macOS checkout follow-up pending
-- [Multi-CPU effort](multi-cpu-effort.md) — 6809 support via a `Processor` trait in this repo; step 1 plan in plan/; user decisions (core crate: emma6k-core)
+- [Multi-CPU effort](multi-cpu-effort.md) — NEXT UP: re-baseline benchmark, then step 1 PR 1 (`MachineState`); 6809 via a `Processor` trait; plan in plan/; user decisions
 - [Open issues](open-issues.md) — #646 epic (ask before closing) + follow-ons #656–659; frontend test coverage #559/#560
 
 ## Workflow

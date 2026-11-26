@@ -15,7 +15,7 @@ metadata:
 - `Bus` stays concrete: PR #643 regressed throughput with a dynamic hop on memory access, and #644 had to restore the fast path.
 
 **Steps:**
-1. A refactor with the 6502 as the only CPU and no behavior change. The plan is `plan/multi-cpu-step1-core-refactor-plan.md` (not yet committed as of 2026-11-26). It has four PRs:
+1. A refactor with the 6502 as the only CPU and no behavior change. The plan is `plan/multi-cpu-step1-core-refactor-plan.md`, merged to `main` with #661 on 2026-11-26. It has four PRs:
    - PR 1: `MachineState` extraction.
    - PR 2: `Processor` trait plus generic `exec`.
    - PR 3: core/6502 module boundary inside the crate, plus a toy test `Processor`.
@@ -30,4 +30,10 @@ metadata:
 - The core crate is versioned in lockstep with `emma65`.
 - PR 4's timing is decided only after PRs 1–3 are reviewed and merged.
 
-**How to apply:** the rename is done ([[emma6k-rename]]), so PR 1 can start. Benchmark each PR against [[clock-bench-baseline]] for the current host. The step 1 plan document already uses `emma6k-core`.
+**Where we left off (2026-11-26, end of session):** the rename is done ([[emma6k-rename]]). `main` is at `5adc11f` with a clean working tree, and no branch or PR is open. No step 1 code has been written. To resume:
+1. **On Linux,** re-take the benchmark baseline on current `main` before writing any code ([[clock-bench-baseline]]). Its Linux row dates from 2026-09. The plan's "Performance baseline" table holds the macOS numbers, and the plan is frozen ([[plan-frozen-doc-current]]), so record new numbers in the memory file, not the plan.
+2. **On macOS,** do the checkout follow-up from [[emma6k-rename]] first. Its baseline at `afba63f` still stands, because the rename didn't touch the hot path.
+3. Cut a branch from a freshly fetched `origin/main` ([[branch-from-origin-main]]) and implement PR 1 (`MachineState` extraction) following the plan's "PR 1" section. Then do the plan's "Verification for each PR" checklist. Before starting, check that each of the four PRs compiles on its own ([[multi-unit-plan-workflow]]).
+4. Open PR 1, then stop for the user's review before starting PR 2.
+
+**How to apply:** follow the steps above. Benchmark each PR against [[clock-bench-baseline]] for the current host. The step 1 plan document already uses `emma6k-core`.
