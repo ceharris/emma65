@@ -1,7 +1,7 @@
 //! Wall-clock integration test for the MC6840 PTM, per the follow-up
 //! proposed in #545 (which fixed #543, a Timer 3 prescaler jitter bug).
 //!
-//! Unlike the cycle-exact unit tests in `src/emulator/device/mc6840.rs` and
+//! Unlike the cycle-exact unit tests in `core/src/device/mc6840.rs` and
 //! the IRQ-detection tests in `tests/system_integration.rs`, this drives a
 //! real 6502 program under a throttled clock via `run()` and measures actual
 //! elapsed wall-clock time between timer firings, using a memory-mapped
@@ -70,7 +70,7 @@ fn clock_speed() -> ClockSpeed {
 /// `cr_setup` is the assembler source for whatever CR1/CR2/CR3 writes are
 /// needed to arm the timer under test -- supplied by the caller since each
 /// timer's control register lives at a different offset (see the register
-/// map at the top of `src/emulator/device/mc6840.rs`). `msb_offset`,
+/// map at the top of `core/src/device/mc6840.rs`). `msb_offset`,
 /// `latch_offset`, and `counter_offset` are that timer's MSB-buffer,
 /// latch, and counter-read offsets from $E000. `wait_loop_prewrite`, if
 /// non-empty, is inserted at the top of the polling loop before the status
@@ -195,7 +195,7 @@ fn individual_periods(timestamps: &[Instant]) -> Vec<Duration> {
 ///
 /// A tolerance this generous (not a tight cycle-level bound) is deliberate:
 /// this test measures real wall-clock time through OS thread scheduling and
-/// `run()`'s batched throttle (see `run_loop` in `src/emulator/exec/mod.rs`),
+/// `run()`'s batched throttle (see `run_loop` in `core/src/exec/mod.rs`),
 /// both of which add noise a cycle-exact unit test doesn't have to account
 /// for. What this is designed to catch is *drift on the order of the #543
 /// bug* (double-digit percent, compounding per timer-register rewrite), not
@@ -319,7 +319,7 @@ async fn timer2_continuous_period_stable_over_sustained_run() {
 /// prescaling stays enabled" scenario that used to reset the prescaler's
 /// in-flight count and inject jitter every rewrite (see the fix in
 /// `Mc6840::write` and `rewriting_cr3_with_prescale_bit_unchanged_preserves_prescaler_count`
-/// in `src/emulator/device/mc6840.rs`).
+/// in `core/src/device/mc6840.rs`).
 ///
 /// Before the fix, resetting the prescaler on every one of these rewrites
 /// (which happen far more often than once per 8-cycle prescale division)

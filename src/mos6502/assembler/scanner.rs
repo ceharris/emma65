@@ -1,6 +1,6 @@
 use super::error::Error;
 use super::token::{Token, TokenType};
-use crate::text::Text;
+use emma6k_core::text::Text;
 
 const TAB_SIZE: usize = 8;
 

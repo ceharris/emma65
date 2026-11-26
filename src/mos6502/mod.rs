@@ -2,7 +2,7 @@
 //! 6502 family.
 //!
 //! - [`cpu`]: the CPU itself (decoder, ALU, status register, variants), its
-//!   [`Processor`](crate::emulator::Processor) implementation, and the binary
+//!   [`Processor`](emma6k_core::Processor) implementation, and the binary
 //!   execution trace, whose register record is the 6502's.
 //! - [`disassembler`] and [`assembler`]: the 65C02 instruction set.
 //! - [`config`]: the top-level [`Config`](config::Config) schema with its
@@ -18,6 +18,11 @@ pub mod cpu;
 pub mod disassembler;
 pub mod templates;
 
-/// [`emulator::session::EmulatorSession`](crate::emulator::session::EmulatorSession)
+#[cfg(test)]
+mod device_tests;
+#[cfg(test)]
+mod exec_tests;
+
+/// [`emulator::session::EmulatorSession`](emma6k_core::session::EmulatorSession)
 /// for the 6502 [`Cpu`](cpu::Cpu).
-pub type EmulatorSession = crate::emulator::session::EmulatorSession<cpu::Cpu>;
+pub type EmulatorSession = emma6k_core::session::EmulatorSession<cpu::Cpu>;

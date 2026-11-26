@@ -53,7 +53,7 @@ mod tests {
         let dest = temp_dest("round-trip");
         let toml_path = materialize_config(&dest).unwrap();
 
-        let config: crate::emulator::Config = Figment::new()
+        let config: crate::mos6502::config::Config = Figment::new()
             .merge(Toml::file(&toml_path))
             .extract()
             .expect("bundled snake config failed to parse");

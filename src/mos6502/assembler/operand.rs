@@ -14,8 +14,8 @@ use super::expr::{Expr, Operand};
 use super::instructions::InstructionTable;
 use super::parser::Parser;
 use super::token::TokenType;
-use crate::location::Location;
 use crate::mos6502::cpu::opcodes::{AddressingMode, DecodedOp, Mnemonic};
+use emma6k_core::location::Location;
 
 /// The addressing-mode syntax written after a mnemonic, before it has been
 /// resolved to a specific [`AddressingMode`] (that happens in [`encode`],

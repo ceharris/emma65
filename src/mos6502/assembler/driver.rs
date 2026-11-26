@@ -14,8 +14,8 @@ use super::eval::evaluate;
 use super::instructions::InstructionTable;
 use super::operand::encode;
 use super::statement::{ByteOperand, Directive, Statement, parse_program};
-use crate::location::Location;
 use crate::mos6502::cpu::variant::CpuVariant;
+use emma6k_core::location::Location;
 
 /// A finite cap on the number of layout passes, guarding against a genuine
 /// non-convergence (see the plan doc) rather than looping forever. Ordinary

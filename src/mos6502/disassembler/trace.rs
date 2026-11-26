@@ -1,10 +1,11 @@
 //! Reconstructs disassembled instruction lines from a stream of trace records,
-//! as recorded by [`Cpu::step()`](crate::emulator::Cpu) bus tracing.
+//! as recorded by [`Cpu::step()`](crate::mos6502::cpu::Cpu::step) bus tracing.
 
 use super::{DisassembledLine, Disassembler};
-use crate::emulator::bus::SymbolTable;
-use crate::emulator::{Registers, TraceCallback, TraceKind, TraceRecord};
+use crate::mos6502::cpu::Registers;
+use crate::mos6502::cpu::trace::{TraceCallback, TraceKind, TraceRecord};
 use crate::mos6502::cpu::variant::CpuVariant;
+use emma6k_core::bus::SymbolTable;
 
 /// The in-progress instruction being reconstructed from trace records.
 struct Pending {
@@ -284,8 +285,10 @@ impl<C: TraceCallback, L: DisassemblyListener> TraceCallback for DisassemblingTr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::emulator::bus::{AddressRange, Bus, BusConfig};
-    use crate::emulator::{CpuBuilder, Mnemonic, StepResult, TraceCallback};
+    use crate::mos6502::cpu::opcodes::Mnemonic;
+    use crate::mos6502::cpu::trace::TraceCallback;
+    use crate::mos6502::cpu::{CpuBuilder, StepResult};
+    use emma6k_core::bus::{AddressRange, Bus, BusConfig};
     use std::sync::{Arc, Mutex};
 
     struct CapturingCallback(Arc<Mutex<Vec<TraceRecord>>>);

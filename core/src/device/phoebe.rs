@@ -1,0 +1,401 @@
+//! A bank-switched memory module designed for the Phoebe SBC.
+//!
+//! This device provides 56K RAM and 32K ROM. The ROM is designed to be bank-switched into a 16K
+//! region in the address space (at `0xC000`). It divides the switchable region in half, and maps a
+//! fixed 8K ROM bank into the upper half of the region. Using a single memory-mapped register, the
+//! lower half of the region can be mapped to any one of three 8K banks. The lower half of the
+//! region can also be unmapped, allowing the 8K RAM that shares the same region to be visible.
+//!
+//! The 8K ROM banks are numbered from 0 to 3, corresponding to their offsets in the 32K address
+//! space of the physical ROM; Bank 0 = offset `0x0000`, Bank 1 = offset `0x2000`, Bank 2 = offset
+//! `0x4000`, Bank 3 = offset `0x6000`.
+//!
+//! Bank 3 is mapped to the upper half of the 16K switchable region, and cannot be switched out.
+//! The program image in Bank 3 must include appropriate target addresses for the 6502 machine
+//! vectors; NMI vector at `0x7FFA`, Reset vector at `0x7FFC`, IRQ vector at `0x7FFE`.
+//!
+//! ## Control Register
+//! An 8-bit control register is used to select the 8K ROM bank that is mapped into the
+//! address space at `0xC000..0xDFFF`. On the Phoebe SBC, this register is mapped by the
+//! hardware to address `0xFFF7`, but the emulation allows it to be mapped into any address.
+//!
+//! Only the two low-order bits of the register are significant -- the remaining bits are ignored
+//! on write and always read as zero. The register is initialized to zero at system reset. When
+//! no bank is selected (by setting both selection bits high), the 8K RAM that resides in the same
+//! region becomes visible.
+//!
+//! | Bit 1 | Bit 0 | Selection       |
+//! |-------|-------|-----------------|
+//! |   0   |   0   | ROM Bank 0      |
+//! |   0   |   1   | ROM Bank 1      |
+//! |   1   |   0   | ROM Bank 2      |
+//! |   1   |   1   | RAM             |
+//!
+//!
+use crate::bus::RomWritePolicy;
+use crate::device::IoDevice;
+use crate::{AddressRange, BusError};
+use crate::{LogCategory, LogLevel, LogSender, log_msg};
+
+const NUM_BANKS: u8 = 4;
+const BANK_SIZE: usize = 8192;
+const SELECTION_MASK: u8 = 0b00000011;
+
+const ROM_START: u16 = 0xC000;
+const ROM_END: u16 = 0xFFFF;
+
+const WINDOW_START: u16 = ROM_START;
+const WINDOW_END: u16 = WINDOW_START + (BANK_SIZE - 1) as u16;
+
+/// Total size of ROM in the module
+pub const ROM_SIZE: usize = NUM_BANKS as usize * BANK_SIZE;
+/// Total size of RAM in the module
+pub const RAM_SIZE: usize = 64 * 1024 - BANK_SIZE;
+
+/// A bank-switched ROM (designed for the Phoebe SBC).
+pub struct Phoebe {
+    /// Name of the device as it appears in configuration and CLI.
+    name: &'static str,
+    /// Address to which the bank selection register is mapped.
+    control_register_address: u16,
+    /// Write policy to apply for attempted write operations
+    write_policy: Option<RomWritePolicy>,
+    /// Address region that corresponds to ROM
+    rom_range: AddressRange,
+    /// Address region that corresponds to the bank-switching window
+    window_range: AddressRange,
+    /// Contents of the bank selection register (only bits 1..0 are significant)
+    selected_bank: u8,
+    /// ROM storage
+    rom_data: Vec<u8>,
+    /// RAM storage
+    ram_data: Vec<u8>,
+    /// Sender for structured diagnostic messages (e.g. `reset()`).
+    log_sender: LogSender,
+}
+
+impl Phoebe {
+    /// Constructs a new `Phoebe` device mapped to the given region and register address.
+    pub fn new(name: &'static str, control_register_address: u16) -> Self {
+        Self {
+            name,
+            control_register_address,
+            write_policy: None,
+            rom_range: AddressRange::new(ROM_START, ROM_END),
+            window_range: AddressRange::new(WINDOW_START, WINDOW_END),
+            selected_bank: 0,
+            rom_data: Vec::new(),
+            ram_data: Vec::new(),
+            log_sender: LogSender::default(),
+        }
+    }
+
+    /// Constructs a new `Vireo` device whose memory is loaded with the given data.
+    ///
+    /// ## Arguments
+    /// - `control_register_address` - address for the control register
+    /// - `rom_data` - data to load into ROM; panics if the length of `rom_data` is not 32K
+    /// - `ram_data` - data to load into RAM; panics if the length of `ram_data` is not 128K
+    ///
+    pub fn with_data(
+        name: &'static str,
+        control_register_address: u16,
+        rom_data: Vec<u8>,
+        ram_data: Vec<u8>,
+    ) -> Self {
+        assert_eq!(
+            rom_data.len(),
+            ROM_SIZE,
+            "ROM data size {} does not match ROM size {}",
+            rom_data.len(),
+            ROM_SIZE
+        );
+        assert_eq!(
+            ram_data.len(),
+            RAM_SIZE,
+            "RAM data size {} does not match RAM size {}",
+            ram_data.len(),
+            RAM_SIZE
+        );
+        let mut device = Self::new(name, control_register_address);
+        device.rom_data = rom_data;
+        device.ram_data = ram_data;
+        device
+    }
+
+    /// Sets the write policy.
+    pub fn set_write_policy(&mut self, write_policy: RomWritePolicy) {
+        self.write_policy = Some(write_policy);
+    }
+
+    /// Installs a log sender for diagnostic messages (e.g. `reset()`).
+    pub fn set_log_sender(&mut self, sender: LogSender) {
+        self.log_sender = sender;
+    }
+
+    fn control_register(&self) -> u8 {
+        self.selected_bank
+    }
+
+    fn set_control_register(&mut self, value: u8) {
+        self.selected_bank = value & SELECTION_MASK;
+    }
+
+    fn effective_address(&self, address: u16) -> (bool, usize) {
+        if self.rom_range.contains(address) {
+            if self.window_range.contains(address) {
+                if self.selected_bank < NUM_BANKS - 1 {
+                    let offset = BANK_SIZE * self.selected_bank as usize;
+                    let effective_address = offset + (address - WINDOW_START) as usize;
+                    (true, effective_address)
+                } else {
+                    (false, address as usize)
+                }
+            } else {
+                let offset = (NUM_BANKS - 1) as usize * BANK_SIZE;
+                let effective_address =
+                    offset + (address as usize - (ROM_START as usize + BANK_SIZE));
+                (true, effective_address)
+            }
+        } else {
+            (false, address as usize)
+        }
+    }
+}
+
+impl IoDevice for Phoebe {
+    fn read(&mut self, address: u16) -> u8 {
+        self.peek(address)
+    }
+
+    fn check_writability(&self, address: u16) -> Result<(), BusError> {
+        let (is_rom, _) = self.effective_address(address);
+        if is_rom && let Some(write_policy) = self.write_policy {
+            match write_policy {
+                RomWritePolicy::Ignore => Ok(()),
+                RomWritePolicy::Error => Err(BusError::RomWrite { addr: address }),
+            }
+        } else {
+            Ok(())
+        }
+    }
+
+    fn write(&mut self, address: u16, value: u8) {
+        if address == self.control_register_address {
+            self.set_control_register(value);
+        } else {
+            let (is_rom, effective_address) = self.effective_address(address);
+            if !is_rom {
+                self.ram_data[effective_address] = value;
+            }
+        }
+    }
+
+    fn peek(&self, address: u16) -> u8 {
+        if address == self.control_register_address {
+            self.control_register()
+        } else {
+            let (is_rom, effective_address) = self.effective_address(address);
+            if is_rom {
+                self.rom_data[effective_address]
+            } else {
+                self.ram_data[effective_address]
+            }
+        }
+    }
+
+    fn patch(&mut self, address: u16, value: u8) {
+        if address == self.control_register_address {
+            self.set_control_register(value);
+        } else {
+            let (is_rom, effective_address) = self.effective_address(address);
+            if is_rom {
+                self.rom_data[effective_address] = value;
+            } else {
+                self.ram_data[effective_address] = value;
+            }
+        }
+    }
+
+    fn claims(&self, _address: u16) -> bool {
+        true
+    }
+
+    fn reset(&mut self) {
+        self.set_control_register(0);
+        log_msg!(
+            self.log_sender,
+            LogLevel::Info,
+            LogCategory::Device,
+            "{} reset",
+            self.identity()
+        );
+    }
+
+    fn name(&self) -> &str {
+        self.name
+    }
+
+    fn identity_address(&self) -> u16 {
+        self.control_register_address
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DEVICE_NAME: &str = "phoebe";
+    const CTRL_REGISTER_ADDRESS: u16 = 0xFFF7;
+
+    fn device() -> Phoebe {
+        let rom_data: Vec<u8> = vec![0xFF; ROM_SIZE];
+        let ram_data: Vec<u8> = vec![0; RAM_SIZE];
+        Phoebe::with_data(DEVICE_NAME, CTRL_REGISTER_ADDRESS, rom_data, ram_data)
+    }
+
+    #[test]
+    fn effective_address_ram() {
+        let device = device();
+        assert_eq!(device.effective_address(0x0000), (false, 0x0000));
+        assert_eq!(device.effective_address(0xBFFF), (false, 0xBFFF));
+    }
+
+    #[test]
+    fn effective_address_window() {
+        let mut device = device();
+        device.selected_bank = 0;
+        assert_eq!(device.effective_address(0xC000), (true, 0x0000));
+        assert_eq!(device.effective_address(0xDFFF), (true, 0x1FFF));
+        device.selected_bank = 1;
+        assert_eq!(device.effective_address(0xC000), (true, 0x2000));
+        assert_eq!(device.effective_address(0xDFFF), (true, 0x3FFF));
+        device.selected_bank = 2;
+        assert_eq!(device.effective_address(0xC000), (true, 0x4000));
+        assert_eq!(device.effective_address(0xDFFF), (true, 0x5FFF));
+        device.selected_bank = 3;
+        assert_eq!(device.effective_address(0xC000), (false, 0xC000));
+        assert_eq!(device.effective_address(0xDFFF), (false, 0xDFFF));
+    }
+
+    #[test]
+    fn effective_address_rom() {
+        let device = device();
+        assert_eq!(device.effective_address(0xE000), (true, 0x6000));
+        assert_eq!(device.effective_address(0xFFFF), (true, 0x7FFF));
+    }
+
+    #[test]
+    fn peek_control_register() {
+        let mut device = device();
+        device.set_control_register(SELECTION_MASK);
+        assert_eq!(device.peek(CTRL_REGISTER_ADDRESS), SELECTION_MASK);
+    }
+
+    #[test]
+    fn peek_ram() {
+        let mut device = device();
+        device.ram_data[0] = 0x55;
+        assert_eq!(device.peek(0), 0x55);
+    }
+
+    #[test]
+    fn peek_window() {
+        let mut device = device();
+        device.selected_bank = 1;
+        device.rom_data[0x2000] = 0x55;
+        assert_eq!(device.peek(0xC000), 0x55);
+    }
+
+    #[test]
+    fn peek_rom() {
+        let mut device = device();
+        device.rom_data[0x6000] = 0x55;
+        assert_eq!(device.peek(0xE000), 0x55);
+    }
+
+    #[test]
+    fn write_ram() {
+        let mut device = device();
+        device.selected_bank = SELECTION_MASK;
+        device.write(0x0000, 0xFF);
+        assert_eq!(device.ram_data[0x0000], 0xFF);
+        device.write(0xBFFF, 0xFF);
+        assert_eq!(device.ram_data[0xBFFF], 0xFF);
+    }
+
+    #[test]
+    fn write_rom_ignored() {
+        let mut device = device();
+        device.write(0xFFFF, 0);
+        assert_eq!(device.rom_data[0x7FFF], 0xFF);
+    }
+
+    #[test]
+    fn check_writability_ram_is_ok() {
+        let device = device();
+        assert!(matches!(device.check_writability(0xBFFF), Ok(())));
+    }
+
+    #[test]
+    fn check_writability_rom_is_ok_when_policy_is_none() {
+        let device = device();
+        assert!(matches!(device.check_writability(0xFFFF), Ok(())));
+    }
+
+    #[test]
+    fn check_writability_rom_is_ok_when_policy_is_ignore() {
+        let mut device = device();
+        device.set_write_policy(RomWritePolicy::Ignore);
+        assert!(matches!(device.check_writability(0xFFFF), Ok(())));
+    }
+
+    #[test]
+    fn check_writability_rom_is_error_when_policy_is_error() {
+        let mut device = device();
+        device.set_write_policy(RomWritePolicy::Error);
+        assert!(matches!(
+            device.check_writability(0xFFFF),
+            Err(BusError::RomWrite { addr: 0xFFFF })
+        ));
+    }
+
+    #[test]
+    fn patch_ram() {
+        let mut device = device();
+        device.selected_bank = SELECTION_MASK;
+        device.patch(0x0000, 0xFF);
+        assert_eq!(device.ram_data[0x0000], 0xFF);
+        device.patch(0xBFFF, 0xFF);
+        assert_eq!(device.ram_data[0xBFFF], 0xFF);
+    }
+
+    #[test]
+    fn patch_rom() {
+        let mut device = device();
+        device.patch(0xFFFF, 0);
+        assert_eq!(device.rom_data[0x7FFF], 0);
+    }
+
+    #[test]
+    fn reset_restores_default_bank() {
+        let mut device = device();
+        device.set_control_register(SELECTION_MASK);
+        device.reset();
+        assert_eq!(device.control_register(), 0);
+    }
+
+    #[test]
+    fn reset_logs_device_message() {
+        let (sender, rx) = crate::logging::log_channel(4);
+        let mut device = device();
+        device.set_log_sender(sender);
+        device.reset();
+        let received = rx.recv().unwrap();
+        assert_eq!(received.category, LogCategory::Device);
+        assert_eq!(
+            received.message,
+            format!("{DEVICE_NAME}@0x{CTRL_REGISTER_ADDRESS:04x} reset")
+        );
+    }
+}

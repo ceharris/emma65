@@ -1,6 +1,6 @@
 ---
 name: release
-description: Cut a release for one of the emma6k workspace's five independently-versioned crates (emma65, emma6k-display, emma6k-led-matrix, emma6k-lcd-display, emma6k-debugger) — classify the semver bump, update version files, write the changelog entry, open a PR, and after the user confirms it's merged, tag and push. Use when the user asks to cut/prepare/start a release, bump a crate's version, or says things like "release emma6k-lcd-display 0.2.0" or "publish a new debugger build". Only tagging `emma65` itself triggers a GitHub Actions build — see step 11.
+description: Cut a release for one of the emma6k workspace's five independently-versioned crates (emma65, emma6k-display, emma6k-led-matrix, emma6k-lcd-display, emma6k-debugger) — classify the semver bump, update version files, write the changelog entry, open a PR, and after the user confirms it's merged, tag and push. Use when the user asks to cut/prepare/start a release, bump a crate's version, or says things like "release emma6k-lcd-display 0.2.0" or "publish a new debugger build". Only tagging `emma65` itself triggers a GitHub Actions build — see step 11. `emma6k-core` is not released on its own: it is versioned in lockstep with `emma65` and ships as part of every `emma65` release.
 ---
 
 # Release
@@ -17,6 +17,12 @@ combined `emma6k` `.deb` and `.rpm`, published as a single GitHub Release. Taggi
 other four crates (step 11) is tag-and-push only — it records that crate's version/changelog for
 history, but does not trigger a build; that crate's current state simply gets folded into
 whichever `emma65-v*` release comes next.
+
+**`emma6k-core` rides along with `emma65`.** The CPU-neutral core crate (`core/`) is versioned in
+lockstep with `emma65`: every `emma65` release bumps both to the same version, they share
+`emma65`'s `CHANGELOG.md` entry and its single `emma65-vX.Y.Z` tag, and `emma6k-core` never gets a
+release, tag, or changelog of its own. If the user asks to release `emma6k-core`, that is an
+`emma65` release; say so and proceed with `emma65` as the target.
 
 Detailed lookup tables (artifact → paths, the full semver policy, changelog/tag format specs)
 live in `reference.md` — load it when you reach a step that needs it, not up front.
@@ -56,8 +62,8 @@ tag is that crate's last release, so this is **not** a first release.
 ```
 
 For the four crates with a single directory, pass that directory (e.g. `display`). For `emma65`
-itself, pass `src`, `Cargo.toml`, and `Cargo.lock` (the paths that belong to the core crate, not
-the peripheral directories). This output is raw material for drafting the changelog by hand in
+itself, pass `src`, `core`, `Cargo.toml`, and `Cargo.lock` (the 6502 crate plus the lockstep
+`emma6k-core` crate, not the peripheral directories). This output is raw material for drafting the changelog by hand in
 step 7 — do not try to auto-generate changelog prose from it; this repo's commit messages aren't
 consistently structured enough to categorize reliably on their own.
 
@@ -69,8 +75,11 @@ into the PR body in step 8 so the human reviewer can see and override it.
 **5. Corroborate with `cargo semver-checks`, only for `emma65` itself:**
 
 ```bash
-cargo semver-checks check-release -p emma65 --baseline-rev <last-tag>
+cargo semver-checks check-release -p emma65 -p emma6k-core --baseline-rev <last-tag>
 ```
+
+(If `<last-tag>` predates the `emma6k-core` crate, check `-p emma65` alone: the baseline has no
+`emma6k-core` to compare against, and `emma65` re-exports the core under its old paths.)
 
 Not applicable to the other four crates (bin-only, or an internal Tauri lib) — skip this step
 for them entirely. If the tool isn't installed, tell the user
@@ -82,6 +91,8 @@ silently picking one.
 
 - Single-file crates (`emma65`, `emma6k-display`, `emma6k-led-matrix`, `emma6k-lcd-display`):
   edit the `version = "X.Y.Z"` line directly in that crate's `Cargo.toml`.
+- `emma65` additionally: set the same `X.Y.Z` in `core/Cargo.toml`'s `version`, and in the
+  `version` of the `emma6k-core` dependency in the root `Cargo.toml`. All three must match.
 - `emma6k-debugger`:
   ```bash
   .claude/skills/release/scripts/bump-debugger-version.sh <new-version>
@@ -102,7 +113,7 @@ single unstructured "Initial release." line instead.
 
 ```bash
 git checkout -b release/<crate>-vX.Y.Z
-git add <version files> Cargo.lock <changelog>
+git add <version files> Cargo.lock <changelog>   # for emma65, the version files include core/Cargo.toml
 git commit -m "release: <crate> X.Y.Z"
 git push -u origin release/<crate>-vX.Y.Z
 gh pr create --title "release: <crate> X.Y.Z" --body "..."

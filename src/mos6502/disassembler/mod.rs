@@ -4,9 +4,9 @@ pub mod trace;
 
 pub use trace::{TraceBusOp, TraceDisassembler, TraceRow, TraceRowAssembler};
 
-use crate::emulator::bus::{Bus, SymbolTable};
 use crate::mos6502::cpu::opcodes::{AddressingMode, DecodedOp, Mnemonic, decode_table};
 use crate::mos6502::cpu::variant::CpuVariant;
+use emma6k_core::bus::{Bus, SymbolTable};
 
 /// A single disassembled instruction.
 pub struct DisassembledLine {
@@ -231,8 +231,8 @@ fn absolute_address(b1: u8, b2: u8, pc_after: u16, mode: AddressingMode) -> u16 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::emulator::bus::AddressRange;
-    use crate::emulator::bus::{Bus, BusConfig};
+    use emma6k_core::bus::AddressRange;
+    use emma6k_core::bus::{Bus, BusConfig};
 
     fn make_bus(start: u16, bytes: &[u8]) -> Bus {
         let mut bus = BusConfig::new()

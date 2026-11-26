@@ -5,7 +5,7 @@
 `emulator::exec::run()`'s free-running loop throttles emulated execution to a target clock
 frequency by comparing accumulated emulated cycles against elapsed wall time, batching the
 comparison over ~1,000 instructions to keep sleep-syscall overhead negligible (see
-`src/emulator/exec/mod.rs`). Two distinct numbers come out of a benchmark run:
+`core/src/exec/mod.rs`). Two distinct numbers come out of a benchmark run:
 
 - **Accurate-throttling ceiling** — the highest target clock speed at which measured throughput
   still tracks the target to within a few hundredths of a percent. Below this, the throttle is
