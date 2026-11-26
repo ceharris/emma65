@@ -1,5 +1,9 @@
-//! VPB (vector-pull) resolution: lets external hardware substitute a
-//! different vector address during a RESET/NMI/IRQ/BRK vector fetch.
+//! Vector-pull resolution: lets external hardware substitute a different
+//! vector address while the CPU fetches an interrupt or reset vector.
+//!
+//! The trait is CPU-neutral: it maps a nominal vector address to an
+//! effective one. The examples below use the 6502's vectors, and the WDC65C02's
+//! VPB pin is the hardware it was written to model.
 
 use crate::emulator::bus::InterruptController;
 

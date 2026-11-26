@@ -18,7 +18,7 @@ mod r6551;
 mod ram;
 mod registry;
 mod rom;
-pub mod templates;
+pub mod template;
 mod transport;
 mod via6522;
 mod vireo;
@@ -27,7 +27,7 @@ mod write_policy;
 pub use console::ConsoleModule;
 pub use device::{DeviceModule, DeviceModuleError, DeviceSpec};
 pub use display::CharDisplayModule;
-pub use emulator::{BuildError, Config, CpuVariantSpec};
+pub use emulator::{BuildError, BuiltMachine, MachineSpec, UnmappedPolicySpec, build_machine};
 pub use finch::FinchModule;
 pub use lcd_display::LcdDisplayModule;
 pub use led_matrix::LedMatrixModule;
@@ -48,3 +48,10 @@ pub use rom::RomModule;
 pub use transport::{TransportSpec, TransportSpecFormat};
 pub use via6522::Via6522Module;
 pub use vireo::VireoModule;
+
+// --- 6502 re-exports ---
+// The top-level `Config` schema (with its `cpu-variant` selector) and the
+// bundled templates belong to the 6502; these keep their pre-split
+// `emma65::emulator::config::*` paths working.
+pub use crate::mos6502::config::{Config, CpuVariantSpec};
+pub use crate::mos6502::templates;

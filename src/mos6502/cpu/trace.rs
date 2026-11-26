@@ -382,7 +382,7 @@ pub fn spawn_trace_writer<W: Write + Send + 'static>(
 
 /// Tracks the per-instruction correlation id and the not-yet-flushed register
 /// snapshot for the instruction currently being stepped.
-pub(in crate::emulator) struct TraceState {
+pub(in crate::mos6502) struct TraceState {
     /// Id to assign to the next instruction that begins.
     next_instr_id: u64,
     /// The `(instr_id, snapshot)` for the current instruction, if its
@@ -391,7 +391,7 @@ pub(in crate::emulator) struct TraceState {
 }
 
 impl TraceState {
-    pub(in crate::emulator) fn new() -> Self {
+    pub(in crate::mos6502) fn new() -> Self {
         Self {
             next_instr_id: 0,
             pending: None,
@@ -400,21 +400,21 @@ impl TraceState {
 
     /// Called once per `Cpu::step()`, before any register mutation for that
     /// step, with the register state as it stood at the start of the step.
-    pub(in crate::emulator) fn begin_instruction(&mut self, regs: Registers) {
+    pub(in crate::mos6502) fn begin_instruction(&mut self, regs: Registers) {
         let id = self.next_instr_id;
         self.next_instr_id = self.next_instr_id.wrapping_add(1);
         self.pending = Some((id, regs));
     }
 
     /// Returns the id of the most recently begun instruction.
-    pub(in crate::emulator) fn current_instr_id(&self) -> u64 {
+    pub(in crate::mos6502) fn current_instr_id(&self) -> u64 {
         self.next_instr_id.wrapping_sub(1)
     }
 
     /// Takes and returns the pending `Registers` snapshot for `instr_id`, if
     /// it hasn't already been flushed. Returns `None` (leaving any pending
     /// snapshot for a different id untouched) once already flushed.
-    pub(in crate::emulator) fn take_pending_registers(
+    pub(in crate::mos6502) fn take_pending_registers(
         &mut self,
         instr_id: u64,
     ) -> Option<Registers> {

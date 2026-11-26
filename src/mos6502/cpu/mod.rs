@@ -8,13 +8,12 @@ pub mod opcodes;
 pub mod status;
 pub mod trace;
 pub mod variant;
-pub mod vector;
 
+use crate::emulator::bus::vector::{IdentityVectorResolver, VectorResolver};
 use crate::emulator::bus::{Bus, BusOp, InterruptController};
 use crate::emulator::error::{BusError, CpuBuildError, ExecError};
 use crate::emulator::exec::{self, ClockSpeed};
-use crate::emulator::machine::MachineState;
-use crate::emulator::processor::{HaltState, Processor};
+use crate::emulator::{HaltState, MachineState, Processor};
 use crate::emulator::{
     LogCategory, LogLevel, LogSender, TraceCallback, TraceKind, TraceRecord, log_msg,
 };
@@ -24,7 +23,6 @@ use status::StatusRegister;
 use std::collections::HashSet;
 use trace::TraceState;
 use variant::{CpuVariant, InvalidOpcodePolicy};
-use vector::{IdentityVectorResolver, VectorResolver};
 
 const STACK_BASE: u16 = 0x0100;
 /// Bus address of the RESET vector, read on power-on/reset.
@@ -1338,6 +1336,7 @@ pub struct CpuBuilder {
     bus: Option<Bus>,
     vector_resolver: Option<Box<dyn VectorResolver>>,
     log_sender: LogSender,
+    machine: Option<MachineState>,
 }
 
 impl CpuBuilder {
@@ -1350,6 +1349,7 @@ impl CpuBuilder {
             bus: None,
             vector_resolver: None,
             log_sender: LogSender::default(),
+            machine: None,
         }
     }
 
@@ -1387,17 +1387,31 @@ impl CpuBuilder {
         self
     }
 
+    /// Builds the `Cpu` around existing machine state (for example from
+    /// [`build_machine`](crate::emulator::config::build_machine)) instead of a
+    /// bare bus. The machine state already holds the bus, clock speed, vector
+    /// resolver, and log sender, so any values given to [`bus`](Self::bus),
+    /// [`clock_speed`](Self::clock_speed),
+    /// [`vector_resolver`](Self::vector_resolver), or
+    /// [`log_sender`](Self::log_sender) are ignored.
+    pub fn machine(mut self, machine: MachineState) -> Self {
+        self.machine = Some(machine);
+        self
+    }
+
     /// Consumes the builder and returns a `Cpu`, or an error if required fields are missing.
     pub fn build(self) -> Result<Cpu, CpuBuildError> {
-        let bus = self.bus.ok_or(CpuBuildError::NoBus)?;
         let table = decode_table(self.variant);
-        let machine = MachineState::new(
-            bus,
-            self.clock_speed,
-            self.vector_resolver
-                .unwrap_or_else(|| Box::new(IdentityVectorResolver)),
-            self.log_sender,
-        );
+        let machine = match self.machine {
+            Some(machine) => machine,
+            None => MachineState::new(
+                self.bus.ok_or(CpuBuildError::NoBus)?,
+                self.clock_speed,
+                self.vector_resolver
+                    .unwrap_or_else(|| Box::new(IdentityVectorResolver)),
+                self.log_sender,
+            ),
+        };
         Ok(Cpu {
             regs: Registers::new(),
             machine,

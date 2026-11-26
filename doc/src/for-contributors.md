@@ -19,7 +19,8 @@ detail, see the generated
 
 ## CPU
 
-`emulator::cpu::Cpu` is built with `Cpu::builder(variant)`, which takes a
+`mos6502::cpu::Cpu` (also reachable as `emulator::cpu::Cpu`) is built with
+`Cpu::builder(variant)`, which takes a
 `CpuVariant` (`Cmos65C02` or `Wdc65C02`), a `ClockSpeed`, and a `Bus`, and
 owns the `Registers`, the interrupt-priority logic, and the fetch/decode/
 execute loop. `cpu::opcodes::decode_table()` builds a fixed `[DecodedOp; 256]`
@@ -48,6 +49,18 @@ for control and a `CpuLiveSnapshot` read without pausing the CPU;
 `step_into()`, `step_over_subroutine()`, `step_over_breakpoint()`, and
 `step_return()` build the debugger's single-step commands on top of the same
 `step()` primitive.
+
+The emulator is split into a CPU-neutral core (`emulator`) and the 6502
+itself (`mos6502`), so that other CPUs can be added alongside it. A CPU
+implements the `emulator::Processor` trait and embeds an
+`emulator::MachineState`, which holds everything the CPU doesn't own itself:
+the bus, interrupt controller, watch evaluator, breakpoints, clock speed, and
+cycle count. Everything in `exec` is generic over `Processor`, and its run
+loop is compiled separately for each CPU, so `step()` remains a direct call
+with no dynamic dispatch on the hot path. The 6502's own pieces (the
+instruction set and decoder, the binary trace format, the assembler and
+disassembler, the `cpu-variant` configuration setting, and the bundled
+starter templates, whose ROMs are 6502 programs) all live under `mos6502`.
 
 ## Bus
 
@@ -122,11 +135,14 @@ the integration point for contributors adding new device types. The
 
 ## Other Public Modules
 
-Beyond `emulator`, the crate exposes three more top-level public modules:
+Beyond `emulator` and `mos6502`, the crate exposes the `watch` module, plus
+the 6502's assembler and disassembler at the top level (`emma65::assembler`
+and `emma65::disassembler` are re-exports of `mos6502::assembler` and
+`mos6502::disassembler`):
 
 - **`assembler`** — assembles 6502 assembly source into one or more
   `.org`-delimited output segments plus a symbol table, via `assemble(source)`
-  (`src/assembler/`). Directives are `.org`, `.byte` (including string-literal
+  (`src/mos6502/assembler/`). Directives are `.org`, `.byte` (including string-literal
   operands), `.word`, `.res`, and `.setcpu`; symbols are defined via
   `FOO = expr`, `FOO .equ expr`, or a label on an instruction
   (`my_routine:  LDA #$55`). Expressions support arithmetic, logical,

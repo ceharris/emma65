@@ -3,7 +3,7 @@
 //! Every function takes explicit inputs (operands + relevant flag bits) and returns
 //! a result value plus the updated N/Z/C/V flags. No CPU state is mutated here.
 
-use crate::emulator::cpu::status::StatusRegister;
+use crate::mos6502::cpu::status::StatusRegister;
 
 /// Result of a binary arithmetic or logic operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

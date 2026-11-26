@@ -28,9 +28,9 @@ use super::instructions::{InstructionTable, mnemonic_from_str};
 use super::operand::{OperandSyntax, parse_operand};
 use super::parser::Parser;
 use super::token::{Token, TokenType};
-use crate::emulator::cpu::opcodes::{AddressingMode, Mnemonic};
-use crate::emulator::cpu::variant::CpuVariant;
 use crate::location::Location;
+use crate::mos6502::cpu::opcodes::{AddressingMode, Mnemonic};
+use crate::mos6502::cpu::variant::CpuVariant;
 
 /// A `.byte` operand: either a numeric expression (truncated to one byte) or
 /// a string literal (each character emitted as one byte).
@@ -335,7 +335,7 @@ fn unexpected_token_error(parser: &Parser) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::emulator::cpu::variant::CpuVariant;
+    use crate::mos6502::cpu::variant::CpuVariant;
 
     fn table() -> InstructionTable {
         InstructionTable::new(CpuVariant::Wdc65C02)

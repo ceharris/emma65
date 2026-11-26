@@ -3,8 +3,8 @@
 
 use std::collections::HashMap;
 
-use crate::emulator::cpu::opcodes::{AddressingMode, DecodedOp, Mnemonic, decode_table};
-use crate::emulator::cpu::variant::CpuVariant;
+use crate::mos6502::cpu::opcodes::{AddressingMode, DecodedOp, Mnemonic, decode_table};
+use crate::mos6502::cpu::variant::CpuVariant;
 
 /// Maps an assembly-source mnemonic name to a [`Mnemonic`], case-insensitively.
 ///
