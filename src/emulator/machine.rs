@@ -8,14 +8,17 @@
 
 use crate::emulator::LogSender;
 use crate::emulator::bus::{Bus, InterruptController};
-use crate::emulator::cpu::StepResult;
 use crate::emulator::cpu::vector::VectorResolver;
-use crate::emulator::exec::ClockSpeed;
+use crate::emulator::exec::{ClockSpeed, StepResult};
 use crate::watch::{WatchContext, WatchEvaluator};
 use std::collections::HashSet;
 
 /// Machine state that isn't specific to any instruction set.
-pub(crate) struct MachineState {
+///
+/// Reached through [`Processor::machine`](crate::emulator::Processor::machine); its
+/// fields are crate-private, and the [`Processor`](crate::emulator::Processor)
+/// trait's default methods expose them.
+pub struct MachineState {
     /// The memory bus; owns all RAM, ROM, and IO device regions.
     pub(crate) bus: Bus,
     /// Interrupt controller; tracks IRQ sources and pending NMI.
@@ -99,12 +102,12 @@ impl MachineState {
     /// register, flag, and endianness semantics stay with the instruction set.
     /// It is called only when at least one watchpoint is installed.
     #[inline]
-    pub(crate) fn check_halt<'a, C, F>(
+    pub(crate) fn check_halt<'a, Op, C, F>(
         &'a mut self,
         pc: u16,
         skip_pc: Option<u16>,
         make_ctx: F,
-    ) -> Option<StepResult>
+    ) -> Option<StepResult<Op>>
     where
         C: WatchContext + 'a,
         F: FnOnce(&'a Bus) -> C,

@@ -73,7 +73,8 @@ fn step_to_stop(cpu: &mut emma65::emulator::Cpu) {
             StepResult::Reset
             | StepResult::Breakpoint(_)
             | StepResult::WatchTriggered { .. }
-            | StepResult::WatchError { .. } => unreachable!(),
+            | StepResult::WatchError { .. }
+            | StepResult::StopRequested => unreachable!(),
         }
     }
     panic!("program did not reach STP within {MAX_STEPS} steps");

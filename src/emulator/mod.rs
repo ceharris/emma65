@@ -8,6 +8,7 @@ pub mod error;
 pub mod exec;
 mod logging;
 mod machine;
+mod processor;
 mod session;
 pub mod transport;
 
@@ -31,7 +32,9 @@ pub use cpu::trace::{
 };
 pub use cpu::variant::{CpuVariant, InvalidOpcodePolicy};
 pub use cpu::vector::{IdentityVectorResolver, VectorResolver};
-pub use cpu::{Cpu, CpuBuilder, Registers, map_flag_name, map_register_name};
+pub use cpu::{
+    Cpu, CpuBuilder, CpuLiveSnapshot, Registers, RunHandle, map_flag_name, map_register_name,
+};
 pub use device::display::DisplayFrame;
 pub use device::lcd_display::LcdDisplayFrame;
 pub use device::led_matrix::LedMatrixFrame;
@@ -49,13 +52,15 @@ pub use device::{
 };
 pub use error::{BusConfigError, BusError, CpuBuildError, ExecError};
 pub use exec::{
-    ClockSpeed, CpuLiveSnapshot, RunHandle, RunStopper, run, run_from, step_into,
-    step_over_breakpoint, step_over_subroutine, step_return,
+    ClockSpeed, RunStopper, run, run_from, step_into, step_over_breakpoint, step_over_subroutine,
+    step_return,
 };
 pub(crate) use logging::log_msg;
 pub use logging::{
     LogCategory, LogLevel, LogRecord, LogSender, spawn_log_collector, spawn_log_writer,
 };
+pub use machine::MachineState;
+pub use processor::{HaltState, Processor};
 pub use session::EmulatorSession;
 pub use transport::{
     ChannelRelay, InternalPipeTransport, PipeTransport, PtyTransport, TcpSocketTransport,

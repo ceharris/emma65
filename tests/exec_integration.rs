@@ -156,7 +156,8 @@ fn bus_trace_captures_reads_and_writes() {
             StepResult::Reset
             | StepResult::Breakpoint(_)
             | StepResult::WatchTriggered { .. }
-            | StepResult::WatchError { .. } => unreachable!(),
+            | StepResult::WatchError { .. }
+            | StepResult::StopRequested => unreachable!(),
         }
     }
 

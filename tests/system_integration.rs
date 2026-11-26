@@ -42,7 +42,8 @@ fn step_to_stop(cpu: &mut emma65::emulator::Cpu) {
             StepResult::Reset
             | StepResult::Breakpoint(_)
             | StepResult::WatchTriggered { .. }
-            | StepResult::WatchError { .. } => unreachable!(),
+            | StepResult::WatchError { .. }
+            | StepResult::StopRequested => unreachable!(),
         }
     }
     panic!("CPU did not reach STP within {MAX_STEPS} steps");
@@ -63,7 +64,8 @@ fn step_to_stop_deadline(cpu: &mut emma65::emulator::Cpu, deadline: std::time::I
             StepResult::Reset
             | StepResult::Breakpoint(_)
             | StepResult::WatchTriggered { .. }
-            | StepResult::WatchError { .. } => unreachable!(),
+            | StepResult::WatchError { .. }
+            | StepResult::StopRequested => unreachable!(),
         }
     }
 }
