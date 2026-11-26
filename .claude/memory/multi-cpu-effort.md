@@ -30,14 +30,18 @@ metadata:
 - The core crate is versioned in lockstep with `emma65`.
 - PR 4's timing is decided only after PRs 1–3 are reviewed and merged.
 
-**Where we left off (2026-11-26):** PR 1 merged as #664. PR 2 (the `Processor` trait and a generic `exec`) is open as #665 on branch `refactor/processor-trait`, awaiting the user's UAT and review. Don't start PR 3 until the user says so ([[multi-unit-plan-workflow]]).
+**Where we left off (2026-11-26):** PRs 1 and 2 merged (#664, #665). PR 3 (the core/6502 module boundary) is open as #666 on branch `refactor/mos6502-module-boundary`, awaiting the user's UAT and review. After it, PR 4 (extracting the `emma6k-core` crate) is next, but the plan defers PR 4's timing until PRs 1–3 are reviewed, so ask the user before starting it ([[multi-unit-plan-workflow]]).
 
-Notes for PR 3:
-- **`check_halt` takes a closure**, `|bus| CpuWatchContext { regs, bus }`, not the plan's `&dyn WatchContext`. A context borrowing `machine.bus` can't coexist with `&mut self` on the same `MachineState`.
-- **Aliases keep existing paths working.** The generic types live at `exec::{StepResult<Op>, RunHandle<P>, CpuLiveSnapshot<R>}`. The 6502 module defines aliases with the old names, and `emma65::emulator::*` re-exports the aliases. When PR 3 moves `cpu/` to `mos6502/`, move the aliases with it and keep the re-exports.
-- **`Cpu` keeps inherent accessors** that duplicate the trait's defaults, so concrete callers don't need `use Processor`. This was the user-facing choice in #665; keep it unless the user says otherwise.
-- **Performance:** PR 1 made the 6502 about 14% faster because `Cpu::execute` became inlined into `step`. PR 2 kept it inlined and benchmarked level with PR 1 (minimal ~104 MHz, default ~39 MHz on Linux, rustc 1.100.0). In each PR, A/B against `main`, and re-check `nm -C target/release/examples/clock_bench_minimal | grep 'Cpu>::'` for `execute`.
-- **Toolchain:** rustc 1.100.0 was installed on Linux on 2026-11-26, matching CI's stable. Benchmark numbers from before that date used an older compiler. Don't let a rustup update or a heavy build overlap a benchmark run.
+Notes for PR 4:
+- **Where the facade lives.** Every re-export that names a `mos6502` item is grouped under `// --- 6502 re-exports ---` in `src/emulator/mod.rs` and `src/emulator/config/mod.rs`. That's the facade to lift into the `emma65` crate. `lib.rs` also re-exports `mos6502::{assembler, disassembler}`.
+- **Make `MachineState`'s crate-private parts public.** The test toy CPU (`src/emulator/exec/toy.rs`) needs `check_halt`, `finish_cycle`, `tick_idle`, `irq_recognized` and the `pub(crate)` fields, and so will a CPU in another crate. Prefer accessor methods to public fields.
+- **`Config` lives in `mos6502::config`, not core,** because its `cpu-variant` field is a 6502 type. The core half is `config::build_machine(registry, MachineSpec, context) -> BuiltMachine`, and the 6502 wraps the result via `CpuBuilder::machine`.
+- **6502-based tests still live in core modules** (`exec`, `config::pic_finch`, `device::console`, `bus`). The core crate can't depend on the 6502, so they have to move to `emma65` or be ported to the toy CPU.
+- **The template mechanism is core** (`config::template`: `Template::new`, `find_in`, `materialize_from`, `asset`). The six entries are `mos6502::templates`.
+- **The `pic_finch` device has a local `IRQ_VECTOR` (`0xFFFE`)** on purpose: it models the WDC65C02 VPB pin.
+- **Other carried-over decisions:** `check_halt` takes a closure, not `&dyn WatchContext`. The generic types stay in `exec` with aliases in `mos6502::cpu`. `Cpu` keeps its inherent accessors.
+- **Performance:** PR 1 made the 6502 about 14% faster by inlining `Cpu::execute` into `step`. PRs 2 and 3 kept that (PR 3 benchmarked about 1.4% below PR 2, within noise; module moves can shift codegen-unit layout). Plan says to watch for inlining loss across the crate boundary in PR 4. A/B each PR against `main` and re-check `nm -C target/release/examples/clock_bench_minimal | grep 'Cpu>::'` for `execute`.
+- **Toolchain:** rustc 1.100.0 since 2026-11-26 on Linux, matching CI's stable. Don't let a rustup update or a heavy build overlap a benchmark run.
 
 **CI doesn't build the debugger or the SDL crates for `src/`-only changes.** Their jobs are path-filtered to their own directories (`debugger/**` and so on) even though they depend on the `emma65` library. In #664 they were skipped. For a refactor PR, run `cargo test --workspace` and the debugger's clippy command locally, and say in the PR that you did.
 
