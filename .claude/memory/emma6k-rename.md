@@ -33,8 +33,8 @@ The project is being renamed to **emma6k** (decided by the user 2026-11-26) befo
 - **Not run there:** linking the SDL binaries (no SDL2 on that Mac), the debugger clippy step (existing macOS warnings, see [[macos-linux-portability]]), and the frontend tests (no `node_modules`). **On Linux, run the full `cargo build --workspace`, `cargo test --workspace`, every CI clippy command, and `npm test` in `debugger/frontend`.**
 
 **Remaining steps:**
-1. The user renames the GitHub repo to `ceharris/emma6k`.
-2. The agent runs `git remote set-url origin git@github.com:ceharris/emma6k.git` on each host.
+1. ~~The user renames the GitHub repo to `ceharris/emma6k`.~~ Done 2026-11-26.
+2. The agent runs `git remote set-url origin git@github.com:ceharris/emma6k.git` on each host. Done on Linux 2026-11-26; **still needed on macOS**.
 3. Dispatch `docker-ci-image.yml` on main (confirm with the user first) so `ghcr.io/ceharris/emma6k-ci` exists. CI pulls `ghcr.io/${{ github.repository }}-ci`, so until then every CI job on the PR fails to find its image.
 4. Open the PR. The branch was committed and pushed from the macOS workstation on 2026-11-26; open the PR only after steps 1–3.
 
