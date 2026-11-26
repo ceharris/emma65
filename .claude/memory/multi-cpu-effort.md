@@ -30,7 +30,7 @@ metadata:
 - The core crate is versioned in lockstep with `emma65`.
 - PR 4's timing is decided only after PRs 1–3 are reviewed and merged.
 
-**Where we left off (2026-11-26):** PRs 1 and 2 merged (#664, #665). PR 3 (the core/6502 module boundary) is open as #666 on branch `refactor/mos6502-module-boundary`, awaiting the user's UAT and review. After it, PR 4 (extracting the `emma6k-core` crate) is next, but the plan defers PR 4's timing until PRs 1–3 are reviewed, so ask the user before starting it ([[multi-unit-plan-workflow]]).
+**Where we left off (2026-11-26):** PRs 1–3 merged (#664, #665, #666). Next is PR 4, extracting the `emma6k-core` crate. The plan defers its timing (now, or together with the 6809 crate in step 2) until PRs 1–3 are reviewed, so **the user decides when it starts** ([[multi-unit-plan-workflow]]).
 
 Notes for PR 4:
 - **Where the facade lives.** Every re-export that names a `mos6502` item is grouped under `// --- 6502 re-exports ---` in `src/emulator/mod.rs` and `src/emulator/config/mod.rs`. That's the facade to lift into the `emma65` crate. `lib.rs` also re-exports `mos6502::{assembler, disassembler}`.
