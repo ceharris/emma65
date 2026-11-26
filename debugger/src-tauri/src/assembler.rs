@@ -359,7 +359,7 @@ mod tests {
     #[tokio::test]
     async fn write_source_file_then_read_source_file_round_trips_contents() {
         let dir =
-            std::env::temp_dir().join(format!("emma65-assembler-test-{}", std::process::id()));
+            std::env::temp_dir().join(format!("emma6k-assembler-test-{}", std::process::id()));
         tokio::fs::create_dir_all(&dir).await.unwrap();
         let path = dir.join("program.s").to_string_lossy().into_owned();
 
@@ -375,7 +375,7 @@ mod tests {
     #[tokio::test]
     async fn read_source_file_missing_path_reports_error() {
         let result =
-            read_source_file("/nonexistent/emma65-assembler-test/program.s".to_string()).await;
+            read_source_file("/nonexistent/emma6k-assembler-test/program.s".to_string()).await;
         assert!(result.is_err());
     }
 }

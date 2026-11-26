@@ -236,7 +236,7 @@ function drawFrame(
  * rendering on top of it (rounded dots, inter-dot and inter-cell gaps, a dimly-visible "off"
  * state, a bezel) the same way `LedMatrixPanel.tsx` draws its raw per-LED buffer as round LEDs on
  * a PCB -- neither cosmetic layer lives in the shared library, since each renderer (this panel and
- * the SDL2 companion, `emma65-lcd-display`, mirroring `led-matrix`'s) draws with its own native
+ * the SDL2 companion, `emma6k-lcd-display`, mirroring `led-matrix`'s) draws with its own native
  * primitives at its own resolution rather than blitting a backend-rasterized bitmap. Unlike
  * `DisplayPanel`, there's no keyboard input to forward -- an LCD display has no input capability,
  * like `LedMatrixPanel`.

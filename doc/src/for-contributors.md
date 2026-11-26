@@ -1,10 +1,12 @@
 # For Contributors
 
-Emma65 is written in Rust (2024 edition), as a Cargo workspace. The root
+Emma6k is written in Rust (2024 edition), as a Cargo workspace. Crates that
+aren't specific to the 65C02 use the `emma6k-` prefix; the 65C02 emulator crate
+keeps the `emma65` name. The root
 crate (`emma65`) exposes a library plus two binaries, `emma65` and
 `emma65-tracer`; three further workspace members — `debugger/src-tauri`
-(`emma65-debugger`), `display` (`emma65-display`), and `led-matrix`
-(`emma65-led-matrix`) — are thin front ends built on that library. Its
+(`emma6k-debugger`), `display` (`emma6k-display`), and `led-matrix`
+(`emma6k-led-matrix`) — are thin front ends built on that library. Its
 central public module is `emulator`, which implements everything those front
 ends are built on: a 65C02 CPU model, a configurable memory bus, a library of
 memory-mapped I/O devices, and the pluggable transports that connect those
@@ -13,7 +15,7 @@ fit together internally, for a contributor adding a new device or working on
 the emulator core itself; see [The Emulator Core](the-emulator-core.md) for a
 feature-level tour of the same territory. For full type- and function-level
 detail, see the generated
-[API documentation](https://ceharris.github.io/emma65/api/emma65/).
+[API documentation](https://ceharris.github.io/emma6k/api/emma65/).
 
 ## CPU
 
@@ -115,7 +117,7 @@ The `emma65` binary (`src/bin/emulator/`) uses the `emulator::config` module
 to load configuration from all sources (TOML, environment, CLI), build an
 `EmulatorSession`, and run the free loop. The `emulator::config` module is
 the integration point for contributors adding new device types. The
-`emma65-tracer` binary (`src/bin/tracer/`) and the `emma65-debugger` crate
+`emma65-tracer` binary (`src/bin/tracer/`) and the `emma6k-debugger` crate
 (`debugger/src-tauri/`) are both thin front ends over the same library.
 
 ## Other Public Modules
@@ -165,11 +167,11 @@ Beyond `emulator`, the crate exposes three more top-level public modules:
 | `tempfile`          | Temporary file for the embedded default ROM at startup              |
 
 The other three workspace members are thin binary crates. `debugger/src-tauri`
-(crate `emma65-debugger`) adds Tauri 2, `tauri-plugin-dialog`/
+(crate `emma6k-debugger`) adds Tauri 2, `tauri-plugin-dialog`/
 `tauri-plugin-log`, and (on Linux) `gtk` on the Rust side, plus a
 React/TypeScript/Vite frontend in `debugger/frontend` — see
-[The Debugger](the-debugger.md). `display` (crate `emma65-display`) and
-`led-matrix` (crate `emma65-led-matrix`) each add the `sdl2` crate (requires
+[The Debugger](the-debugger.md). `display` (crate `emma6k-display`) and
+`led-matrix` (crate `emma6k-led-matrix`) each add the `sdl2` crate (requires
 SDL2 development headers to build — see
 [Running the Display Peripheral](running-the-display-peripheral.md) and
 [Running the LED Matrix Peripheral](running-the-led-matrix-peripheral.md)) and

@@ -285,9 +285,9 @@ function resolveRevealPosition(
  * resolved theme via `useTheme()`; unlike a detached window, the main
  * window already has that for free through `ThemeProvider`/React context.
  */
-const EMMA65_DOCK_THEME_BASE: Omit<DockviewTheme, "colorScheme"> = {
-  name: "emma65",
-  className: "dockview-theme-emma65",
+const EMMA6K_DOCK_THEME_BASE: Omit<DockviewTheme, "colorScheme"> = {
+  name: "emma6k",
+  className: "dockview-theme-emma6k",
 };
 
 // MemoryPanel always renders a fixed 16-row page (mouse wheel pages through
@@ -1188,7 +1188,7 @@ export default function DockLayout() {
           components={panelComponents}
           rightHeaderActionsComponent={DockTabActions}
           onReady={onReady}
-          theme={{ ...EMMA65_DOCK_THEME_BASE, colorScheme: resolvedTheme }}
+          theme={{ ...EMMA6K_DOCK_THEME_BASE, colorScheme: resolvedTheme }}
         />
       </div>
     </PanelHeaderActionProvider>

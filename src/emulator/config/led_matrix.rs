@@ -396,7 +396,7 @@ mod tests {
         // sized for exactly one message (the original bug) leaves zero room for the next `send_bytes`
         // the instant the first message lands, so it races the background pipe-writer task's drain
         // and silently drops the loser -- observed live as some matrices in a multi-matrix swap
-        // never updating on `emma65-led-matrix`. This spawns a real `cat` child (same as production)
+        // never updating on `emma6k-led-matrix`. This spawns a real `cat` child (same as production)
         // with the config module's actual capacity formula and fires `matrix_count` full-size block
         // messages back-to-back with no `.await` between them -- the exact shape of one `CMD_SWAP`
         // burst -- asserting every single one is accepted (`send_bytes` returns `true`), not just

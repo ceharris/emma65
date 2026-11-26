@@ -1,11 +1,11 @@
 [package]
-name = "emma65-led-matrix"
+name = "emma6k-led-matrix"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
 
 [[bin]]
-name = "emma65-led-matrix"
+name = "emma6k-led-matrix"
 path = "src/main.rs"
 
 [dependencies]
@@ -14,4 +14,4 @@ sdl2 = { version = "0.38", features = ["gfx"] }
 clap = { version = "4.0", features = ["derive"] }
 
 [build-dependencies]
-emma65-build-info = { path = "../build-info" }
+emma6k-build-info = { path = "../build-info" }

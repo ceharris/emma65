@@ -2,7 +2,7 @@
 
 Wire protocol the [Character Display](io-devices.md#character-display-display)
 device (config type `display`) uses to stream its composited frame data to an
-external peripheral process — the bundled `emma65-display` binary, or a
+external peripheral process — the bundled `emma6k-display` binary, or a
 replacement for it — over an attached [transport](io-devices.md#transport-options),
 when running the plain `emma65` CLI standalone. It's unrelated to how the
 debugger renders the same device in-process, which needs no wire protocol at
@@ -10,7 +10,7 @@ all (same address space, same process), and unrelated to the
 [LED Matrix External Protocol](appendix-led-matrix-protocol.md) — a different
 device with different needs. See
 [Running the Display Peripheral](running-the-display-peripheral.md) for how
-to configure and launch `emma65-display` itself, and
+to configure and launch `emma6k-display` itself, and
 [Character Display](io-devices.md#character-display-display) for the
 device's bus-facing register behavior — this page covers only what crosses
 the transport.

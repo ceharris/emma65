@@ -95,7 +95,7 @@ inter-dot and inter-cell gaps, a dimly-visible off state rather than flat backgr
 lives independently in each renderer rather than in the shared library — this protocol carries the
 same undecorated raw buffer the debugger panel receives in-process, and a companion peripheral is
 expected to apply its own equivalent cosmetic treatment using its own native drawing primitives
-(the same split `LedMatrix`'s protocol and `emma65-led-matrix` already use for round-LED
+(the same split `LedMatrix`'s protocol and `emma6k-led-matrix` already use for round-LED
 rendering). A peripheral can distinguish an "on" dot from an "off" one the same way
 `LcdDisplayPanel.tsx`'s `drawFrame` does: a pixel exactly equal to the header's `background` triple
 is "off"; anything else is "on" (in practice, always exactly the header's `foreground` triple,

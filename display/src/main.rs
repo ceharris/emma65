@@ -1,4 +1,4 @@
-//! `emma65-display` — an external peripheral process that renders `CharDisplay`'s
+//! `emma6k-display` — an external peripheral process that renders `CharDisplay`'s
 //! composited output in an SDL2 window.
 //!
 //! Spawned by the emulator itself via a `display` device's `transport = "pipe:..."`
@@ -29,7 +29,7 @@ use protocol::{Frame, Header};
 
 #[derive(Parser)]
 #[command(
-    about = "SDL2 external peripheral for emma65's memory-mapped character display",
+    about = "SDL2 external peripheral for emma6k's memory-mapped character display",
     version = env!("BUILD_VERSION"),
     disable_version_flag = true
 )]
@@ -100,7 +100,7 @@ fn spawn_frame_reader(frame_len: usize, columns: u32, rows: u32) -> mpsc::Receiv
                 }
                 Ok(false) => break, // clean EOF: emulator exited or transport shut down
                 Err(e) => {
-                    eprintln!("emma65-display: {e}");
+                    eprintln!("emma6k-display: {e}");
                     break;
                 }
             }
@@ -149,7 +149,7 @@ fn main() {
     let header = match read_header(&mut io::stdin().lock()) {
         Ok(header) => header,
         Err(e) => {
-            eprintln!("emma65-display: failed to read header: {e}");
+            eprintln!("emma6k-display: failed to read header: {e}");
             std::process::exit(1);
         }
     };
@@ -166,7 +166,7 @@ fn main() {
         .expect("SDL2 video subsystem init failed");
     let window = video
         .window(
-            &format!("emma65 display - {}x{}", header.columns, header.rows),
+            &format!("emma6k display - {}x{}", header.columns, header.rows),
             pixel_width * args.scale.max(1),
             pixel_height * args.scale.max(1),
         )

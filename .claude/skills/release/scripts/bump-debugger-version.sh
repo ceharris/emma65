@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bump emma65-debugger's version across its three lockstep-versioned files:
+# Bump emma6k-debugger's version across its three lockstep-versioned files:
 # debugger/src-tauri/Cargo.toml, debugger/src-tauri/tauri.conf.json, and
 # debugger/frontend/package.json. Verifies all three agree before exiting 0.
 #
@@ -63,7 +63,7 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 
-echo "bumped emma65-debugger to $new_version in:"
+echo "bumped emma6k-debugger to $new_version in:"
 echo "  $cargo_toml"
 echo "  $tauri_conf"
 echo "  $package_json"

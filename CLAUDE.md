@@ -2,16 +2,45 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Agent memory
+
+Keep all persistent agent memory for this project in `.claude/memory/` in this repository. It is
+versioned with the code, so it travels between the user's workstations (Linux is the primary
+development host; there's also a macOS workstation). Its index is imported here:
+
+@.claude/memory/MEMORY.md
+
+- **Never write project memory to the per-user auto-memory directory**
+  (`~/.claude/projects/<path>/memory/`). If the harness's built-in memory instructions say to save
+  there, save to `.claude/memory/` instead. If that per-user directory holds memories about this
+  project, reconcile them into `.claude/memory/`: merge duplicates, keep the newer or more accurate
+  fact, and record conflicts for the user rather than silently choosing one. Then leave only a
+  pointer back to this directory there.
+- **Format.** Store one fact per file, with frontmatter `name` (kebab-case slug, matching the file
+  name), `description` (one line, used to judge relevance), and `metadata.type` (`user`,
+  `feedback`, `project`, or `reference`). For `feedback` and `project` memories, follow the fact
+  with **Why:** and **How to apply:** lines. Link related memories with `[[name]]`. Add a one-line
+  pointer to `.claude/memory/MEMORY.md` for every file.
+- **Maintenance.** Update an existing file rather than creating a duplicate, and delete memories
+  that turn out to be wrong. Use absolute dates. Don't record what the code, git history, or this
+  file already say.
+- **Host-neutral by default.** When a fact only holds on one machine (benchmark numbers, platform
+  gaps, local paths), say which host it applies to.
+- **Commit memory with the work.** Include memory changes in the commits for the work they
+  describe, so the other workstation picks them up. Uncommitted memory doesn't travel.
+- **This repository is public.** Never store secrets, credentials, or personal details beyond what
+  the repository already contains.
+
 ## Commands
 
 ```bash
 cargo build              # build the emma65 and emma65-tracer binaries + library
-cargo build --workspace  # also build the debugger crate (emma65-debugger), the display crate
-                          # (emma65-display), the led-matrix crate (emma65-led-matrix), and the
-                          # lcd-display crate (emma65-lcd-display)
-cargo build -p emma65-display     # build just the SDL2 display peripheral (needs libsdl2-dev)
-cargo build -p emma65-led-matrix  # build just the SDL2 LED matrix peripheral (needs libsdl2-dev)
-cargo build -p emma65-lcd-display # build just the SDL2 LCD display peripheral (needs libsdl2-dev)
+cargo build --workspace  # also build the debugger crate (emma6k-debugger), the display crate
+                          # (emma6k-display), the led-matrix crate (emma6k-led-matrix), and the
+                          # lcd-display crate (emma6k-lcd-display)
+cargo build -p emma6k-display     # build just the SDL2 display peripheral (needs libsdl2-dev)
+cargo build -p emma6k-led-matrix  # build just the SDL2 LED matrix peripheral (needs libsdl2-dev)
+cargo build -p emma6k-lcd-display # build just the SDL2 LCD display peripheral (needs libsdl2-dev)
 cargo test                # run the library/binary test suite
 cargo test --workspace    # also run the debugger, display, led-matrix, and lcd-display crates' tests
 cargo test <name>         # run a single test by name (partial match)
@@ -28,26 +57,28 @@ Tauri invokes `npm run build` there automatically as part of `cargo tauri build`
 
 ## Architecture
 
-`emma65` is a Cargo workspace (Rust 2024 edition) with six members:
+This repository is the emma6k project: a Cargo workspace (Rust 2024 edition) with six members.
+Crates that aren't specific to the 6502 use the `emma6k-` prefix; the 6502 emulator crate and its
+binaries keep the `emma65` name.
 
 - **`.`** (crate `emma65`) — the emulator library plus two binaries: `emma65` (the emulator)
   and `emma65-tracer` (decodes binary trace files)
-- **`build-info`** (crate `emma65-build-info`) — a `build.rs`-only helper, shared as a
+- **`build-info`** (crate `emma6k-build-info`) — a `build.rs`-only helper, shared as a
   build-dependency by every other member's `build.rs`, that captures each crate's git commit
   hash, build timestamp, and (for a tagged release commit) version number into `BUILD_VERSION`/
   `BUILD_INFO_LINE` env vars consumed via `env!` — see `build-info/src/lib.rs`'s doc comment and
   issue #623
-- **`debugger/src-tauri`** (crate `emma65-debugger`) — a Tauri 2 desktop app that hosts the
+- **`debugger/src-tauri`** (crate `emma6k-debugger`) — a Tauri 2 desktop app that hosts the
   emulator and exposes a full-featured debugger UI
-- **`display`** (crate `emma65-display`) — an SDL2 peripheral binary that renders the
+- **`display`** (crate `emma6k-display`) — an SDL2 peripheral binary that renders the
   `display` device's composited output for the plain `emma65` CLI (the debugger renders
   it in-process instead); spawned by the emulator as a child process over a `pipe:` transport,
   per `plan/char-display-external-protocol.md`
-- **`led-matrix`** (crate `emma65-led-matrix`) — an SDL2 peripheral binary that renders the
+- **`led-matrix`** (crate `emma6k-led-matrix`) — an SDL2 peripheral binary that renders the
   `display/matrix` device's per-matrix composited output for the plain `emma65` CLI (the
   debugger renders it in-process instead); spawned by the emulator as a child process over a
   `pipe:` transport, per `plan/led-matrix-external-protocol.md`
-- **`lcd-display`** (crate `emma65-lcd-display`) — an SDL2 peripheral binary that renders the
+- **`lcd-display`** (crate `emma6k-lcd-display`) — an SDL2 peripheral binary that renders the
   `display/lcd` device's composited dot-matrix output for the plain `emma65` CLI (the debugger
   renders it in-process instead); spawned by the emulator as a child process over a `pipe:`
   transport, per `plan/lcd-display-external-protocol.md`
@@ -91,7 +122,7 @@ src/
     config/                  — configuration loading and device module registry (see below)
   watch/                    — watchpoint expression pipeline (see below)
 debugger/
-  src-tauri/                — emma65-debugger: Tauri commands/state per UI panel (see below)
+  src-tauri/                — emma6k-debugger: Tauri commands/state per UI panel (see below)
   frontend/                 — React/TypeScript/Vite UI (panels, styles, keybindings)
 ```
 

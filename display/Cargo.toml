@@ -1,11 +1,11 @@
 [package]
-name = "emma65-display"
+name = "emma6k-display"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
 
 [[bin]]
-name = "emma65-display"
+name = "emma6k-display"
 path = "src/main.rs"
 
 [dependencies]
@@ -14,4 +14,4 @@ sdl2 = "0.38"
 clap = { version = "4.0", features = ["derive"] }
 
 [build-dependencies]
-emma65-build-info = { path = "../build-info" }
+emma6k-build-info = { path = "../build-info" }

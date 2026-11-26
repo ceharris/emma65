@@ -1,7 +1,7 @@
 {
-  "productName": "emma65-debugger",
+  "productName": "emma6k-debugger",
   "version": "0.1.0",
-  "identifier": "org.emma65.debugger",
+  "identifier": "org.emma6k.debugger",
   "build": {
     "beforeDevCommand": {
       "script": "npm run dev",
@@ -17,7 +17,7 @@
   "app": {
     "windows": [
       {
-        "title": "Emma65 Debugger",
+        "title": "Emma6k Debugger",
         "width": 1600,
         "height": 900,
         "resizable": true,
@@ -26,7 +26,7 @@
       },
       {
         "label": "terminal-detached",
-        "title": "Emma65 Terminal",
+        "title": "Emma6k Terminal",
         "url": "terminal-detached.html",
         "width": 860,
         "height": 480,
@@ -36,7 +36,7 @@
       },
       {
         "label": "display-detached",
-        "title": "Emma65 Display",
+        "title": "Emma6k Display",
         "url": "display-detached.html",
         "width": 640,
         "height": 400,
@@ -46,7 +46,7 @@
       },
       {
         "label": "led-matrix-detached",
-        "title": "Emma65 LED Matrix",
+        "title": "Emma6k LED Matrix",
         "url": "led-matrix-detached.html",
         "width": 700,
         "height": 300,
@@ -56,7 +56,7 @@
       },
       {
         "label": "lcd-display-detached",
-        "title": "Emma65 LCD Display",
+        "title": "Emma6k LCD Display",
         "url": "lcd-display-detached.html",
         "width": 480,
         "height": 240,

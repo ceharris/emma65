@@ -605,7 +605,7 @@ mod tests {
 
     fn temp_dir(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "emma65-memory-variables-test-{name}-{:?}",
+            "emma6k-memory-variables-test-{name}-{:?}",
             std::thread::current().id()
         ));
         std::fs::create_dir_all(&dir).unwrap();

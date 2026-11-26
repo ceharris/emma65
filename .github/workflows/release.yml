@@ -2,9 +2,10 @@ name: Release
 
 # Triggered by pushing the `emma65-vX.Y.Z` tag. A release packages every
 # workspace binary — the emulator CLI (emma65, emma65-tracer), the SDL2
-# peripheral binaries (emma65-display, emma65-led-matrix, emma65-lcd-display),
-# and the Tauri debugger GUI (emma65-debugger) — into one combined `emma65`
-# .deb and .rpm. See .claude/skills/release/ for the human-gated process that
+# peripheral binaries (emma6k-display, emma6k-led-matrix, emma6k-lcd-display),
+# and the Tauri debugger GUI (emma6k-debugger) — into one combined `emma6k`
+# .deb and .rpm. The tag keeps the `emma65-v` prefix because the package's version is
+# the root `emma65` crate's version. See .claude/skills/release/ for the human-gated process that
 # produces this tag.
 #
 # The other four workspace crates keep their own independent version and
@@ -90,10 +91,10 @@ jobs:
             echo ""
             echo "- emma65 $version"
             for entry in \
-              "emma65-display:display" \
-              "emma65-led-matrix:led-matrix" \
-              "emma65-lcd-display:lcd-display" \
-              "emma65-debugger:debugger/src-tauri"
+              "emma6k-display:display" \
+              "emma6k-led-matrix:led-matrix" \
+              "emma6k-lcd-display:lcd-display" \
+              "emma6k-debugger:debugger/src-tauri"
             do
               crate="${entry%%:*}"
               dir="${entry#*:}"
@@ -160,7 +161,7 @@ jobs:
           cargo install cargo-generate-rpm --locked
 
       - name: Build CLI and peripheral binaries
-        run: cargo build --release -p emma65 -p emma65-display -p emma65-led-matrix -p emma65-lcd-display
+        run: cargo build --release -p emma65 -p emma6k-display -p emma6k-led-matrix -p emma6k-lcd-display
 
       - name: Build debugger binary
         working-directory: debugger/src-tauri
@@ -211,6 +212,6 @@ jobs:
           mapfile -t assets < <(find dist -type f)
           gh release create "${{ needs.resolve.outputs.tag }}" \
             --repo "${{ github.repository }}" \
-            --title "emma65 ${{ needs.resolve.outputs.version }}" \
+            --title "emma6k ${{ needs.resolve.outputs.version }}" \
             --notes-file release-notes.md \
             "${assets[@]}"

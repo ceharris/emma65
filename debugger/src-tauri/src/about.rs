@@ -1,7 +1,7 @@
 //! Help > About dialog (issue #423): a small static-content panel plus,
 //! in production builds only, a build-info line carrying the git commit hash,
 //! build timestamp, and (for a tagged release build) version number, captured
-//! by `build.rs` via the shared `emma65-build-info` crate (issue #623).
+//! by `build.rs` via the shared `emma6k-build-info` crate (issue #623).
 
 use crate::menu;
 use tauri::{AppHandle, Emitter};
@@ -27,7 +27,7 @@ pub fn get_about_info() -> AboutInfo {
     }
 }
 
-/// Empty in a dev build (see `emma65-build-info`'s doc comment); present only in production.
+/// Empty in a dev build (see `emma6k-build-info`'s doc comment); present only in production.
 fn build_info() -> Option<String> {
     let line = env!("BUILD_INFO_LINE");
     (!line.is_empty()).then(|| line.to_string())

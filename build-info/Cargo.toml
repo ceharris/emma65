@@ -1,12 +1,12 @@
 [package]
-name = "emma65-build-info"
+name = "emma6k-build-info"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
 publish = false
 
 [lib]
-name = "emma65_build_info"
+name = "emma6k_build_info"
 path = "src/lib.rs"
 
 [dependencies]

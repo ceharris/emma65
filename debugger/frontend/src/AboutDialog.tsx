@@ -67,7 +67,7 @@ export default function AboutDialog() {
         <div className="modal-title">About</div>
 
         <div className="modal-message">
-          Emma65: Emulator and Debugger for the 65C02 series microprocessor and related peripherals
+          Emma6k: Emulator and Debugger for the 65C02 series microprocessor and related peripherals
         </div>
 
         <div className="modal-message">

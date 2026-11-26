@@ -1,6 +1,6 @@
 # The Debugger
 
-`emma65-debugger` is a native desktop application (built with
+`emma6k-debugger` is a native desktop application (built with
 [Tauri](https://tauri.app)) that turns the emulator into a full interactive
 development environment for 65C02 programs. Its main window is a freely
 rearrangeable dock of panels — disassembly, memory, registers, stack,

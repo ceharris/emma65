@@ -1,6 +1,6 @@
 # The Emulator Core
 
-At the heart of Emma65 is a CPU model that faithfully emulates the 65C02
+At the heart of Emma6k is a CPU model that faithfully emulates the 65C02
 instruction set and interrupt behavior, paired with a flexibly configurable
 memory bus and a growing library of virtual I/O devices — everything the
 `emma65` command-line emulator, the debugger, and the tracer are all built
@@ -13,21 +13,21 @@ real 65C02 hardware.
 
 ## Correctness
 
-Emma65 passes
+Emma6k passes
 the [Klaus Dormann 65C02 test suite](https://github.com/Klaus2m5/6502_65C02_functional_tests),
 which exhaustively exercises every instruction, addressing mode, flag
 computation, interrupt sequence, and decimal-mode operation defined by the
 65C02 architecture. It also passes
 the [Bruce Clark decimal mode test](http://www.6502.org/tutorials/decimal_mode.html),
 which independently verifies all 256×256 ADC and SBC operand combinations in
-BCD mode against predicted CMOS 65C02 results. Users can rely on Emma65's
+BCD mode against predicted CMOS 65C02 results. Users can rely on Emma6k's
 instruction-level behavior matching real hardware.
 
 ## Features
 
 ### Instruction Set
 
-Emma65 emulates two variants of the 65C02 processor family:
+Emma6k emulates two variants of the 65C02 processor family:
 
 - **CMOS 65C02** — the standard CMOS variant, including all instructions added
   over the original NMOS 6502: `BRA`, `STZ`, `TSB`, `TRB`, `PHX`, `PHY`,
@@ -67,14 +67,14 @@ behavior, if that's what you're looking for, include:
 
 ### Interrupt Support
 
-Emma65 implements the full 65C02 interrupt model:
+Emma6k implements the full 65C02 interrupt model:
 
 - **RESET** — restores the CPU to its power-on state: every device on the
   bus is reset to its own power-on state, the stack pointer is set to
   `$FF`, the status register to `I` (interrupts disabled, every other flag
   clear), the cumulative cycle counter is zeroed, and any `STP`/`WAI`-halted
   state is cleared. The program counter is then loaded from the reset vector
-  at `$FFFC`/`$FFFD`. Emma65 issues one automatically before running the
+  at `$FFFC`/`$FFFD`. Emma6k issues one automatically before running the
   first instruction of a session, and the debugger's CPU/Bus panel exposes
   it as an on-demand control.
 - **NMI** — edge-triggered and latched: the first falling edge sets a pending

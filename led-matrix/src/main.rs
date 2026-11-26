@@ -1,4 +1,4 @@
-//! `emma65-led-matrix` — an external peripheral process that renders `LedMatrix`'s per-matrix
+//! `emma6k-led-matrix` — an external peripheral process that renders `LedMatrix`'s per-matrix
 //! composited output in an SDL2 window.
 //!
 //! Spawned by the emulator itself via a `display/matrix` device's `transport = "pipe:..."`
@@ -78,7 +78,7 @@ fn gfx_color(color: Color) -> u32 {
 
 #[derive(Parser)]
 #[command(
-    about = "SDL2 external peripheral for emma65's memory-mapped LED matrix display",
+    about = "SDL2 external peripheral for emma6k's memory-mapped LED matrix display",
     version = env!("BUILD_VERSION"),
     disable_version_flag = true
 )]
@@ -166,7 +166,7 @@ fn spawn_message_reader() -> mpsc::Receiver<Message> {
                     let tag = tag_buf[0];
                     let Some(len) = protocol::body_len(tag) else {
                         eprintln!(
-                            "emma65-led-matrix: unrecognized message tag {tag}, stream desynced"
+                            "emma6k-led-matrix: unrecognized message tag {tag}, stream desynced"
                         );
                         break;
                     };
@@ -179,20 +179,20 @@ fn spawn_message_reader() -> mpsc::Receiver<Message> {
                                 }
                             }
                             Err(e) => {
-                                eprintln!("emma65-led-matrix: {e}");
+                                eprintln!("emma6k-led-matrix: {e}");
                                 break;
                             }
                         },
                         Ok(false) => break, // stream closed immediately after the tag byte, before any body bytes; treat as shutdown
                         Err(e) => {
-                            eprintln!("emma65-led-matrix: {e}");
+                            eprintln!("emma6k-led-matrix: {e}");
                             break;
                         }
                     }
                 }
                 Ok(false) => break, // clean EOF: emulator exited or transport shut down
                 Err(e) => {
-                    eprintln!("emma65-led-matrix: {e}");
+                    eprintln!("emma6k-led-matrix: {e}");
                     break;
                 }
             }
@@ -291,7 +291,7 @@ fn main() {
     let header = match read_header(&mut io::stdin().lock()) {
         Ok(header) => header,
         Err(e) => {
-            eprintln!("emma65-led-matrix: failed to read header: {e}");
+            eprintln!("emma6k-led-matrix: failed to read header: {e}");
             std::process::exit(1);
         }
     };
@@ -315,7 +315,7 @@ fn main() {
     let window = video
         .window(
             &format!(
-                "emma65 LED matrix - {}x{}",
+                "emma6k LED matrix - {}x{}",
                 arrangement.columns, arrangement.rows
             ),
             pixel_width,

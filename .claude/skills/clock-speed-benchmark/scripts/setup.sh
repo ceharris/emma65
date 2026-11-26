@@ -9,7 +9,7 @@ set -euo pipefail
 skill_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [ ! -f Cargo.toml ] || [ ! -d src/emulator ]; then
-  echo "error: run this from the emma65 repository root" >&2
+  echo "error: run this from the emma6k repository root" >&2
   exit 1
 fi
 

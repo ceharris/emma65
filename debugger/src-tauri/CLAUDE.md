@@ -1,6 +1,6 @@
-# CLAUDE.md — `emma65-debugger`
+# CLAUDE.md — `emma6k-debugger`
 
-A Tauri 2 desktop app (`emma65-debugger`) that loads config from
+A Tauri 2 desktop app (`emma6k-debugger`) that loads config from
 `~/.emma/debugger/profiles/default/emulator.toml`, builds an `EmulatorSession` with an
 injected `InternalPipeTransport` wired to its terminal window, and exposes the emulator to a
 React/TypeScript frontend (`debugger/frontend/`) via `#[tauri::command]`s. UI preferences

@@ -2,7 +2,7 @@
 
 Wire protocol the [LCD Display](io-devices.md#lcd-display-displaylcd)
 device (config type `display/lcd`) uses to stream its composited frame data
-to an external peripheral process — the bundled `emma65-lcd-display` binary,
+to an external peripheral process — the bundled `emma6k-lcd-display` binary,
 or a replacement for it — over an attached
 [transport](io-devices.md#transport-options), when running the plain
 `emma65` CLI standalone. It's unrelated to how the debugger renders the same
@@ -12,7 +12,7 @@ same process), and unrelated to the
 and [LED Matrix External Protocol](appendix-led-matrix-protocol.md) — different
 devices with different needs. See
 [Running the LCD Display Peripheral](running-the-lcd-display-peripheral.md)
-for how to configure and launch `emma65-lcd-display` itself, and
+for how to configure and launch `emma6k-lcd-display` itself, and
 [LCD Display](io-devices.md#lcd-display-displaylcd) for the device's
 bus-facing register behavior — this page covers only what crosses the
 transport.
@@ -105,7 +105,7 @@ lives independently in each renderer rather than in a shared library — this
 protocol carries the same undecorated raw buffer the debugger panel receives
 in-process, and a companion peripheral is expected to apply its own
 equivalent cosmetic treatment using its own native drawing primitives (the
-same split the LED Matrix's protocol and `emma65-led-matrix` already use for
+same split the LED Matrix's protocol and `emma6k-led-matrix` already use for
 round-LED rendering). A peripheral can distinguish an "on"
 dot from an "off" one the same way the debugger panel does: a pixel exactly
 equal to the header's `background` triple is "off"; anything else is "on"

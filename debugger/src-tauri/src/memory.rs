@@ -434,7 +434,7 @@ mod tests {
     }
 
     async fn write_temp_file(name: &str, contents: &[u8]) -> String {
-        let dir = std::env::temp_dir().join(format!("emma65-memory-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("emma6k-memory-test-{}", std::process::id()));
         tokio::fs::create_dir_all(&dir).await.unwrap();
         let path = dir.join(name);
         tokio::fs::write(&path, contents).await.unwrap();

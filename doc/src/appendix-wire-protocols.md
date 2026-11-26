@@ -21,8 +21,8 @@ Two families of protocol, serving different needs:
 - **External rendering protocols** — the [Character Display](appendix-display-protocol.md),
   [LED Matrix](appendix-led-matrix-protocol.md), and
   [LCD Display](appendix-lcd-display-protocol.md) protocols stream composited
-  frame data to the bundled `emma65-display`, `emma65-led-matrix`, and
-  `emma65-lcd-display` SDL2 peripheral binaries (see
+  frame data to the bundled `emma6k-display`, `emma6k-led-matrix`, and
+  `emma6k-lcd-display` SDL2 peripheral binaries (see
   [Running the Display Peripheral](running-the-display-peripheral.md),
   [Running the LED Matrix Peripheral](running-the-led-matrix-peripheral.md),
   and [Running the LCD Display Peripheral](running-the-lcd-display-peripheral.md)).
