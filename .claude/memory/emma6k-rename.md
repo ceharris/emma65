@@ -43,4 +43,4 @@ The project is being renamed to **emma6k** (decided by the user 2026-11-26) befo
 - The docs site moves to `ceharris.github.io/emma6k`; GitHub likely won't redirect the old Pages URL.
 - The debugger's OS-managed log directory follows the new identifier.
 
-**Decided:** the future core crate is `emma6k-core`. **Open question for the user:** whether to rename the local checkout directory (`~/git/emma65`) on each host.
+**Decided:** the future core crate is `emma6k-core`. **Local checkout directory:** leave it named `~/git/emma65` for now (user, 2026-11-26). Bring up renaming it on the Linux workstation, but only after that host's per-user memory has been reconciled into `.claude/memory/`. Renaming the directory changes the per-user memory path that Claude Code derives from it.
