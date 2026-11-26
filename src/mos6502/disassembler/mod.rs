@@ -5,8 +5,8 @@ pub mod trace;
 pub use trace::{TraceBusOp, TraceDisassembler, TraceRow, TraceRowAssembler};
 
 use crate::emulator::bus::{Bus, SymbolTable};
-use crate::emulator::cpu::opcodes::{AddressingMode, DecodedOp, Mnemonic, decode_table};
-use crate::emulator::cpu::variant::CpuVariant;
+use crate::mos6502::cpu::opcodes::{AddressingMode, DecodedOp, Mnemonic, decode_table};
+use crate::mos6502::cpu::variant::CpuVariant;
 
 /// A single disassembled instruction.
 pub struct DisassembledLine {

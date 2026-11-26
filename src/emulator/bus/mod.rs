@@ -4,14 +4,15 @@ mod interrupt;
 mod loader;
 mod region;
 pub mod symbol;
+pub mod vector;
 
 pub use interrupt::{DeviceInterruptState, InterruptController, IrqSource, MAX_IRQ_SOURCES};
 pub use loader::BusLoadTarget;
 use rand::RngExt;
 pub use region::{AddressRange, BusOp};
 pub use symbol::{SymbolSource, SymbolTable};
+pub use vector::{IdentityVectorResolver, VectorResolver};
 
-use crate::emulator::cpu::vector::VectorResolver;
 use crate::emulator::device::{DeviceId, IoDevice};
 use crate::emulator::error::{BusConfigError, BusError};
 
@@ -1500,7 +1501,7 @@ mod tests {
 
     // --- vector resolver ---
 
-    use crate::emulator::cpu::vector::IdentityVectorResolver;
+    use crate::emulator::bus::vector::IdentityVectorResolver;
 
     #[test]
     fn vector_resolver_installs_and_round_trips_through_take() {

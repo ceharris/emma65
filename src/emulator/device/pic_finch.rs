@@ -45,8 +45,11 @@ use std::sync::atomic::{AtomicU8, Ordering};
 
 use crate::emulator::VectorResolver;
 use crate::emulator::bus::InterruptController;
-use crate::emulator::cpu::IRQ_VECTOR;
 use crate::emulator::{LogCategory, LogLevel, LogSender, log_msg};
+
+/// The 65C02's IRQ/BRK vector address. The PIC models the WDC65C02's VPB pin
+/// and redirects only fetches of this vector; RESET and NMI pass through.
+const IRQ_VECTOR: u16 = 0xFFFE;
 
 /// Base address of the PIC's 8-slot, 16-byte IRQ vector table.
 const VECTOR_TABLE_BASE: u16 = 0xFFE0;

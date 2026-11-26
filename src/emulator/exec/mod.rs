@@ -784,6 +784,9 @@ fn run_loop<P: Processor>(
 }
 
 #[cfg(test)]
+mod toy;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

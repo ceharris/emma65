@@ -50,10 +50,10 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
-    use crate::disassembler::Disassembler;
-    use crate::emulator::cpu::opcodes::{AddressingMode, DecodedOp, Mnemonic, decode_table};
-    use crate::emulator::cpu::variant::CpuVariant;
     use crate::emulator::{AddressRange, Bus, RomWritePolicy};
+    use crate::mos6502::cpu::opcodes::{AddressingMode, DecodedOp, Mnemonic, decode_table};
+    use crate::mos6502::cpu::variant::CpuVariant;
+    use crate::mos6502::disassembler::Disassembler;
 
     fn assemble_ok(source: &str) -> AssembledProgram {
         assemble(source).unwrap_or_else(|errors| {

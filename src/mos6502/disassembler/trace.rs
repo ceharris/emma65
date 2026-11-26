@@ -3,8 +3,8 @@
 
 use super::{DisassembledLine, Disassembler};
 use crate::emulator::bus::SymbolTable;
-use crate::emulator::cpu::variant::CpuVariant;
 use crate::emulator::{Registers, TraceCallback, TraceKind, TraceRecord};
+use crate::mos6502::cpu::variant::CpuVariant;
 
 /// The in-progress instruction being reconstructed from trace records.
 struct Pending {

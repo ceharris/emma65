@@ -4,7 +4,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 
 ## Current work
 - [emma6k rename](emma6k-rename.md) — merged in #661: naming rule, what kept the emma65 name, old tag prefixes, moved-checkout steps (per-user memory pointer, `cargo clean`); both hosts moved (2026-11-26)
-- [Multi-CPU effort](multi-cpu-effort.md) — step 1 PR 1 merged (#664); PR 2 open as #665 (awaiting review); PR 3 notes; 6809 via a `Processor` trait; plan in plan/; user decisions
+- [Multi-CPU effort](multi-cpu-effort.md) — step 1 PRs 1–2 merged; PR 3 open as #666 (awaiting review); ask before PR 4; PR 4 notes; 6809 via a `Processor` trait; plan in plan/; user decisions
 - [macOS port effort](macos-port-effort.md) — plan/macos-port-plan.md (#663); Unit 1 (SDL2 use-pkgconfig, cfg the 4 window_for_events clones, commit macOS-schema.json, install.md macOS) exact steps; run on the Mac; ask priority vs multi-CPU
 - [Open issues](open-issues.md) — #646 epic (ask before closing) + follow-ons #656–659; frontend test coverage #559/#560; #667 unmapped writes are silent
 

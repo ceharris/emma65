@@ -14,8 +14,8 @@ use super::expr::{Expr, Operand};
 use super::instructions::InstructionTable;
 use super::parser::Parser;
 use super::token::TokenType;
-use crate::emulator::cpu::opcodes::{AddressingMode, DecodedOp, Mnemonic};
 use crate::location::Location;
+use crate::mos6502::cpu::opcodes::{AddressingMode, DecodedOp, Mnemonic};
 
 /// The addressing-mode syntax written after a mnemonic, before it has been
 /// resolved to a specific [`AddressingMode`] (that happens in [`encode`],
@@ -565,7 +565,7 @@ fn branch_out_of_range(location: Location) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::emulator::cpu::variant::CpuVariant;
+    use crate::mos6502::cpu::variant::CpuVariant;
 
     fn parse_operand_source<'a>(
         source: &'a str,

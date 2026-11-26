@@ -2,13 +2,14 @@
 //! evaluator, breakpoints, clock speed, cycle count, vector resolver, and log
 //! sender.
 //!
-//! The 6502 [`Cpu`](crate::emulator::Cpu) embeds a [`MachineState`] alongside
-//! the state that belongs to its instruction set (registers, decode table,
-//! variant, invalid-opcode policy, WAI/STP flags, and tracing).
+//! Each CPU embeds a [`MachineState`] alongside the state that belongs to its
+//! instruction set (for the 6502: registers, decode table, variant,
+//! invalid-opcode policy, WAI/STP flags, and tracing), and exposes it through
+//! [`Processor::machine`](crate::emulator::Processor::machine).
 
 use crate::emulator::LogSender;
+use crate::emulator::bus::vector::VectorResolver;
 use crate::emulator::bus::{Bus, InterruptController};
-use crate::emulator::cpu::vector::VectorResolver;
 use crate::emulator::exec::{ClockSpeed, StepResult};
 use crate::watch::{WatchContext, WatchEvaluator};
 use std::collections::HashSet;
@@ -40,7 +41,7 @@ pub struct MachineState {
 impl MachineState {
     /// Creates machine state around `bus`, with no breakpoints or
     /// watchpoints and a cycle count of zero.
-    pub(crate) fn new(
+    pub fn new(
         bus: Bus,
         clock_speed: ClockSpeed,
         vector_resolver: Box<dyn VectorResolver>,
