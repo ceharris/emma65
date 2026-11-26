@@ -219,7 +219,7 @@ mod tests {
     #[test]
     fn returns_default_when_layout_file_missing() {
         let dir = std::env::temp_dir().join(format!(
-            "emma65-layout-test-missing-{:?}",
+            "emma6k-layout-test-missing-{:?}",
             std::thread::current().id()
         ));
         assert_eq!(load_dock_layout_from(&dir), DockLayoutData::default());
@@ -228,7 +228,7 @@ mod tests {
     #[test]
     fn returns_default_when_layout_file_unparseable() {
         let dir = std::env::temp_dir().join(format!(
-            "emma65-layout-test-corrupt-{:?}",
+            "emma6k-layout-test-corrupt-{:?}",
             std::thread::current().id()
         ));
         fs::create_dir_all(&dir).unwrap();
@@ -240,7 +240,7 @@ mod tests {
     #[test]
     fn save_and_load_round_trip_via_tempdir() {
         let dir = std::env::temp_dir().join(format!(
-            "emma65-layout-test-roundtrip-{:?}",
+            "emma6k-layout-test-roundtrip-{:?}",
             std::thread::current().id()
         ));
         let data = DockLayoutData {

@@ -3,6 +3,6 @@ revision = 3
 requires-python = ">=3.12"
 
 [[package]]
-name = "emma65"
+name = "emma6k"
 version = "0.1.0"
 source = { virtual = "." }

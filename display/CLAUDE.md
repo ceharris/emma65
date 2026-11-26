@@ -1,6 +1,6 @@
-# CLAUDE.md — `emma65-display`
+# CLAUDE.md — `emma6k-display`
 
-An SDL2 desktop app (`emma65-display`) that renders a `display` device's composited
+An SDL2 desktop app (`emma6k-display`) that renders a `display` device's composited
 output for the plain `emma65` CLI standalone (no Tauri debugger); see
 `plan/char-display-external-protocol.md` for the wire format it consumes. `emma65` spawns it as
 a child process via a `display` device's `transport = "pipe:..."` attribute — its own
@@ -12,5 +12,5 @@ frames stall), compositing each with the `emma65` crate's own
 `emulator::device::display::compositing::composite` (already `pub`, reused directly — no
 rendering logic is duplicated) and blitting it via `SDL_UpdateTexture`/`SDL_RenderCopy`/
 `SDL_RenderPresent`. Building it requires SDL2 development headers (`libsdl2-dev` on
-Debian/Ubuntu); it is not built by plain `cargo build` — use `cargo build -p emma65-display`
+Debian/Ubuntu); it is not built by plain `cargo build` — use `cargo build -p emma6k-display`
 or `cargo build --workspace`.

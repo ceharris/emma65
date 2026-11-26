@@ -1,14 +1,14 @@
 [package]
-name = "emma65-debugger"
+name = "emma6k-debugger"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-name = "emma65_debugger_lib"
+name = "emma6k_debugger_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "emma65-debugger"
+name = "emma6k-debugger"
 path = "src/main.rs"
 
 [dependencies]
@@ -32,7 +32,7 @@ gtk = "0.18"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-emma65-build-info = { path = "../../build-info" }
+emma6k-build-info = { path = "../../build-info" }
 
 [dev-dependencies]
 tauri = { version = "2", features = ["test"] }

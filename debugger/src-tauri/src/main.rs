@@ -17,5 +17,5 @@ fn main() {
         unsafe { std::env::set_var("GDK_BACKEND", "x11") };
     }
 
-    emma65_debugger_lib::run();
+    emma6k_debugger_lib::run();
 }

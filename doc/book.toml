@@ -1,10 +1,10 @@
 [book]
-title = "Emma65"
-description = "A software emulator for the 65C02-family of 8-bit microprocessors"
+title = "Emma6k"
+description = "An emulator and debugger toolkit for classic 8-bit microprocessors"
 authors = ["Carl Harris"]
 language = "en"
 src = "src"
 
 [output.html]
-git-repository-url = "https://github.com/ceharris/emma65"
-edit-url-template = "https://github.com/ceharris/emma65/edit/main/doc/{path}"
+git-repository-url = "https://github.com/ceharris/emma6k"
+edit-url-template = "https://github.com/ceharris/emma6k/edit/main/doc/{path}"

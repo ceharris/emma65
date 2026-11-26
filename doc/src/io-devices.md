@@ -1,6 +1,6 @@
 # I/O Devices
 
-Emma65 includes a number of built-in devices. Most — a simple console, 6522
+Emma6k includes a number of built-in devices. Most — a simple console, 6522
 VIA, and 6551 ACIA among them — are register-window devices that can be
 mapped into any address range on the bus; each integrates with the interrupt
 controller and most of them exchange data with the outside world over a
@@ -298,7 +298,7 @@ screen-and-keyboard console. This is also what makes the device IRQ-capable
 at all; with no keyboard range configured it never asserts IRQ. Live input
 is supplied by whichever display panel is rendering the device's output (see
 below) — the debugger's Display panel, or, for the plain `emma65` CLI, the
-bundled `emma65-display` SDL2 peripheral, which captures SDL2 keyboard
+bundled `emma6k-display` SDL2 peripheral, which captures SDL2 keyboard
 events from its own window and sends them back over the same `pipe:`
 transport used for frame data (see the
 [inbound keystroke stream](appendix-display-protocol.md#inbound-keystroke-stream-peripheral--device)).
@@ -312,13 +312,13 @@ available two ways:
   no configuration needed, and also supplies the live keyboard input
   described above.
 - **Standalone `emma65`** — configure a `pipe:` transport pointing at the
-  bundled `emma65-display` SDL2 peripheral binary (see
+  bundled `emma6k-display` SDL2 peripheral binary (see
   [Running the Display Peripheral](running-the-display-peripheral.md) below).
   The wire protocol is designed for high throughput — it sends one composited
   frame per vsync rather than streaming every individual memory write, so the
   peripheral stays in sync without the overhead of redrawing more often than
   the display actually changes — and, when `keyboard-address=` is
-  configured, `emma65-display` supplies live keyboard input the same way the
+  configured, `emma6k-display` supplies live keyboard input the same way the
   debugger's Display panel does. See the
   [Character Display External Protocol](appendix-display-protocol.md) for
   details.
@@ -331,7 +331,7 @@ type = "display"
 address = 0xF000
 columns = 40
 rows = 25
-transport = "pipe:/path/to/emma65-display"
+transport = "pipe:/path/to/emma6k-display"
 ```
 
 - `columns`/`rows` (optional, default 40×25) — grid size; both must be
@@ -382,7 +382,7 @@ available two ways:
 - **The debugger** — the LCD Display panel renders composited frames
   in-process, no configuration needed.
 - **Standalone `emma65`** — configure a `pipe:` transport pointing at the
-  bundled `emma65-lcd-display` SDL2 peripheral binary (see
+  bundled `emma6k-lcd-display` SDL2 peripheral binary (see
   [Running the LCD Display Peripheral](running-the-lcd-display-peripheral.md)
   below). The wire protocol is designed for high throughput — it only
   sends a fresh frame when a register write could actually change what's
@@ -398,7 +398,7 @@ available two ways:
 type = "display/lcd"
 address = 0xD000
 geometry = "16x2"
-transport = "pipe:/path/to/emma65-lcd-display"
+transport = "pipe:/path/to/emma6k-lcd-display"
 ```
 
 `geometry` (optional, default `16x2`) selects one of the ten supported
@@ -479,7 +479,7 @@ available two ways:
 - **The debugger** — the LED Matrix panel renders each matrix as an
   independent, composited canvas in-process, no configuration needed.
 - **Standalone `emma65`** — configure a `pipe:` transport pointing at the
-  bundled `emma65-led-matrix` SDL2 peripheral binary (see
+  bundled `emma6k-led-matrix` SDL2 peripheral binary (see
   [Running the LED Matrix Peripheral](running-the-led-matrix-peripheral.md)
   below). The wire protocol is designed for high throughput — it only
   sends a matrix's pixels when that matrix actually swaps, and a palette
@@ -496,7 +496,7 @@ type = "display/matrix"
 address = 0x9000
 register-address = 0x9400
 arrangement = "2x2"
-transport = "pipe:/path/to/emma65-led-matrix"
+transport = "pipe:/path/to/emma6k-led-matrix"
 ```
 
 `arrangement` (required, `COLSxROWS`, e.g. `2x2`) describes how the matrices

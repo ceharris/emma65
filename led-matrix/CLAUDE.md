@@ -1,6 +1,6 @@
-# CLAUDE.md — `emma65-led-matrix`
+# CLAUDE.md — `emma6k-led-matrix`
 
-An SDL2 desktop app (`emma65-led-matrix`) that renders a `display/matrix` device's per-matrix
+An SDL2 desktop app (`emma6k-led-matrix`) that renders a `display/matrix` device's per-matrix
 composited output for the plain `emma65` CLI standalone (no Tauri debugger); see
 `plan/led-matrix-external-protocol.md` for the wire format it consumes. `emma65` spawns it as a
 child process via a `display/matrix` device's `transport = "pipe:..."` attribute — its own
@@ -16,4 +16,4 @@ indices are retained and recomposited against the current palette on every redra
 `pub`, reused directly), drawn as filled circles on a PCB-colored background via SDL2_gfx's
 `DrawRenderer`, flush per `--arrangement COLSxROWS`. Building it requires SDL2 development
 headers (`libsdl2-dev` on Debian/Ubuntu); it is not built by plain `cargo build` — use
-`cargo build -p emma65-led-matrix` or `cargo build --workspace`.
+`cargo build -p emma6k-led-matrix` or `cargo build --workspace`.

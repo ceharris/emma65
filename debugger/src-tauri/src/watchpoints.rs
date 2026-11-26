@@ -632,7 +632,7 @@ mod tests {
     /// Returns a fresh, uniquely-named temp directory for one test's config files.
     fn temp_dir(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "emma65-watchpoints-test-{name}-{:?}",
+            "emma6k-watchpoints-test-{name}-{:?}",
             std::thread::current().id()
         ));
         std::fs::create_dir_all(&dir).unwrap();

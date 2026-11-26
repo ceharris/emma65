@@ -734,7 +734,7 @@ mod tests {
     #[test]
     fn save_and_load_round_trip_via_tempdir() {
         let dir = std::env::temp_dir().join(format!(
-            "emma65-preferences-test-{:?}",
+            "emma6k-preferences-test-{:?}",
             std::thread::current().id()
         ));
         let config = UiConfig {

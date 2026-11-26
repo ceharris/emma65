@@ -4,7 +4,7 @@
 //! in which a single memory-mapped port is read to receive ASCII characters from a keyboard device,
 //! and is written to print ASCII characters to display. In this emulation, the keyboard and
 //! display are replaced with an IPC transport (typically a pipe connected to the virtual terminal
-//! device provided with the Emma65 debugger).
+//! device provided with the Emma6k debugger).
 //!
 //! This implementation incorporates an integral ring buffer that holds input characters until they
 //! are read by the program running on the 6502. An additional latch register allows the 6502

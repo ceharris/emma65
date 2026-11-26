@@ -88,7 +88,7 @@ for the full description of each kind):
 
 | Transport   | CLI shorthand           | Example |
 |-------------|--------------------------|---------|
-| Pipe        | `pipe:/path/to/exe`     | `--device display@0xF000,transport=pipe:/path/to/emma65-display` |
+| Pipe        | `pipe:/path/to/exe`     | `--device display@0xF000,transport=pipe:/path/to/emma6k-display` |
 | TCP (any interface)      | `tcp:PORT`  | `--device console@0xFFF8,transport=tcp:9600` |
 | TCP (specific interface) | `tcp:IP:PORT` | `--device console@0xFFF8,transport=tcp:127.0.0.1:9600` |
 | Unix domain socket       | `unix:PATH` | `--device via/6522@0xFF80,transport=unix:~/.emma/sock/via6522` |
@@ -100,7 +100,7 @@ for the full description of each kind):
 spawned process. The CLI shorthand can't: a `--device` spec's own
 `key=value,...` attributes are comma-separated, so a comma inside a `pipe:`
 value is parsed as the start of the next attribute rather than as an
-argument separator. `transport=pipe:/path/to/emma65-display` (no arguments
+argument separator. `transport=pipe:/path/to/emma6k-display` (no arguments
 to the peripheral) works fine on the command line; something like
 `transport=pipe:/path/to/exe,--some-flag` does not — reach for a TOML config
 file instead when the peripheral needs arguments.
@@ -131,14 +131,14 @@ command line. A few representative examples, one `--device` flag per device:
 # MC6840 PTM over a Unix socket
 --device ptm/6840@0xFF90,transport=unix:~/.emma/sock/mc6840
 
-# Character display with keyboard input, rendered by emma65-display
---device display@0xF000,keyboard-address=0xF800,break=0x03,transport=pipe:/path/to/emma65-display
+# Character display with keyboard input, rendered by emma6k-display
+--device display@0xF000,keyboard-address=0xF800,break=0x03,transport=pipe:/path/to/emma6k-display
 
-# LCD display, rendered by emma65-lcd-display
---device display/lcd@0xD000,geometry=16x2,polarity=negative,backlight=blue,transport=pipe:/path/to/emma65-lcd-display
+# LCD display, rendered by emma6k-lcd-display
+--device display/lcd@0xD000,geometry=16x2,polarity=negative,backlight=blue,transport=pipe:/path/to/emma6k-lcd-display
 
-# 2x2 RGB LED matrix, rendered by emma65-led-matrix
---device display/matrix@0x9000,register-address=0x9400,arrangement=2x2,transport=pipe:/path/to/emma65-led-matrix
+# 2x2 RGB LED matrix, rendered by emma6k-led-matrix
+--device display/matrix@0x9000,register-address=0x9400,arrangement=2x2,transport=pipe:/path/to/emma6k-led-matrix
 
 # 16-bit Galois LFSR in step mode
 --device lfsr@0xFFF6,mode=step,taps=0xB400

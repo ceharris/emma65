@@ -1,11 +1,11 @@
 ---
 name: release
-description: Cut a release for one of emma65's five independently-versioned crates (emma65, emma65-display, emma65-led-matrix, emma65-lcd-display, emma65-debugger) — classify the semver bump, update version files, write the changelog entry, open a PR, and after the user confirms it's merged, tag and push. Use when the user asks to cut/prepare/start a release, bump a crate's version, or says things like "release emma65-lcd-display 0.2.0" or "publish a new debugger build". Only tagging `emma65` itself triggers a GitHub Actions build — see step 11.
+description: Cut a release for one of the emma6k workspace's five independently-versioned crates (emma65, emma6k-display, emma6k-led-matrix, emma6k-lcd-display, emma6k-debugger) — classify the semver bump, update version files, write the changelog entry, open a PR, and after the user confirms it's merged, tag and push. Use when the user asks to cut/prepare/start a release, bump a crate's version, or says things like "release emma6k-lcd-display 0.2.0" or "publish a new debugger build". Only tagging `emma65` itself triggers a GitHub Actions build — see step 11.
 ---
 
 # Release
 
-Cuts a release for one artifact in the `emma65` workspace. This skill handles only the
+Cuts a release for one artifact in the `emma6k` workspace. This skill handles only the
 human-judgment half of a release — classifying the version bump, editing files, and opening a PR
 for review. It never builds or publishes anything itself.
 
@@ -13,7 +13,7 @@ Each of the five crates keeps its own independent version and `CHANGELOG.md` for
 only `emma65` — the root/umbrella crate — has a real GitHub Actions build behind its tag. Pushing
 an `emma65-vX.Y.Z` tag and dispatching `.github/workflows/release.yml` builds **every** workspace
 binary (the emulator CLI, the three SDL2 peripheral binaries, and the Tauri debugger GUI) into one
-combined `emma65` `.deb` and `.rpm`, published as a single GitHub Release. Tagging one of the
+combined `emma6k` `.deb` and `.rpm`, published as a single GitHub Release. Tagging one of the
 other four crates (step 11) is tag-and-push only — it records that crate's version/changelog for
 history, but does not trigger a build; that crate's current state simply gets folded into
 whichever `emma65-v*` release comes next.
@@ -26,8 +26,8 @@ live in `reference.md` — load it when you reach a step that needs it, not up f
 **0. Preflight.** Run `gh auth status`. If it fails, stop and tell the user before touching any
 files — don't discover this partway through with version files already edited.
 
-**1. Identify the target artifact.** One of: `emma65`, `emma65-display`, `emma65-led-matrix`,
-`emma65-lcd-display`, `emma65-debugger`. Ask if the user didn't name one explicitly. Look up its
+**1. Identify the target artifact.** One of: `emma65`, `emma6k-display`, `emma6k-led-matrix`,
+`emma6k-lcd-display`, `emma6k-debugger`. Ask if the user didn't name one explicitly. Look up its
 directory, `Cargo.toml` path(s), and changelog path in `reference.md`'s artifact table.
 
 **2. Find the last release tag** for this artifact:
@@ -36,7 +36,12 @@ directory, `Cargo.toml` path(s), and changelog path in `reference.md`'s artifact
 git tag -l '<tag-prefix>*' --sort=-v:refname | head -1
 ```
 
-(tag prefix from `reference.md`, e.g. `emma65-lcd-display-v`)
+(tag prefix from `reference.md`, e.g. `emma6k-lcd-display-v`)
+
+The four `emma6k-*` crates were named `emma65-*` through their 0.1.0 releases, so their earlier
+tags use the legacy prefix (e.g. `emma65-lcd-display-v0.1.0`; see `reference.md`'s artifact
+table). If the current prefix finds no tag, repeat the lookup with the legacy prefix. A legacy
+tag is that crate's last release, so this is **not** a first release.
 
 - **If none exists** — true for all five artifacts today — this is that artifact's first
   release. Skip straight to step 6 with the version already in `Cargo.toml` (currently `0.1.0`
@@ -75,9 +80,9 @@ silently picking one.
 
 **6. Update version field(s).**
 
-- Single-file crates (`emma65`, `emma65-display`, `emma65-led-matrix`, `emma65-lcd-display`):
+- Single-file crates (`emma65`, `emma6k-display`, `emma6k-led-matrix`, `emma6k-lcd-display`):
   edit the `version = "X.Y.Z"` line directly in that crate's `Cargo.toml`.
-- `emma65-debugger`:
+- `emma6k-debugger`:
   ```bash
   .claude/skills/release/scripts/bump-debugger-version.sh <new-version>
   ```

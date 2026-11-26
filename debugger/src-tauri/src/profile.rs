@@ -11,10 +11,10 @@ use clap::Parser;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow, Wry};
 use tauri_plugin_dialog::DialogExt;
 
-/// CLI arguments accepted by the `emma65-debugger` binary.
+/// CLI arguments accepted by the `emma6k-debugger` binary.
 #[derive(Parser)]
 #[clap(
-    name = "emma65-debugger",
+    name = "emma6k-debugger",
     version = env!("BUILD_VERSION"),
     disable_version_flag = true
 )]
@@ -161,7 +161,7 @@ pub fn resolve_startup_profile(
 }
 
 /// Sets `window`'s title to `"{base} — {profile}"` (em dash separator), e.g.
-/// `Emma65 Debugger — default`.
+/// `Emma6k Debugger — default`.
 ///
 /// On Linux, immediately follows with a `set_resizable(false)`/`set_resizable(true)`
 /// toggle — GTK/Wayland client-side decorations otherwise don't repaint the
@@ -185,7 +185,7 @@ pub fn set_window_title(window: &WebviewWindow, base: &str, profile: &str) -> Re
 /// the window isn't created yet (e.g. during tests).
 pub fn set_main_window_title(app: &impl Manager<Wry>, profile: &str) {
     if let Some(window) = app.get_webview_window(crate::MAIN_WINDOW_LABEL) {
-        let _ = set_window_title(&window, "Emma65 Debugger", profile);
+        let _ = set_window_title(&window, "Emma6k Debugger", profile);
     }
 }
 
@@ -336,7 +336,7 @@ mod tests {
 
     fn temp_home(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "emma65-profile-test-{name}-{:?}",
+            "emma6k-profile-test-{name}-{:?}",
             std::thread::current().id()
         ));
         let _ = fs::remove_dir_all(&dir);

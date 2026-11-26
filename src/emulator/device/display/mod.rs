@@ -1061,7 +1061,7 @@ mod tests {
         let (mut device, mut remote) = device_with_external_transport(true);
         collect_bytes(&mut remote); // drain the header
 
-        remote.send(0x42); // simulates emma65-display's first-ever stdout write
+        remote.send(0x42); // simulates emma6k-display's first-ever stdout write
         std::thread::sleep(std::time::Duration::from_millis(5));
         device.tick(10_000); // must not tear down the transport merely because this arrived
 

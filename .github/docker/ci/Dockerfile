@@ -1,4 +1,4 @@
-# CI image for emma65: system library dependencies needed to build the
+# CI image for emma6k: system library dependencies needed to build the
 # workspace's Tauri debugger and SDL2 peripheral binaries. The Rust toolchain
 # itself is installed per-job by dtolnay/rust-toolchain, not baked in here, so
 # jobs keep tracking "stable" without needing an image rebuild.

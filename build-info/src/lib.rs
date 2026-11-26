@@ -1,4 +1,4 @@
-//! Shared build-time metadata capture, called from each emma65 crate's `build.rs` (issue #623).
+//! Shared build-time metadata capture, called from each emma6k workspace crate's `build.rs` (issue #623).
 //!
 //! [`emit`] captures the short git commit hash, a UTC build timestamp, and whether HEAD carries
 //! an exact-match release tag for the calling crate — `<tag_prefix>X.Y.Z`, per the release
@@ -23,7 +23,7 @@ use std::env;
 use std::process::Command;
 
 /// Emits `BUILD_VERSION` and `BUILD_INFO_LINE` as `cargo:rustc-env` vars for the calling crate.
-/// `tag_prefix` is that crate's release tag prefix (e.g. `"emma65-lcd-display-v"`).
+/// `tag_prefix` is that crate's release tag prefix (e.g. `"emma6k-lcd-display-v"`).
 pub fn emit(tag_prefix: &str) {
     let pkg_version = env::var("CARGO_PKG_VERSION").unwrap_or_default();
     let is_debug = env::var("CARGO_CFG_DEBUG_ASSERTIONS").is_ok();

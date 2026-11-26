@@ -1,17 +1,17 @@
-//! `emma65-lcd-display` — an external peripheral process that renders `LcdDisplay`'s composited
+//! `emma6k-lcd-display` — an external peripheral process that renders `LcdDisplay`'s composited
 //! output in an SDL2 window.
 //!
 //! Spawned by the emulator itself via a `display/lcd` device's `transport = "pipe:..."`
 //! attribute (see `plan/lcd-display-external-protocol.md`); this binary is never run standalone
 //! against a live `emma65` process any other way — its own stdin *is* the pipe. It reads the
 //! one-time header, then a background thread decodes each self-describing frame that follows
-//! (§5) into raw RGBA pixels. Unlike `emma65-led-matrix`/`emma65-display`, no compositing logic
+//! (§5) into raw RGBA pixels. Unlike `emma6k-led-matrix`/`emma6k-display`, no compositing logic
 //! runs here at all — `LcdDisplay`'s frame sink already produces a fully composited flat buffer
 //! (background/foreground baked in, no palette concept) — but the *cosmetic* dot-matrix rendering
 //! (square dots, inter-dot/inter-cell gaps, a dimly-blended "off" state) is deliberately not
 //! shared with `LcdDisplayPanel.tsx` (see that file's doc comment and spec §6), so this binary
 //! ports that same cosmetic treatment to SDL2 with its own native primitives, the same split
-//! `emma65-led-matrix` uses for its round-LED rendering. Unlike `CharDisplay`'s peripheral, there
+//! `emma6k-led-matrix` uses for its round-LED rendering. Unlike `CharDisplay`'s peripheral, there
 //! is no keyboard forwarding — an LCD display has no input capability, like `LedMatrix`.
 //!
 //! Per spec §7 there is no "replay the last frame" mechanism, so a freshly attached peripheral
@@ -81,7 +81,7 @@ fn blend_color(from: Rgb24, to: Rgb24, t: f64) -> Color {
 
 #[derive(Parser)]
 #[command(
-    about = "SDL2 external peripheral for emma65's memory-mapped LCD display",
+    about = "SDL2 external peripheral for emma6k's memory-mapped LCD display",
     version = env!("BUILD_VERSION"),
     disable_version_flag = true
 )]
@@ -165,7 +165,7 @@ fn read_frame<R: Read>(reader: &mut R) -> io::Result<Option<Frame>> {
 
 /// Spawns a thread that reads frames from stdin and forwards them over a bounded (capacity 1)
 /// channel — backpressure naturally throttles reading if the render loop falls behind, rather
-/// than buffering stale frames, same policy as `emma65-display`'s `spawn_frame_reader`. The
+/// than buffering stale frames, same policy as `emma6k-display`'s `spawn_frame_reader`. The
 /// thread (and thus the channel) ends on a clean EOF or any read/decode error, the latter logged
 /// to stderr first; either way the main loop treats a closed channel as "time to exit".
 fn spawn_frame_reader() -> mpsc::Receiver<Frame> {
@@ -182,7 +182,7 @@ fn spawn_frame_reader() -> mpsc::Receiver<Frame> {
                 }
                 Ok(None) => break, // clean EOF: emulator exited or transport shut down
                 Err(e) => {
-                    eprintln!("emma65-lcd-display: {e}");
+                    eprintln!("emma6k-lcd-display: {e}");
                     break;
                 }
             }
@@ -313,7 +313,7 @@ fn main() {
     let header = match read_header(&mut io::stdin().lock()) {
         Ok(header) => header,
         Err(e) => {
-            eprintln!("emma65-lcd-display: failed to read header: {e}");
+            eprintln!("emma6k-lcd-display: failed to read header: {e}");
             std::process::exit(1);
         }
     };
@@ -328,7 +328,7 @@ fn main() {
         .expect("SDL2 video subsystem init failed");
     let window = video
         .window(
-            &format!("emma65 LCD display - {}x{}", header.columns, header.rows),
+            &format!("emma6k LCD display - {}x{}", header.columns, header.rows),
             pixel_width,
             pixel_height,
         )

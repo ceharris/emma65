@@ -1,0 +1,9 @@
+[Desktop Entry]
+Categories=Development;Debugger;
+Exec=emma6k-debugger
+StartupWMClass=emma6k-debugger
+Icon=emma6k-debugger
+Name=emma6k-debugger
+Comment=Debugger GUI for the emma6k emulator toolkit
+Terminal=false
+Type=Application

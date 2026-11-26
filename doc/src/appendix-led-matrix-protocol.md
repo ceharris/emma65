@@ -4,7 +4,7 @@ Wire protocol the
 [RGB LED Matrix Display](io-devices.md#rgb-led-matrix-display-displaymatrix)
 device (config type `display/matrix`) uses to stream its per-matrix pixel and
 palette data to an external peripheral process — the bundled
-`emma65-led-matrix` binary, or a replacement for it — over an attached
+`emma6k-led-matrix` binary, or a replacement for it — over an attached
 [transport](io-devices.md#transport-options), when running the plain
 `emma65` CLI standalone. It's unrelated to how the debugger renders the same
 device in-process, which needs no wire protocol at all (same address space,
@@ -14,7 +14,7 @@ different device with different needs, most notably that this device's
 matrices swap per-matrix rather than in lockstep across the whole device on a
 single vsync. See
 [Running the LED Matrix Peripheral](running-the-led-matrix-peripheral.md)
-for how to configure and launch `emma65-led-matrix` itself, and
+for how to configure and launch `emma6k-led-matrix` itself, and
 [RGB LED Matrix Display](io-devices.md#rgb-led-matrix-display-displaymatrix)
 for the device's bus-facing register behavior — this page covers only what
 crosses the transport.

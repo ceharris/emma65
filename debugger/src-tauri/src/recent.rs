@@ -187,7 +187,7 @@ mod tests {
 
     fn temp_home(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "emma65-recent-test-{name}-{:?}",
+            "emma6k-recent-test-{name}-{:?}",
             std::thread::current().id()
         ));
         let _ = fs::remove_dir_all(&dir);
@@ -198,7 +198,7 @@ mod tests {
     #[test]
     fn save_and_load_round_trip_via_tempdir() {
         let dir = std::env::temp_dir().join(format!(
-            "emma65-recent-io-test-{:?}",
+            "emma6k-recent-io-test-{:?}",
             std::thread::current().id()
         ));
         let paths = vec![PathBuf::from("/a/b"), PathBuf::from("/c/d")];
@@ -211,7 +211,7 @@ mod tests {
     #[test]
     fn load_recent_from_returns_empty_when_missing() {
         let dir = std::env::temp_dir().join(format!(
-            "emma65-recent-missing-test-{:?}",
+            "emma6k-recent-missing-test-{:?}",
             std::thread::current().id()
         ));
         assert!(load_recent_from(&dir).is_empty());
@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn load_and_prune_recent_drops_entries_for_missing_directories() {
         let dir = std::env::temp_dir().join(format!(
-            "emma65-recent-prune-test-{:?}",
+            "emma6k-recent-prune-test-{:?}",
             std::thread::current().id()
         ));
         let _ = fs::remove_dir_all(&dir);
@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn load_and_prune_recent_leaves_recent_toml_untouched_when_nothing_is_missing() {
         let dir = std::env::temp_dir().join(format!(
-            "emma65-recent-prune-noop-test-{:?}",
+            "emma6k-recent-prune-noop-test-{:?}",
             std::thread::current().id()
         ));
         let _ = fs::remove_dir_all(&dir);
