@@ -30,7 +30,7 @@ metadata:
 - The core crate is versioned in lockstep with `emma65`.
 - PR 4's timing is decided only after PRs 1–3 are reviewed and merged.
 
-**Where we left off (2026-11-26):** PRs 1–3 merged (#664–666). The user chose to do PR 4 now rather than defer it to step 2 (2026-11-26). PR 4 (the `emma6k-core` crate in `core/`) is on branch `refactor/extract-core-crate`, awaiting the user's UAT and review. Once it merges, step 1 is complete. Step 2 is the 6809 crate for the CLI. Don't start step 2 until the user says so, and plan it first: there's no step 2 plan document yet.
+**Where we left off (2026-11-26):** PRs 1–3 merged (#664–666). The user chose to do PR 4 now rather than defer it to step 2 (2026-11-26). PR 4 (the `emma6k-core` crate in `core/`) is open as #668 on branch `refactor/extract-core-crate`, awaiting the user's UAT and review. Once it merges, step 1 is complete. Step 2 is the 6809 crate for the CLI. Don't start step 2 until the user says so, and plan it first: there's no step 2 plan document yet.
 
 How step 1 ended up, for step 2:
 - **Crates.** `emma6k-core` (`core/`) has its modules at the crate root: `emma6k_core::{bus, config, device, exec, session, transport, watch, ...}`. `emma65` (root) is the 6502 plus a facade, `src/emulator.rs`, that does `pub use emma6k_core::*`, adds the 6502 re-exports, and has a local `config` module adding `Config`/`CpuVariantSpec`/`templates`. Everything outside the workspace's `emma65` code uses `emma65::emulator::*` paths.
