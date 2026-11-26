@@ -15,6 +15,8 @@ For every code change, without being asked each time:
 
 Plan/spec docs (`plan/*.md`) and some docs-only changes have been committed straight to `main`, but only when the user explicitly asked for that. Otherwise ask before committing anything.
 
+Agent memory changes (`.claude/memory/`) are an exception. Commit them with the PR for the work they describe. When no PR applies, commit them directly to `main` without asking (user, 2026-11-26). Push that commit right away, so it can't be swept into a later branch's squash merge ([[branch-from-origin-main]]).
+
 When the user asks to "prepare memory for the next session", write precise memory notes only. Don't start implementing or editing code in that session, even if a bug turns up while writing them. Record the finding (root cause, fix, regression tests to add) in memory instead.
 
 **Why:** the user called this their "agreed upon workflow" (2026-08-16). They added `Closes #n` on 2026-09-02, after an issue had to be closed by hand. The "prepare memory" rule came from a 2026-09-02 session that started editing `main` mid-wrap-up and was interrupted.
