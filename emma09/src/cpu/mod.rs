@@ -6,10 +6,25 @@
 //! `finish_cycle`, `tick_idle`), as every CPU does. It adds an instruction's
 //! cycles in one go after executing it, not per bus cycle.
 //!
-//! **Interrupts.** This version services only RESET. IRQ, FIRQ and NMI, and
-//! waking from CWAI and SYNC on an interrupt, come later; until then CWAI and
-//! SYNC wait until a reset. SWI, SWI2, SWI3 and RTI are instructions and work
-//! fully.
+//! **Interrupts.** Before each instruction the CPU services, in priority
+//! order, a pending reset, then NMI, then FIRQ (unless CC's F flag masks it),
+//! then IRQ (unless I masks it). Devices reach FIRQ through the configuration
+//! framework's `interrupt = "firq"` routing.
+//!
+//! - **NMI** is edge-triggered and stays disarmed after a reset until a program
+//!   first loads S (LDS, LEAS, TFR or EXG into S, or PULU S). An NMI that
+//!   arrives while disarmed stays pending until then. Service sets E, stacks
+//!   the entire state, sets I and F, and takes 19 cycles.
+//! - **FIRQ** clears E, stacks only PC and CC, sets I and F, and takes 10
+//!   cycles.
+//! - **IRQ** sets E, stacks the entire state, sets I, and takes 19 cycles.
+//!
+//! CWAI stacks the entire state, then waits for an unmasked interrupt (or a
+//! reset). Servicing it then skips the stacking and takes
+//! [`CWAI_WAKE_CYCLES`], keeping E set so RTI restores everything, even for
+//! FIRQ. SYNC waits for any interrupt line, masked or not: an unmasked one is
+//! serviced as usual, and a masked one just ends the wait. The vectors are
+//! read through the machine's vector resolver.
 
 pub mod cc;
 mod execute;
@@ -40,6 +55,15 @@ pub const FIRQ_VECTOR: u16 = 0xFFF6;
 pub const SWI2_VECTOR: u16 = 0xFFF4;
 /// Bus address of the SWI3 vector.
 pub const SWI3_VECTOR: u16 = 0xFFF2;
+
+/// Cycles to service an interrupt that ends a CWAI wait. CWAI has already
+/// stacked the state, so this is the interrupt sequence less its stacking.
+pub const CWAI_WAKE_CYCLES: u8 = 7;
+/// Cycles to service an NMI or IRQ: stacking the entire state and fetching
+/// the vector.
+pub const ENTIRE_INTERRUPT_CYCLES: u8 = 19;
+/// Cycles to service a FIRQ: stacking PC and CC and fetching the vector.
+pub const FAST_INTERRUPT_CYCLES: u8 = 10;
 
 /// Bytes below `S` that a live snapshot's stack window starts at.
 const STACK_WINDOW_BELOW: u16 = 32;
@@ -132,10 +156,33 @@ pub struct Cpu {
     machine: MachineState,
     /// Governs how undocumented opcodes and undefined postbytes are handled.
     invalid_opcode_policy: InvalidOpcodePolicy,
-    /// `Waiting` after CWAI or SYNC; the 6809 has no stopped state.
-    halt: HaltState,
+    /// Whether the CPU is parked by CWAI or SYNC.
+    wait: Wait,
+    /// Whether NMI is armed: false from reset until a program first loads S.
+    nmi_armed: bool,
     /// Address of the instruction being executed: its prefix or opcode byte.
     instr_pc: u16,
+}
+
+/// What, if anything, the CPU is waiting for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Wait {
+    /// Running.
+    None,
+    /// After CWAI: the entire state is stacked; an unmasked interrupt (or a
+    /// reset) ends the wait.
+    Cwai,
+    /// After SYNC: any interrupt line, masked or not (or a reset), ends the
+    /// wait.
+    Sync,
+}
+
+/// A hardware interrupt the CPU can service.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Interrupt {
+    Nmi,
+    Firq,
+    Irq,
 }
 
 impl Cpu {
@@ -155,7 +202,8 @@ impl Cpu {
     }
 
     /// Reads the reset vector (through the installed [`VectorResolver`]),
-    /// sets DP to 0, sets the I and F masks, and clears any wait.
+    /// sets DP to 0, sets the I and F masks, disarms NMI, and clears any
+    /// wait.
     pub fn reset(&mut self) -> Result<(), ExecError> {
         self.machine.bus_mut().reset_devices();
         let vector = self.machine.resolve_vector(RESET_VECTOR);
@@ -163,7 +211,8 @@ impl Cpu {
         self.regs.dp = 0;
         self.regs.cc.insert(ConditionCodes::I | ConditionCodes::F);
         self.machine.reset_cycles();
-        self.halt = HaltState::Running;
+        self.wait = Wait::None;
+        self.nmi_armed = false;
         log_msg!(
             self.machine.log_sender(),
             LogLevel::Info,
@@ -174,15 +223,27 @@ impl Cpu {
     }
 
     /// Fetches, decodes and executes one instruction, or services a pending
-    /// reset. Skips the breakpoint and watch check at `skip_pc`, and
-    /// everywhere if `check_breakpoints` is `false`.
+    /// reset or interrupt. Skips the breakpoint and watch check at `skip_pc`,
+    /// and everywhere if `check_breakpoints` is `false`.
     pub fn step(&mut self, skip_pc: Option<u16>, check_breakpoints: bool) -> StepResult {
-        if self.halt == HaltState::Waiting {
-            // Keep devices running while parked. Until interrupt servicing
-            // exists, only a reset ends a CWAI or SYNC wait.
-            self.machine.tick_idle();
-            if !self.machine.interrupts().reset_pending() {
-                return StepResult::Waiting;
+        match self.wait {
+            Wait::None => {}
+            Wait::Cwai => {
+                // Keep devices running while parked, so one can interrupt.
+                self.machine.tick_idle();
+                if !self.machine.interrupts().reset_pending() && self.pending_interrupt().is_none()
+                {
+                    return StepResult::Waiting;
+                }
+            }
+            Wait::Sync => {
+                self.machine.tick_idle();
+                if !self.machine.interrupts().reset_pending() && !self.interrupt_line_asserted() {
+                    return StepResult::Waiting;
+                }
+                // Any interrupt line ends SYNC. An unmasked one is serviced
+                // below; a masked one isn't, and execution continues.
+                self.wait = Wait::None;
             }
         }
 
@@ -204,16 +265,31 @@ impl Cpu {
             };
         }
 
-        let first = match self.read8(start) {
-            Ok(b) => b,
-            Err(e) => return StepResult::Error(e),
-        };
+        // One `finish_cycle` call for every path keeps it inlined here.
+        match self.service_or_execute(start) {
+            Ok((cycles, op)) => {
+                self.machine.finish_cycle(cycles);
+                StepResult::Executed(op)
+            }
+            Err(e) => StepResult::Error(e),
+        }
+    }
+
+    /// Services a pending unmasked interrupt, or fetches, decodes and
+    /// executes the instruction at `start`, applying the invalid-opcode
+    /// policy. Returns the cycles taken and the step's op. On an error, PC is
+    /// left at `start`.
+    #[inline]
+    fn service_or_execute(&mut self, start: u16) -> Result<(u8, DecodedOp), ExecError> {
+        if let Some(interrupt) = self.pending_interrupt() {
+            let cycles = self.service_interrupt(interrupt)?;
+            return Ok((cycles, DecodedOp::interrupt(cycles)));
+        }
+
+        let first = self.read8(start)?;
         let decoded = match first {
             0x10 | 0x11 => {
-                let second = match self.read8(start.wrapping_add(1)) {
-                    Ok(b) => b,
-                    Err(e) => return StepResult::Error(e),
-                };
+                let second = self.read8(start.wrapping_add(1))?;
                 let page = if first == 0x10 {
                     Page::Page2
                 } else {
@@ -224,49 +300,68 @@ impl Cpu {
             _ => DecodedOp::new(Page::Page1, first),
         };
         let opcode_len = decoded.page.prefix_len() + 1;
+        let invalid = || ExecError::InvalidOpcode {
+            addr: start,
+            opcode: decoded.opcode,
+        };
 
         if decoded.is_invalid() {
             return match self.invalid_opcode_policy {
                 InvalidOpcodePolicy::Nop => {
                     self.regs.pc = start.wrapping_add(opcode_len);
-                    self.machine.finish_cycle(opcodes::INVALID_OPCODE_CYCLES);
-                    StepResult::Executed(decoded)
+                    Ok((opcodes::INVALID_OPCODE_CYCLES, decoded))
                 }
-                InvalidOpcodePolicy::Error => StepResult::Error(ExecError::InvalidOpcode {
-                    addr: start,
-                    opcode: decoded.opcode,
-                }),
+                InvalidOpcodePolicy::Error => Err(invalid()),
             };
         }
 
         self.instr_pc = start;
         self.regs.pc = start.wrapping_add(opcode_len);
         match self.execute(decoded) {
-            Ok(cycles) => {
-                self.machine.finish_cycle(cycles);
-                StepResult::Executed(decoded)
-            }
+            Ok(cycles) => Ok((cycles, decoded)),
             // `execute` reports an undefined indexed postbyte as an invalid
             // opcode, before the instruction has changed anything but PC.
-            Err(ExecError::InvalidOpcode { .. }) => match self.invalid_opcode_policy {
-                InvalidOpcodePolicy::Nop => {
-                    self.regs.pc = start.wrapping_add(decoded.base_len());
-                    self.machine.finish_cycle(decoded.base_cycles);
-                    StepResult::Executed(decoded)
-                }
-                InvalidOpcodePolicy::Error => {
-                    self.regs.pc = start;
-                    StepResult::Error(ExecError::InvalidOpcode {
-                        addr: start,
-                        opcode: decoded.opcode,
-                    })
-                }
-            },
+            Err(ExecError::InvalidOpcode { .. })
+                if self.invalid_opcode_policy == InvalidOpcodePolicy::Nop =>
+            {
+                self.regs.pc = start.wrapping_add(decoded.base_len());
+                Ok((decoded.base_cycles, decoded))
+            }
+            Err(ExecError::InvalidOpcode { .. }) => {
+                self.regs.pc = start;
+                Err(invalid())
+            }
             Err(e) => {
                 self.regs.pc = start;
-                StepResult::Error(e)
+                Err(e)
             }
         }
+    }
+
+    /// Returns the highest-priority interrupt that is pending and not
+    /// masked: an armed NMI, then FIRQ unless F is set, then IRQ unless I is
+    /// set.
+    #[inline]
+    fn pending_interrupt(&self) -> Option<Interrupt> {
+        let interrupts = self.machine.interrupts();
+        if self.nmi_armed && interrupts.nmi_pending() {
+            Some(Interrupt::Nmi)
+        } else if !self.regs.cc.contains(ConditionCodes::F) && interrupts.firq_active() {
+            Some(Interrupt::Firq)
+        } else if !self.regs.cc.contains(ConditionCodes::I) && self.machine.irq_recognized() {
+            Some(Interrupt::Irq)
+        } else {
+            None
+        }
+    }
+
+    /// Returns `true` if any interrupt line is asserted, masked or not: what
+    /// ends a SYNC. A disarmed NMI doesn't count.
+    fn interrupt_line_asserted(&self) -> bool {
+        let interrupts = self.machine.interrupts();
+        (self.nmi_armed && interrupts.nmi_pending())
+            || interrupts.firq_active()
+            || self.machine.irq_recognized()
     }
 
     // --- bus helpers ---
@@ -496,7 +591,10 @@ impl Processor for Cpu {
     /// `Waiting` after CWAI or SYNC. The 6809 has no STP, so it is never
     /// `Stopped`.
     fn halt_state(&self) -> HaltState {
-        self.halt
+        match self.wait {
+            Wait::None => HaltState::Running,
+            Wait::Cwai | Wait::Sync => HaltState::Waiting,
+        }
     }
 
     fn flush_trace(&mut self) {}
@@ -626,7 +724,8 @@ impl CpuBuilder {
             regs: Registers::new(),
             machine,
             invalid_opcode_policy: self.invalid_opcode_policy,
-            halt: HaltState::Running,
+            wait: Wait::None,
+            nmi_armed: false,
             instr_pc: 0,
         })
     }

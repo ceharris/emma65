@@ -275,6 +275,14 @@ impl DeviceRegistry {
         );
     }
 
+    /// Removes the device type registered as `name`, so that configuring it fails as an unknown
+    /// device type. A CPU uses this to leave out built-in modules that assume another CPU (the
+    /// 6809 drops `pic/finch`, which resolves the 6502's IRQ vector). Returns `true` if `name`
+    /// was registered.
+    pub fn unregister(&mut self, name: &str) -> bool {
+        self.modules.remove(name).is_some()
+    }
+
     /// Instantiates a registered device type, configures it according to the given attributes,
     /// and attaches it to the given bus configuration.
     /// # Arguments
@@ -388,6 +396,27 @@ mod tests {
             .err()
             .unwrap();
         assert!(matches!(err, DeviceModuleError::Config(s) if s.contains("foobar")))
+    }
+
+    #[tokio::test]
+    async fn an_unregistered_module_is_an_unknown_device_type() {
+        let mut registry = DeviceRegistry::default();
+        registry.register(MockModule::from_name("alpha"));
+        assert!(registry.unregister("alpha"));
+        assert!(!registry.unregister("alpha"));
+        let err = registry
+            .instantiate(
+                "alpha",
+                BusConfig::new(),
+                0x55aa,
+                &HashMap::new(),
+                &InstantiationContext::default(),
+                Arc::new(Mutex::new(DeviceIdAllocator::new())),
+            )
+            .await
+            .err()
+            .unwrap();
+        assert!(matches!(err, DeviceModuleError::Config(s) if s == "unknown device type: alpha"));
     }
 
     #[tokio::test]

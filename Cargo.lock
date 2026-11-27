@@ -1094,7 +1094,10 @@ name = "emma09"
 version = "0.1.0"
 dependencies = [
  "bitflags 2.13.1",
+ "clap",
  "emma6k-core",
+ "figment",
+ "serde",
  "tokio",
 ]
 

@@ -72,9 +72,10 @@ binaries keep the `emma65` name.
   Versioned in lockstep with `emma65` and released only as part of an `emma65` release (see the
   release skill)
 - **`emma09`** (crate `emma09`) — the Motorola 6809, built on `emma6k-core` alone: registers,
-  opcode tables, indexed addressing, ALU, and its `Processor` impl. In progress per
-  `plan/multi-cpu-step2-mc6809-plan.md`: it services only RESET so far, and nothing outside its
-  tests runs it yet. Versioned in lockstep with `emma65`, like `emma6k-core`
+  opcode tables, indexed addressing, ALU, interrupts (NMI, FIRQ, IRQ, CWAI, SYNC), its
+  `Processor` impl, and its `Config` and device registry (the built-ins minus `pic/finch`). In
+  progress per `plan/multi-cpu-step2-mc6809-plan.md`: nothing outside its tests runs it yet (the
+  CLI comes in Unit 4). Versioned in lockstep with `emma65`, like `emma6k-core`
 - **`build-info`** (crate `emma6k-build-info`) — a `build.rs`-only helper, shared as a
   build-dependency by every other member's `build.rs`, that captures each crate's git commit
   hash, build timestamp, and (for a tagged release commit) version number into `BUILD_VERSION`/
@@ -169,10 +170,12 @@ core/src/                   — crate emma6k-core, the CPU-neutral core
   watch/                    — watchpoint expression pipeline (see below)
   location.rs, text.rs      — source-text helpers shared by watch and CPU assemblers
 emma09/                     — crate emma09, the Motorola 6809
-  src/cpu/                  — Cpu, CpuBuilder, Registers, Processor impl, big-endian watch
-                               context; opcodes.rs (per-page opcode tables with base cycles),
-                               indexed.rs (postbyte forms), execute.rs (semantics and ALU),
-                               cc.rs (condition codes)
+  src/cpu/                  — Cpu, CpuBuilder, Registers, Processor impl, interrupt servicing,
+                               big-endian watch context; opcodes.rs (per-page opcode tables with
+                               base cycles), indexed.rs (postbyte forms), execute.rs (semantics,
+                               ALU, stacking), cc.rs (condition codes)
+  src/config.rs             — Config (cpu-variant "6809"), CpuVariantSpec, INTERRUPT_LINES (IRQ,
+                               FIRQ, NMI), device_registry(), Config::build → EmulatorSession
   src/exec_tests.rs         — exec (run, step-over, step-out) driving the 6809
   tests/schwotzer_6809.rs   — W. Schwotzer's MC6809 CPU test suite; its GPL-2.0 source, binary,
                                FLEX shim and license are in tests/roms/ (test-only, never shipped)
