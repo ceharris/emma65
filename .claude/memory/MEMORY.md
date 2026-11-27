@@ -15,6 +15,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 - [No worktrees](no-worktrees.md) — plain `git checkout -b` in the main checkout; worktrees broke the user's UAT
 - [Git uses SSH](git-push-via-ssh.md) — origin is SSH on both hosts; push normally, no HTTPS credential workarounds
 - [GitHub bodies: no hard wrap](github-body-no-hard-wrap.md) — one line per paragraph in issue/PR bodies and comments
+- [CI path filters are deliberate](ci-path-filters-deliberate.md) — debugger/SDL jobs skip src/- and core/-only changes on purpose (expensive); verify locally, don't propose widening
 - [CI clippy denies warnings](ci-clippy-deny-warnings.md) — any clippy warning fails CI; run CI's exact `-D warnings` commands before pushing
 - [Sudo via script](sudo-via-script.md) — no passwordless sudo; write a script for the user to run
 - [Debug the CI image locally](debug-ci-image-locally.md) — build/run .github/docker/ci locally instead of push-and-wait

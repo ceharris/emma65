@@ -41,12 +41,10 @@ How step 1 ended up, for step 2:
 - **Carried-over decisions:** `Config` lives in `mos6502::config` (step 2's `cpu = "..."` selector goes wherever the choice between CPU sessions is made). Generic `exec` types have 6502 aliases. `Cpu` keeps its inherent accessors. The `pic_finch` device has a local `IRQ_VECTOR`.
 - **Toolchain:** rustc 1.100.0 on Linux since 2026-11-26, matching CI's stable. Its new `unused_dependencies` lint warns about a normal dependency used only by tests, so put those under `[dev-dependencies]`.
 
-**CI doesn't build the debugger or the SDL crates for `src/`- or `core/`-only changes.** Their jobs are path-filtered to their own directories (`debugger/**` and so on) even though they depend on `emma65` and `emma6k-core`. In #664 they were skipped. For a refactor PR, run `cargo test --workspace` and the debugger's clippy command locally, and say in the PR that you did.
-
-**Open offer (2026-11-26, not yet answered):** add `src/**`, `core/**` and the root `Cargo.toml` to the path filters of CI's debugger and SDL jobs, so changes to the libraries they depend on build them. Raise it again if the user doesn't. Do it as its own small PR, not inside a refactor PR.
+**CI doesn't build the debugger or the SDL crates for `src/`- or `core/`-only changes**, and that's deliberate; see [[ci-path-filters-deliberate]]. For a refactor PR, verify them locally and say so in the PR.
 
 **To resume in a new session:**
-1. Ask the user what's next: step 2 (the 6809), the CI path-filter fix above, issue #667, or the macOS port ([[macos-port-effort]]).
+1. Ask the user what's next: step 2 (the 6809), issue #667, or the macOS port ([[macos-port-effort]]).
 2. For step 2, write a plan document first (`plan/multi-cpu-step2-...md`), as was done for step 1. The step 1 plan's "Not in step 1" section lists its scope: a 6809 crate, the `cpu = "..."` selector, an enum choosing the session at startup, FIRQ/HALT interrupt lines, trace format v3, and a 6809 template. Check its unit split for compile dependencies ([[multi-unit-plan-workflow]]) and get the user's decisions before implementing.
 
 **How to apply:** follow the resume steps above. A/B-benchmark every PR that touches a hot path against `main`, alternating builds, using [[clock-bench-baseline]]'s post-step-1 row for the current host. Re-check `nm` for `Cpu::execute` staying inlined into `step`: PR 1's ~14% gain came from that, and every later PR kept it.
