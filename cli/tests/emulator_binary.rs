@@ -432,14 +432,17 @@ fn emma6k_with_no_configuration_has_no_cpu() {
 }
 
 #[test]
-fn emma09_with_no_configuration_has_no_default_profile_yet() {
-    let output = std::process::Command::new(emma09_bin()).output().unwrap();
-    assert!(!output.status.success());
-    let stderr = stderr_of(&output);
-    assert!(
-        stderr.contains("the 6809 has no default profile yet"),
-        "stderr: {stderr}"
-    );
+fn emma09_with_no_configuration_boots_camelforth() {
+    let stdout = run_briefly(std::process::Command::new(emma09_bin()));
+    assert!(stdout.contains("6809 CamelForth"), "stdout: {stdout:?}");
+}
+
+#[test]
+fn emma6k_profile_camelforth_boots_camelforth() {
+    let mut command = std::process::Command::new(emma6k_bin());
+    command.args(["--profile", "camelforth"]);
+    let stdout = run_briefly(command);
+    assert!(stdout.contains("6809 CamelForth"), "stdout: {stdout:?}");
 }
 
 #[test]

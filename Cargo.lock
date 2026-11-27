@@ -1098,6 +1098,7 @@ dependencies = [
  "emma6k-core",
  "figment",
  "serde",
+ "tempfile",
  "tokio",
 ]
 

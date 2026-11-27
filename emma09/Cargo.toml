@@ -26,3 +26,4 @@ clap = { version = "4.0", features = ["derive"] }
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time"] }
 figment = { version = "0.10", features = ["toml"] }
+tempfile = "3.27"

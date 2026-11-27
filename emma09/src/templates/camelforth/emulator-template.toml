@@ -1,0 +1,29 @@
+# Bundled CamelForth starter-profile configuration for the 6809 (emma09).
+# This is a TEMPLATE: {{ROM_IMAGE}} and {{LABELS}} are replaced with
+# materialized paths when the profile is instantiated.
+#
+# CamelForth is GPL-3.0-or-later; see README.md beside this file.
+
+cpu-variant = "6809"
+clock-speed-hz = 2000000
+
+[[devices]]
+type = "ram"
+address = 0x0000
+size = 0xE000
+fill = 0
+
+[[devices]]
+type = "rom"
+address = 0xE000
+size = 0x2000
+image = "{{ROM_IMAGE}}"
+labels = "{{LABELS}}"
+
+# The console sits over the ROM's old I/O window at $FFD0. Its break key,
+# Ctrl+C, raises IRQ, which the ROM answers by abandoning the running word
+# and returning to the interpreter.
+[[devices]]
+type = "console"
+address = 0xFFD0
+break = 0x3
