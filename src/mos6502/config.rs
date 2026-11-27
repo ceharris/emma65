@@ -10,6 +10,7 @@ use crate::mos6502::EmulatorSession;
 use crate::mos6502::cpu::Cpu;
 use crate::mos6502::cpu::variant::CpuVariant;
 use clap::Parser;
+use emma6k_core::InterruptLine;
 use emma6k_core::config::{
     BuildError, DeviceRegistry, DeviceSpec, InstantiationContext, MachineSpec, UnmappedPolicySpec,
     build_machine,
@@ -17,6 +18,10 @@ use emma6k_core::config::{
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+
+/// The 65C02's interrupt inputs. It has no FIRQ, so a device routed to `firq` is a
+/// configuration error.
+pub const INTERRUPT_LINES: &[InterruptLine] = &[InterruptLine::Irq, InterruptLine::Nmi];
 
 /// The 65C02 variant to emulate, as set via the top-level `cpu-variant`
 /// configuration attribute.
@@ -136,6 +141,7 @@ impl Config {
                 devices,
                 clock_speed_hz: self.clock_speed_hz,
                 unmapped_policy: self.unmapped_policy.as_ref(),
+                interrupt_lines: INTERRUPT_LINES,
             },
             context,
         )
@@ -260,6 +266,56 @@ mod tests {
             session.cpu.bus_mut().read(0x1000),
             Err(emma6k_core::BusError::Unmapped { addr: 0x1000 })
         ));
+    }
+
+    #[tokio::test]
+    async fn build_rejects_a_device_routed_to_firq() {
+        use figment::Figment;
+        use figment::providers::{Format, Toml};
+
+        let config: Config = Figment::new()
+            .merge(Toml::string(
+                r#"
+                [[devices]]
+                type = "acia/6850"
+                address = 0x8000
+                interrupt = "firq"
+                "#,
+            ))
+            .extract()
+            .unwrap();
+        let err = config
+            .build(&DeviceRegistry::with_builtins())
+            .await
+            .err()
+            .expect("a 6502 has no FIRQ input");
+        let message = err.to_string();
+        assert!(
+            matches!(
+                &err,
+                BuildError::Device {
+                    source: DeviceModuleError::Config(_),
+                    ..
+                }
+            ),
+            "{message}"
+        );
+        assert!(message.contains("no firq input"), "{message}");
+    }
+
+    #[tokio::test]
+    async fn build_accepts_a_device_routed_to_irq() {
+        let config = Config {
+            cpu_variant_spec: None,
+            clock_speed_hz: None,
+            devices: Some(vec!["acia/6850@0x8000,interrupt=irq".parse().unwrap()]),
+            unmapped_policy: None,
+        };
+        let session = config
+            .build(&DeviceRegistry::with_builtins())
+            .await
+            .unwrap();
+        assert_eq!(session.cpu.interrupts().firq_mask(), 0);
     }
 
     #[test]

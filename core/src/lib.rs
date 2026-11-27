@@ -34,8 +34,8 @@ mod test_support;
 
 pub use bus::vector::{IdentityVectorResolver, VectorResolver};
 pub use bus::{
-    AddressRange, Bus, BusConfig, BusOp, InterruptController, IrqSource, RomWritePolicy,
-    SymbolSource, SymbolTable, UnmappedPolicy,
+    AddressRange, Bus, BusConfig, BusOp, InterruptController, InterruptLine, IrqSource,
+    RomWritePolicy, SymbolSource, SymbolTable, UnmappedPolicy,
 };
 pub use config::{
     BuildError, DeviceModule, DeviceModuleError, DeviceRegistry, DeviceSpec, DisplayFrameSlot,

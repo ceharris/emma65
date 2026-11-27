@@ -6,7 +6,9 @@ mod region;
 pub mod symbol;
 pub mod vector;
 
-pub use interrupt::{DeviceInterruptState, InterruptController, IrqSource, MAX_IRQ_SOURCES};
+pub use interrupt::{
+    DeviceInterruptState, InterruptController, InterruptLine, IrqSource, MAX_IRQ_SOURCES,
+};
 pub use loader::BusLoadTarget;
 use rand::RngExt;
 pub use region::{AddressRange, BusOp};
@@ -534,6 +536,11 @@ impl BusConfig {
             device_index,
         });
         Ok(self)
+    }
+
+    /// Returns the IDs of the devices registered so far, in registration order.
+    pub fn device_ids(&self) -> impl ExactSizeIterator<Item = DeviceId> + '_ {
+        self.devices.iter().map(|(id, _)| *id)
     }
 
     /// Maps an additional region over `range` for a device already registered via `device()`.

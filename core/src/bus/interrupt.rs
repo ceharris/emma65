@@ -1,7 +1,7 @@
 //! Interrupt controller.
 //!
-//! The interrupt controller handles signaling and recognition of the three interrupt
-//! sources defined for the 6502: RESET, NMI, and IRQ.
+//! The interrupt controller handles signaling and recognition of the CPU's interrupt
+//! inputs: RESET, NMI, IRQ, and (on CPUs that have it, such as the 6809) FIRQ.
 //!
 //! Tne interrupt controller plays a crucial role in identifying interrupt sources
 //! during CPU step execution. As such the [`poll_devices`](InterruptController::poll_devices)
@@ -23,6 +23,19 @@
 //! [`assert_irq_pulse`](InterruptController::assert_irq_pulse) instead of `assert_irq`.
 //! The CPU calls [`consume_irq_pulses`](InterruptController::consume_irq_pulses) once an
 //! IRQ has been serviced, which releases any sources currently asserted in pulse mode.
+//!
+//! ## FIRQ routing
+//!
+//! Which maskable input a device drives is board wiring, not a property of the device, so
+//! devices only ever report a single "interrupt requested" level. The configuration
+//! framework routes each device to IRQ or FIRQ (the `interrupt` device attribute) and
+//! records the FIRQ-routed devices in a fixed mask, set once with
+//! [`set_firq_mask`](InterruptController::set_firq_mask). A FIRQ-routed source sets its bit
+//! in the same source set as every other device, and the mask splits the set into the two
+//! lines: [`irq_active`](InterruptController::irq_active) and
+//! [`active_sources_mask`](InterruptController::active_sources_mask) see only the sources
+//! outside the mask, and [`firq_active`](InterruptController::firq_active) only those inside
+//! it. So polling costs the same whichever line a device is wired to.
 //!
 use crate::device::DeviceId;
 
@@ -57,12 +70,45 @@ pub struct DeviceInterruptState {
     pub reset: bool,
 }
 
-/// Tracks the state of the IRQ line (level-triggered, multi-source) and NMI (edge-triggered).
+/// The CPU interrupt inputs a device can be wired to, or that a CPU declares it has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum InterruptLine {
+    /// The maskable interrupt request every supported CPU has.
+    Irq,
+    /// The 6809's fast interrupt request: maskable separately from IRQ, and of higher priority.
+    Firq,
+    /// The non-maskable interrupt.
+    Nmi,
+}
+
+impl InterruptLine {
+    /// The line's name as configuration spells it (`irq`, `firq`, `nmi`).
+    pub fn name(self) -> &'static str {
+        match self {
+            InterruptLine::Irq => "irq",
+            InterruptLine::Firq => "firq",
+            InterruptLine::Nmi => "nmi",
+        }
+    }
+}
+
+impl std::fmt::Display for InterruptLine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// Tracks the state of the IRQ and FIRQ lines (level-triggered, multi-source) and NMI
+/// (edge-triggered).
 pub struct InterruptController {
+    /// Every source currently requesting an interrupt, on either maskable line.
     irq_sources: u64,
     /// Subset of `irq_sources` asserted via [`assert_irq_pulse`](InterruptController::assert_irq_pulse);
     /// cleared from `irq_sources` the next time an IRQ is serviced.
     irq_pulse_sources: u64,
+    /// Sources wired to FIRQ rather than IRQ. Fixed once the machine is built; always zero
+    /// for a CPU without FIRQ.
+    firq_mask: u64,
     nmi_pending: bool,
     reset_pending: bool,
 }
@@ -73,6 +119,7 @@ impl InterruptController {
         Self {
             irq_sources: 0,
             irq_pulse_sources: 0,
+            firq_mask: 0,
             nmi_pending: false,
             reset_pending: false,
         }
@@ -105,20 +152,39 @@ impl InterruptController {
         self.irq_pulse_sources &= mask;
     }
 
-    /// Returns `true` if any source is currently asserting the IRQ line.
-    #[inline]
-    pub fn irq_active(&self) -> bool {
-        self.irq_sources != 0
+    /// Routes the sources whose bits are set in `mask` to the FIRQ line instead of IRQ.
+    /// Called once, when the machine is built; see the [module docs](self#firq-routing).
+    pub fn set_firq_mask(&mut self, mask: u64) {
+        self.firq_mask = mask;
     }
 
-    /// Releases all sources currently asserted in pulse mode. Called once an IRQ has
-    /// been serviced (i.e. the CPU has entered the ISR), so each pulsed source produces
+    /// Returns the sources routed to FIRQ: bit `n` set means `IrqSource(n)` drives FIRQ.
+    #[inline]
+    pub fn firq_mask(&self) -> u64 {
+        self.firq_mask
+    }
+
+    /// Returns `true` if any source routed to IRQ is currently asserting the IRQ line.
+    #[inline]
+    pub fn irq_active(&self) -> bool {
+        self.irq_sources & !self.firq_mask != 0
+    }
+
+    /// Returns `true` if any source routed to FIRQ is currently asserting the FIRQ line.
+    #[inline]
+    pub fn firq_active(&self) -> bool {
+        self.irq_sources & self.firq_mask != 0
+    }
+
+    /// Releases all IRQ-routed sources currently asserted in pulse mode. Called once an IRQ
+    /// has been serviced (i.e. the CPU has entered the ISR), so each pulsed source produces
     /// exactly one interrupt regardless of how long the line would otherwise remain
-    /// asserted.
+    /// asserted. Pulsed sources routed to FIRQ stay pending.
     #[inline]
     pub fn consume_irq_pulses(&mut self) {
-        self.irq_sources &= !self.irq_pulse_sources;
-        self.irq_pulse_sources = 0;
+        let consumed = self.irq_pulse_sources & !self.firq_mask;
+        self.irq_sources &= !consumed;
+        self.irq_pulse_sources &= !consumed;
     }
 
     /// Latches a pending NMI. Called on the falling edge of the NMI line.
@@ -184,7 +250,7 @@ impl InterruptController {
     }
 
     /// Returns a bitmask of currently-asserting IRQ sources: bit `n` set means `IrqSource(n)`
-    /// is asserting. Priority order matches bit order (lower bit = higher priority, per
+    /// is asserting. Sources routed to FIRQ are left out. Priority order matches bit order (lower bit = higher priority, per
     /// `IrqSource`'s `Ord` impl), so a [`VectorResolver`] can mask this against its own
     /// priority/enable mask and find the highest-priority active source directly via
     /// `trailing_zeros()`, with no need to reconstruct a bitmask from an iterator. Unlike
@@ -195,7 +261,7 @@ impl InterruptController {
     /// [`VectorResolver`]: crate::bus::vector::VectorResolver
     #[inline]
     pub fn active_sources_mask(&self) -> u64 {
-        self.irq_sources
+        self.irq_sources & !self.firq_mask
     }
 
     /// Validates and extracts the bit index for `source`.
@@ -421,6 +487,51 @@ mod tests {
         let mut ctrl = InterruptController::new();
         ctrl.poll_devices([dis(MAX_IRQ_SOURCES, true, false, false)].into_iter());
         assert!(!ctrl.irq_active());
+    }
+
+    #[test]
+    fn firq_inactive_by_default() {
+        let mut ctrl = InterruptController::new();
+        ctrl.assert_irq(IrqSource(1));
+        assert!(!ctrl.firq_active());
+    }
+
+    #[test]
+    fn firq_routed_source_raises_firq_not_irq() {
+        let mut ctrl = InterruptController::new();
+        ctrl.set_firq_mask(1 << 2);
+        ctrl.poll_devices([dis(2, true, false, false)].into_iter());
+        assert!(ctrl.firq_active());
+        assert!(!ctrl.irq_active());
+        assert_eq!(ctrl.active_sources_mask(), 0);
+    }
+
+    #[test]
+    fn irq_and_firq_sources_are_independent() {
+        let mut ctrl = InterruptController::new();
+        ctrl.set_firq_mask(1 << 2);
+        ctrl.poll_devices([dis(1, true, false, false), dis(2, true, false, false)].into_iter());
+        assert!(ctrl.irq_active());
+        assert!(ctrl.firq_active());
+        assert_eq!(ctrl.active_sources_mask(), 1 << 1);
+
+        ctrl.poll_devices([dis(1, false, false, false)].into_iter());
+        assert!(!ctrl.irq_active());
+        assert!(ctrl.firq_active());
+
+        ctrl.poll_devices([dis(2, false, false, false)].into_iter());
+        assert!(!ctrl.firq_active());
+    }
+
+    #[test]
+    fn consume_irq_pulses_leaves_firq_routed_pulses_pending() {
+        let mut ctrl = InterruptController::new();
+        ctrl.set_firq_mask(1 << 2);
+        ctrl.assert_irq_pulse(IrqSource(1));
+        ctrl.assert_irq_pulse(IrqSource(2));
+        ctrl.consume_irq_pulses();
+        assert!(!ctrl.irq_active());
+        assert!(ctrl.firq_active());
     }
 
     #[test]
