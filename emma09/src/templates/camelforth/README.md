@@ -19,13 +19,13 @@ The 6809's default starter profile: CamelForth for the Motorola 6809, rebuilt to
 - **Screen 45 (load screen):** the Multicomp hardware extras, screens 50–59 and 121–127, aren't loaded. They hold the SD card driver, MMU set-up, the loaders for other operating systems, and the SD-card-backed ANS BLOCK words, none of which emma6k emulates.
 - **Screen 46 (memory map):** the user area moves from `$0600` (sized for a 2K-RAM board) to `$DE00`, following upstream's rule that it sits at RAM top − `$200`, for RAM from `$0000` to `$DFFF`.
 - **Screen 48 (console I/O):** `KEY`, `KEY?` and `EMIT` use emma6k's console device (data register at `$FFD0`, latch register at `$FFD1`) instead of the Multicomp VDU. `KEY?` now returns a true flag of `-1`.
-- **Screen 49 (reset entry and vectors):** the reset entry unmasks IRQ, and a new IRQ handler answers the console's break key (Ctrl+C): it clears the break, resets the stacks, and jumps to `ABORT`, which returns to the interpreter. Screen titles mark each changed screen.
+- **Screen 49 (reset entry and vectors):** the reset entry unmasks IRQ, and a new IRQ handler answers the console's break key (Ctrl+C): it clears the break, resets the stacks, and jumps to a new word, `BREAK-OK`, which prints a fresh `OK` prompt and calls `ABORT` to return to the interpreter. The reset entry is compacted to make room. Screen titles mark each changed screen.
 
 `gforth_shim.fs` and `copying` are unchanged.
 
 ## Using it
 
-`emma09` with no configuration runs this profile, as does `emma6k --profile camelforth`. It has 56K of RAM (`$0000–$DFFF`), the 8K ROM at `$E000`, and the console at `$FFD0` over the ROM's old I/O window, at 2 MHz. Type Forth at the `OK` prompt. Ctrl+C abandons a running word (an endless loop, say) and returns to the interpreter without printing a new prompt; press Enter to see one. Words already defined survive; the data stack is cleared. To quit the emulator, close the terminal, or start it with `--keep-isig` so that Ctrl+C ends it instead.
+`emma09` with no configuration runs this profile, as does `emma6k --profile camelforth`. It has 56K of RAM (`$0000–$DFFF`), the 8K ROM at `$E000`, and the console at `$FFD0` over the ROM's old I/O window, at 2 MHz. Type Forth at the `OK` prompt. Ctrl+C abandons a running word (an endless loop, say) and returns to the interpreter with a fresh `OK` prompt. Words already defined survive; the data stack is cleared. To quit the emulator, close the terminal, or start it with `--keep-isig` so that Ctrl+C ends it instead.
 
 ## Rebuilding
 

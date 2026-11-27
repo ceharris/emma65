@@ -55,6 +55,13 @@ impl Forth {
 
     /// Runs the CPU until the console output contains `text`, returning the
     /// output gathered since the last call. Fails after ten seconds.
+    /// Moves what the console has sent so far into `output`.
+    fn drain(&mut self) {
+        while let Some(byte) = self.console.try_recv() {
+            self.output.push(byte as char);
+        }
+    }
+
     fn run_until(&mut self, text: &str) -> String {
         let start = self.output.len();
         let deadline = Instant::now() + Duration::from_secs(10);
@@ -71,9 +78,7 @@ impl Forth {
                     _ => panic!("the CPU stopped running"),
                 }
             }
-            while let Some(byte) = self.console.try_recv() {
-                self.output.push(byte as char);
-            }
+            self.drain();
         }
         self.output[start..].to_string()
     }
@@ -111,8 +116,12 @@ async fn ctrl_c_abandons_a_runaway_word() {
     for _ in 0..200_000 {
         forth.cpu.step(None, false);
     }
-    // ...until Ctrl+C returns to the interpreter, which still works.
+    forth.drain();
+    assert!(!forth.output.ends_with("OK "), "{:?}", forth.output);
+    // ...until Ctrl+C returns to the interpreter with a fresh prompt...
     forth.type_text("\x03");
+    forth.run_until("OK");
+    // ...and the interpreter still works.
     forth.type_text("6 7 * .\r");
     let reply = forth.run_until("OK");
     assert!(reply.contains("42 "), "{reply:?}");

@@ -816,15 +816,14 @@ CODE EMIT   \ c --    output character to the console
 
 === screen 49
 \ like scr119 but for multicomp; emma6k Ctrl+C on IRQ  27nov26
+: BREAK-OK   CR ." OK " ABORT ;   \ new prompt, then to QUIT
 ASM: HERE EQU BREAK   HEX  \ IRQ: console break key (Ctrl+C)
    CONDAT LDA,   UP-INIT-HI # LDA,   A DPR TFR,  \ clear latch
    UP-INIT 100 + # LDS,   UP-INIT 200 + # LDU,   \ reset stacks
-   0EF # ANDCC,   ' ABORT JMP,   ;C    \ unmask IRQ, to QUIT
-ASM: HERE EQU ENTRY
-   UP-INIT-HI # LDA,   A DPR TFR,   \ initial UP
-   UP-INIT 100 + # LDS,             \ initial SP
-   UP-INIT 200 + # LDU,             \ initial RP
-   0EF # ANDCC,                     \ unmask IRQ for Ctrl+C
+   0EF # ANDCC,   ' BREAK-OK JMP,   ;C   \ unmask IRQ, prompt
+ASM: HERE EQU ENTRY   \ initial UP, SP, RP; unmask IRQ for ^C
+   UP-INIT-HI # LDA,   A DPR TFR,   UP-INIT 100 + # LDS,
+   UP-INIT 200 + # LDU,   0EF # ANDCC,
    ' COLD JMP,   ;C           \ enter top-level Forth word
 ASM: HERE EQU IRET   RTI,  ;C
 HERE  0FFF0 ORG    \ 6809 hardware vectors

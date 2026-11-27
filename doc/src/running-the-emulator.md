@@ -61,9 +61,9 @@ by Neal Crook:
 - 6809 at 2 MHz
 
 Type Forth at the `OK` prompt. Ctrl+C abandons a running word, such as an
-endless loop, and returns to the interpreter; press Enter to see a new
-prompt. To quit, close the terminal, or start the emulator with
-`--keep-isig` so that Ctrl+C ends it instead.
+endless loop, and returns to the interpreter with a fresh `OK` prompt. To
+quit, close the terminal, or start the emulator with `--keep-isig` so that
+Ctrl+C ends it instead.
 
 CamelForth is licensed under the GNU General Public License, version 3 or
 later, unlike the rest of Emma6k, which is MIT-licensed. The license text,
