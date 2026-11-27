@@ -30,7 +30,7 @@ metadata:
 - The core crate is versioned in lockstep with `emma65`.
 - PR 4's timing is decided only after PRs 1–3 are reviewed and merged.
 
-**Where we left off (2026-11-27):** step 1 is complete. PRs 1–3 merged as #664–666, and PR 4 (the `emma6k-core` crate in `core/`) merged as #668 on 2026-11-27. The step 2 plan is drafted at `plan/multi-cpu-step2-mc6809-plan.md` (six units) and has no open decisions. It's in a PR for the user's final read-through; once that PR merges, Unit 1 can start when the user says so. Don't start a unit until the user approves the plan.
+**Where we left off (2026-11-27):** step 1 is complete. PRs 1–3 merged as #664–666, and PR 4 (the `emma6k-core` crate in `core/`) merged as #668 on 2026-11-27. The step 2 plan is drafted at `plan/multi-cpu-step2-mc6809-plan.md` (six units) and has no open decisions. It's in PR #669 (branch `plan/multi-cpu-step2`) for the user's final read-through; once that PR merges, Unit 1 can start when the user says so. Don't start a unit until the user approves the plan.
 
 **Step 2 user decisions (2026-11-27):**
 - A CPU-neutral `emma6k` binary picks the CPU. `emma65` and `emma09` are thin wrappers that exec `emma6k` with the CPU fixed.
