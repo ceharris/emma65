@@ -29,7 +29,7 @@ or both flags, is an error.
 
 `--profile <name>` runs one of the bundled starter profiles, which chooses
 its own CPU. The 65C02 profiles are `taliforth`, `msbasic`, `ehbasic`,
-`rain`, `lcd` and `snake`. A profile can't be combined with `--config`, or
+`rain`, `lcd` and `snake`; the 6809 profile is `camelforth`. A profile can't be combined with `--config`, or
 with a CPU from another family.
 
 ## Default configuration
@@ -50,8 +50,25 @@ peripherals:
 
 Interact with the Forth interpreter via standard input and output.
 
-The 6809 has no built-in default yet: `emma09` with nothing configured stops
-and asks for a configuration (`--config` or `--device`).
+When `emma09` is launched with no devices configured, it runs CamelForth, a
+Forth for the 6809 by Bradford J. Rodriguez, as ported to the Multicomp 6809
+by Neal Crook:
+
+- 56 KB zero-filled RAM at `0x0000`–`0xDFFF`
+- CamelForth ROM at `0xE000`–`0xFFFF`
+- Console device at `0xFFD0`–`0xFFD1`, with `Ctrl+C` (`0x03`) as its break
+  key, connected to the process's own standard input and output
+- 6809 at 2 MHz
+
+Type Forth at the `OK` prompt. Ctrl+C abandons a running word, such as an
+endless loop, and returns to the interpreter; press Enter to see a new
+prompt. To quit, close the terminal, or start the emulator with
+`--keep-isig` so that Ctrl+C ends it instead.
+
+CamelForth is licensed under the GNU General Public License, version 3 or
+later, unlike the rest of Emma6k, which is MIT-licensed. The license text,
+the Forth source, and the changes made for Emma6k are in the `camelforth`
+template's directory in the source repository.
 
 ## TOML configuration file
 

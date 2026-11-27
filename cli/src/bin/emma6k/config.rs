@@ -388,11 +388,28 @@ mod tests {
     }
 
     #[test]
-    fn the_6809_has_no_default_template_yet() {
-        let err = resolve(&["--family", "6809"]).err().unwrap();
-        assert!(err.contains("the 6809 has no default profile yet"), "{err}");
-        let err = resolve(&["--cpu", "6809"]).err().unwrap();
-        assert!(err.contains("the 6809 has no default profile yet"), "{err}");
+    fn the_6809_default_template_is_camelforth() {
+        for args in [&["--family", "6809"][..], &["--cpu", "6809"][..]] {
+            let plan = resolve(args).unwrap();
+            assert_eq!(plan.family, Family::Mc6809, "{args:?}");
+            assert_eq!(plan.app.cpu_variant.as_deref(), Some("6809"), "{args:?}");
+            assert!(plan.app.devices.is_some_and(|d| !d.is_empty()), "{args:?}");
+        }
+    }
+
+    #[test]
+    fn camelforth_chooses_the_6809_and_emma65_refuses_it() {
+        assert_eq!(
+            resolve(&["--profile", "camelforth"]).unwrap().family,
+            Family::Mc6809
+        );
+        let err = resolve(&["--family", "6502", "--profile", "camelforth"])
+            .err()
+            .unwrap();
+        assert!(
+            err.contains("profile 'camelforth' is for the 6809"),
+            "{err}"
+        );
     }
 
     #[test]

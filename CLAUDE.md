@@ -80,8 +80,8 @@ binaries keep the `emma65` name.
 - **`emma09`** (crate `emma09`) — the Motorola 6809, built on `emma6k-core` alone: registers,
   opcode tables, indexed addressing, ALU, interrupts (NMI, FIRQ, IRQ, CWAI, SYNC), its
   `Processor` impl, and its `Config` and device registry (the built-ins minus `pic/finch`). In
-  progress per `plan/multi-cpu-step2-mc6809-plan.md`: `emma09`/`emma6k --cpu 6809` run it, but it
-  has no bundled template yet. Versioned in lockstep with `emma65`, like `emma6k-core`
+  progress per `plan/multi-cpu-step2-mc6809-plan.md`: `emma09`/`emma6k --cpu 6809` run it, with
+  the GPL-3 CamelForth template as its default. Versioned in lockstep with `emma65`, like `emma6k-core`
 - **`build-info`** (crate `emma6k-build-info`) — a `build.rs`-only helper, shared as a
   build-dependency by every other member's `build.rs`, that captures each crate's git commit
   hash, build timestamp, and (for a tagged release commit) version number into `BUILD_VERSION`/
@@ -187,6 +187,11 @@ emma09/                     — crate emma09, the Motorola 6809
                                ALU, stacking), cc.rs (condition codes)
   src/config.rs             — Config (cpu-variant "6809"), CpuVariantSpec, INTERRUPT_LINES (IRQ,
                                FIRQ, NMI), device_registry(), Config::build → EmulatorSession
+  src/templates/            — TEMPLATES and DEFAULT_TEMPLATE; camelforth/ holds the GPL-3.0-or-later
+                               CamelForth ROM (program.bin/.lbl, emulator-template.toml), its Forth
+                               source as a text master (forth/chromium_ans.txt), README.md (license
+                               and changes), and build.sh + tools.py (needs GForth 0.7.0–0.7.3)
+  tests/camelforth.rs       — boots CamelForth via Config::build and drives its console
   src/exec_tests.rs         — exec (run, step-over, step-out) driving the 6809
   tests/schwotzer_6809.rs   — W. Schwotzer's MC6809 CPU test suite; its GPL-2.0 source, binary,
                                FLEX shim and license are in tests/roms/ (test-only, never shipped)
@@ -236,8 +241,8 @@ and a console with `Ctrl+C` as its break key — WDC65C02 at 1.8432 MHz. `emma6k
 family's template list (`cli/src/bin/emma6k/family.rs`); a template's `cpu-variant` chooses its
 family. It materializes a family's default template into a tempdir when no devices are configured,
 or any named template via `--profile <id>` (`LoadedConfig::resolve` and `apply_template` in
-`cli/src/bin/emma6k/config.rs`, loaded through the normal `Toml::file()` path); the 6809 has no
-default template yet. The debugger materializes the default into `~/.emma/debugger/profiles/default/` the first
+`cli/src/bin/emma6k/config.rs`, loaded through the normal `Toml::file()` path); the 6809's default
+is `camelforth`. The debugger materializes the default into `~/.emma/debugger/profiles/default/` the first
 time that profile directory is created, and offers the full template list in its New Profile
 dialog (see `profile::ensure_profile_dir`/`list_templates` below).
 
