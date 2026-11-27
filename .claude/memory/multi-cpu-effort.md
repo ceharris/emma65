@@ -30,7 +30,7 @@ metadata:
 - The core crate is versioned in lockstep with `emma65`.
 - PR 4's timing is decided only after PRs 1–3 are reviewed and merged.
 
-**Where we left off (2026-11-27):** step 1 is complete. PRs 1–3 merged as #664–666, and PR 4 (the `emma6k-core` crate in `core/`) merged as #668 on 2026-11-27. The step 2 plan is drafted at `plan/multi-cpu-step2-mc6809-plan.md` (six units) and has no open decisions. It's in PR #669 (branch `plan/multi-cpu-step2`) for the user's final read-through; once that PR merges, Unit 1 can start when the user says so. Don't start a unit until the user approves the plan.
+**Where we left off (2026-11-27):** step 1 is complete. PRs 1–3 merged as #664–666, and PR 4 (the `emma6k-core` crate in `core/`) merged as #668 on 2026-11-27. The step 2 plan, `plan/multi-cpu-step2-mc6809-plan.md` (six units, no open decisions), was approved and merged in #669 on 2026-11-27. Next is Unit 1 (FIRQ routing in core); start it only when the user says so.
 
 **Step 2 user decisions (2026-11-27):**
 - A CPU-neutral `emma6k` binary picks the CPU. `emma65` and `emma09` are thin wrappers that exec `emma6k` with the CPU fixed.
@@ -54,7 +54,6 @@ How step 1 ended up, for step 2:
 **CI doesn't build the debugger or the SDL crates for `src/`- or `core/`-only changes**, and that's deliberate; see [[ci-path-filters-deliberate]]. For a refactor PR, verify them locally and say so in the PR.
 
 **To resume in a new session:**
-1. If the step 2 plan isn't approved yet, settle its open decisions with the user and fold the answers into the plan.
-2. Once approved, implement one unit per branch and PR ([[multi-unit-plan-workflow]]), re-checking compile dependencies against the actual file lists before each unit.
+1. Implement one unit per branch and PR ([[multi-unit-plan-workflow]]), re-checking compile dependencies against the actual file lists before each unit.
 
 **How to apply:** follow the resume steps above. A/B-benchmark every PR that touches a hot path against `main`, alternating builds, using [[clock-bench-baseline]]'s post-step-1 row for the current host. Re-check `nm` for `Cpu::execute` staying inlined into `step`: PR 1's ~14% gain came from that, and every later PR kept it.
