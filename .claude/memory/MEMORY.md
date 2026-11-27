@@ -36,7 +36,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 - [deny_unknown_fields on attributes](deny-unknown-fields-device-attributes.md) — every device *Attributes struct gets it
 - [Avoid side-effect caveats](avoid-side-effect-caveats.md) — a design needing a caveat is a cue to drop the capability
 - [macOS + Linux portability](macos-linux-portability.md) — Linux primary; no macOS CI, Linux CI cross-checks emma65 for darwin; Intel-only local builds; port progress in macos-port-effort; keep F-keys
-- [Clock bench baselines](clock-bench-baseline.md) — per host: Linux Ryzen ~41/~106 MHz top speed after step 1 (pre-refactor ~36/~87), macOS i9 ~26/~50 MHz pre-refactor; re-bracket the sweep and A/B against same-day main
+- [Clock bench baselines](clock-bench-baseline.md) — per host: Linux Ryzen ~41/~106 MHz top speed after step 1 (pre-refactor ~36/~87), macOS i9 ~26/~50 MHz pre-refactor; re-bracket the sweep and A/B against same-day main; layout swings ±4%, use perf instructions-per-emulated-cycle to tell
 
 ## Docs
 - [plan/ frozen, doc/ current](plan-frozen-doc-current.md) — never retrofit superseded plan docs; always keep the wiki current
