@@ -1,7 +1,8 @@
 name: Release
 
 # Triggered by pushing the `emma65-vX.Y.Z` tag. A release packages every
-# workspace binary — the emulator CLI (emma65, emma65-tracer), the SDL2
+# workspace binary — the emulator CLI (emma6k and its emma65 and emma09 wrappers,
+# emma65-tracer), the SDL2
 # peripheral binaries (emma6k-display, emma6k-led-matrix, emma6k-lcd-display),
 # and the Tauri debugger GUI (emma6k-debugger) — into one combined `emma6k`
 # .deb and .rpm. The tag keeps the `emma65-v` prefix because the package's version is
@@ -89,7 +90,7 @@ jobs:
             echo ""
             echo "This release bundles:"
             echo ""
-            echo "- emma65 $version"
+            echo "- emma65 $version (with emma6k, emma09 and emma6k-core)"
             for entry in \
               "emma6k-display:display" \
               "emma6k-led-matrix:led-matrix" \
@@ -161,7 +162,7 @@ jobs:
           cargo install cargo-generate-rpm --locked
 
       - name: Build CLI and peripheral binaries
-        run: cargo build --release -p emma65 -p emma6k-display -p emma6k-led-matrix -p emma6k-lcd-display
+        run: cargo build --release -p emma65 -p emma6k -p emma6k-display -p emma6k-led-matrix -p emma6k-lcd-display
 
       - name: Build debugger binary
         working-directory: debugger/src-tauri

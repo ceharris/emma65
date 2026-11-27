@@ -15,7 +15,7 @@ for updating an existing installation.
 
 ## System libraries
 
-The plain `emma65` and `emma65-tracer` binaries have no system library
+The command-line emulator (`emma6k`, `emma65` and `emma09`) and `emma65-tracer` have no system library
 dependencies beyond Rust itself. Building the rest of the workspace needs
 additional development packages: `emma6k-display`, `emma6k-led-matrix`, and
 `emma6k-lcd-display` need the SDL2 libraries (`emma6k-led-matrix` also needs
@@ -61,7 +61,7 @@ Or build only what you need — each crate's system library requirement is
 independent of the others (see above):
 
 ```bash
-cargo build --release              # emma65 + emma65-tracer only
+cargo build --release              # emma6k, emma65, emma09 and emma65-tracer only
 cargo build --release -p emma6k-display
 cargo build --release -p emma6k-led-matrix
 cargo build --release -p emma6k-lcd-display
@@ -73,7 +73,8 @@ flag, so each workspace member is installed with its own invocation — they
 all land in the same place, `~/.cargo/bin` by default):
 
 ```bash
-cargo install --path .            # emma65, emma65-tracer
+cargo install --path .            # emma65-tracer
+cargo install --path cli          # emma6k, emma65, emma09
 cargo install --path display      # emma6k-display
 cargo install --path led-matrix   # emma6k-led-matrix
 cargo install --path lcd-display  # emma6k-lcd-display

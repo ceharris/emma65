@@ -96,7 +96,7 @@ impl TransportReporter {
     ///
     /// `pub` (rather than `pub(crate)`) so the two call sites that build an
     /// `InternalPipeTransport` directly for that injection path —
-    /// `src/bin/emulator/main.rs` and `debugger/src-tauri/src/lib.rs`, both
+    /// `cli/src/bin/emma6k/main.rs` and `debugger/src-tauri/src/lib.rs`, both
     /// outside this crate — can construct one too.
     pub fn pending(error_sender: Option<ErrorSender>) -> Self {
         Self {

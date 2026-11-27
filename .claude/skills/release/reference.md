@@ -12,14 +12,15 @@ whatever commit is on `main` gets packaged into the next `emma65-v*` combined re
 
 | Crate | Directory | `Cargo.toml` path(s) | Changelog | Tag prefix | Triggers build |
 |---|---|---|---|---|---|
-| `emma65` (with `emma6k-core` and `emma09`) | repo root, plus `core/` and `emma09/` | `Cargo.toml` (`version`, and the `emma6k-core` dependency's `version`), `core/Cargo.toml`, `emma09/Cargo.toml` (`version`, and its `emma6k-core` dependency's `version`) — all five must match | `CHANGELOG.md` | `emma65-v` | **Yes** — combined `.deb`/`.rpm` |
+| `emma65` (with `emma6k-core`, `emma09` and `emma6k`) | repo root, plus `core/`, `emma09/` and `cli/` | `Cargo.toml` (`version`, and the `emma6k-core` dependency's `version`), `core/Cargo.toml`, `emma09/Cargo.toml` (`version`, and its `emma6k-core` dependency's `version`), `cli/Cargo.toml` (`version`, and its `emma65`, `emma09` and `emma6k-core` dependencies' `version`s) — all nine must match | `CHANGELOG.md` | `emma65-v` | **Yes** — combined `.deb`/`.rpm` |
 | `emma6k-display` | `display/` | `display/Cargo.toml` | `display/CHANGELOG.md` | `emma6k-display-v` | No |
 | `emma6k-led-matrix` | `led-matrix/` | `led-matrix/Cargo.toml` | `led-matrix/CHANGELOG.md` | `emma6k-led-matrix-v` | No |
 | `emma6k-lcd-display` | `lcd-display/` | `lcd-display/Cargo.toml` | `lcd-display/CHANGELOG.md` | `emma6k-lcd-display-v` | No |
 | `emma6k-debugger` | `debugger/src-tauri/` | `debugger/src-tauri/Cargo.toml`, `debugger/src-tauri/tauri.conf.json` (`.version`), `debugger/frontend/package.json` (`.version`) — all three must match | `debugger/src-tauri/CHANGELOG.md` | `emma6k-debugger-v` | No |
 
-`emma6k-core` and `emma09` have no rows of their own: they are versioned in lockstep with `emma65`
-and released only as part of an `emma65` release (see `SKILL.md`).
+`emma6k-core`, `emma09` and `emma6k` (the CLI package in `cli/`) have no rows of their own: they
+are versioned in lockstep with `emma65` and released only as part of an `emma65` release (see
+`SKILL.md`).
 
 The four `emma6k-*` crates were named `emma65-*` through 0.1.0, so their tags up to and including
 0.1.0 use the legacy prefixes `emma65-display-v`, `emma65-led-matrix-v`, `emma65-lcd-display-v`,

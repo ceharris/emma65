@@ -2,6 +2,7 @@
 members = [
     ".",
     "build-info",
+    "cli",
     "core",
     "emma09",
     "debugger/src-tauri",
@@ -9,6 +10,9 @@ members = [
     "led-matrix",
     "lcd-display",
 ]
+# Plain `cargo build`/`cargo test` at the root cover the 6502 crate and the
+# emulator command line (emma6k and its emma65/emma09 wrappers).
+default-members = [".", "cli"]
 resolver = "2"
 
 [package]
@@ -19,10 +23,6 @@ license = "MIT"
 description = "A 6502-family computer emulator, with an emulator CLI, SDL2 peripheral displays, and a Tauri debugger GUI"
 authors = ["Carl Harris"]
 repository = "https://github.com/ceharris/emma6k"
-
-[[bin]]
-name = "emma65"
-path = "src/bin/emulator/main.rs"
 
 [[bin]]
 name = "emma65-tracer"
@@ -38,19 +38,17 @@ path = "src/lib.rs"
 emma6k-core = { path = "core", version = "0.1.0" }
 bitflags = "2"
 crossbeam-channel = "0.5"
-libc = "0.2"
 tokio = { version = "1", features = ["net", "io-util", "rt", "rt-multi-thread", "sync", "macros", "fs", "time", "signal", "process"] }
 # Emulator configuration
 serde = { version = "1.0", features = ["derive"] }
 clap = { version = "4.0", features = ["derive"] }
 figment = { version = "0.10", features = ["toml", "env"] }
-env_logger = "0.11.11"
-tempfile = "3.27"
 
 [build-dependencies]
 emma6k-build-info = { path = "build-info" }
 
 [dev-dependencies]
+tempfile = "3.27"
 
 # Combined apt/dnf packaging for every workspace binary (the emulator CLI,
 # the SDL2 peripheral binaries, and the Tauri debugger GUI) into one `emma6k`
@@ -64,11 +62,13 @@ depends = "$auto"
 section = "utils"
 priority = "optional"
 extended-description = """\
-The emma6k emulator and debugger toolkit: the emma65 (6502-family) emulator \
-CLI and emma65-tracer, SDL2-backed peripheral displays (emma6k-display, emma6k-led-matrix, \
+The emma6k emulator and debugger toolkit: the emma6k emulator CLI with its \
+emma65 (6502-family) and emma09 (6809) wrappers, emma65-tracer, SDL2-backed peripheral displays (emma6k-display, emma6k-led-matrix, \
 emma6k-lcd-display), and the emma6k-debugger GUI, all in one package."""
 assets = [
+    ["target/release/emma6k", "usr/bin/", "755"],
     ["target/release/emma65", "usr/bin/", "755"],
+    ["target/release/emma09", "usr/bin/", "755"],
     ["target/release/emma65-tracer", "usr/bin/", "755"],
     ["target/release/emma6k-display", "usr/bin/", "755"],
     ["target/release/emma6k-led-matrix", "usr/bin/", "755"],
@@ -84,7 +84,9 @@ assets = [
 name = "emma6k"
 auto-req = "auto"
 assets = [
+    { source = "target/release/emma6k", dest = "/usr/bin/emma6k", mode = "755" },
     { source = "target/release/emma65", dest = "/usr/bin/emma65", mode = "755" },
+    { source = "target/release/emma09", dest = "/usr/bin/emma09", mode = "755" },
     { source = "target/release/emma65-tracer", dest = "/usr/bin/emma65-tracer", mode = "755" },
     { source = "target/release/emma6k-display", dest = "/usr/bin/emma6k-display", mode = "755" },
     { source = "target/release/emma6k-led-matrix", dest = "/usr/bin/emma6k-led-matrix", mode = "755" },

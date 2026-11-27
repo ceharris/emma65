@@ -15,9 +15,9 @@
 //! the crate being built has `debug_assertions` enabled) rather than a `#[cfg(debug_assertions)]`
 //! split in the calling crate's own runtime code.
 //!
-//! Deliberately unprefixed (not `EMMA65_...`): `cargo:rustc-env` values leak into the real
+//! Deliberately unprefixed (not `EMMA6K_...`): `cargo:rustc-env` values leak into the real
 //! process environment when a binary launches via `cargo run`/`cargo tauri dev`, and
-//! `EMMA65_`-prefixed vars are picked up by the config loader as overrides (issue #621).
+//! `EMMA6K_`-prefixed vars are picked up by the config loader as overrides (issue #621).
 
 use std::env;
 use std::process::Command;

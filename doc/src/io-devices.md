@@ -31,6 +31,23 @@ default bus configuration, which routes every IRQ-capable device to the
 (`pic/finch`) can be configured instead to rank IRQ sources and dispatch
 each to its own vector, emulating a vectored interrupt controller.
 
+The 6809 has two maskable interrupt inputs: IRQ and FIRQ (fast interrupt
+request). On a real 6809 board, which input a peripheral drives is a matter
+of how it's wired, so here it's a setting on the device: every IRQ-capable
+device accepts an `interrupt` attribute, `irq` (the default) or `firq`:
+
+```toml
+[[devices]]
+type = "acia/6850"
+address = 0xC000
+interrupt = "firq"
+```
+
+or `--device acia/6850@0xC000,interrupt=firq` on the command line. The 65C02
+has only IRQ, so on it `interrupt = "firq"` stops the emulator at startup
+with an error. Routing a device that has no interrupt output (RAM or ROM,
+for example) to `firq` is an error too.
+
 ## Console (`console`)
 
 A simple polling console device for byte-stream I/O over a configurable
@@ -549,7 +566,8 @@ mode = "step"
 
 ## Priority Interrupt Controller (`pic/finch`)
 
-An optional vectored interrupt controller. Where the default bus
+An optional vectored interrupt controller for the 65C02. It isn't available
+on the 6809, whose interrupt vectors are elsewhere. Where the default bus
 configuration dispatches every IRQ-capable device to the 6502's single
 `0xFFFE`/`0xFFFF` vector — leaving a handler to poll each device's status
 register to find out which one interrupted — configuring a `pic/finch`
