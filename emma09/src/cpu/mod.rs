@@ -1,0 +1,636 @@
+//! The emulated Motorola 6809: registers, instruction fetch, decode and
+//! execution, and its [`Processor`] implementation.
+//!
+//! The CPU builds only on `emma6k-core`'s public API: it embeds a
+//! [`MachineState`] and uses its per-step helpers (`check_halt`,
+//! `finish_cycle`, `tick_idle`), as every CPU does. It adds an instruction's
+//! cycles in one go after executing it, not per bus cycle.
+//!
+//! **Interrupts.** This version services only RESET. IRQ, FIRQ and NMI, and
+//! waking from CWAI and SYNC on an interrupt, come later; until then CWAI and
+//! SYNC wait until a reset. SWI, SWI2, SWI3 and RTI are instructions and work
+//! fully.
+
+pub mod cc;
+mod execute;
+pub mod indexed;
+pub mod opcodes;
+
+use cc::ConditionCodes;
+use emma6k_core::bus::vector::{IdentityVectorResolver, VectorResolver};
+use emma6k_core::bus::{Bus, BusOp};
+use emma6k_core::error::{BusError, CpuBuildError, ExecError};
+use emma6k_core::exec::{self, ClockSpeed};
+use emma6k_core::watch::{Operand, WatchContext};
+use emma6k_core::{HaltState, MachineState, Processor};
+use emma6k_core::{LogCategory, LogLevel, LogSender, log_msg};
+use opcodes::{DecodedOp, Page};
+
+/// Bus address of the RESET vector.
+pub const RESET_VECTOR: u16 = 0xFFFE;
+/// Bus address of the NMI vector.
+pub const NMI_VECTOR: u16 = 0xFFFC;
+/// Bus address of the SWI vector.
+pub const SWI_VECTOR: u16 = 0xFFFA;
+/// Bus address of the IRQ vector.
+pub const IRQ_VECTOR: u16 = 0xFFF8;
+/// Bus address of the FIRQ vector.
+pub const FIRQ_VECTOR: u16 = 0xFFF6;
+/// Bus address of the SWI2 vector.
+pub const SWI2_VECTOR: u16 = 0xFFF4;
+/// Bus address of the SWI3 vector.
+pub const SWI3_VECTOR: u16 = 0xFFF2;
+
+/// Bytes below `S` that a live snapshot's stack window starts at.
+const STACK_WINDOW_BELOW: u16 = 32;
+/// Bytes from `S` upward that a live snapshot's stack window covers.
+const STACK_WINDOW_ABOVE: u32 = 96;
+
+/// The 6809's registers. D is A (high byte) and B (low byte) together; see
+/// [`d`](Registers::d) and [`set_d`](Registers::set_d).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Registers {
+    /// Accumulator A, the high byte of D.
+    pub a: u8,
+    /// Accumulator B, the low byte of D.
+    pub b: u8,
+    /// Direct page register: the high byte of a direct-mode address.
+    pub dp: u8,
+    /// Condition codes.
+    pub cc: ConditionCodes,
+    /// Index register X.
+    pub x: u16,
+    /// Index register Y.
+    pub y: u16,
+    /// User stack pointer U.
+    pub u: u16,
+    /// Hardware stack pointer S.
+    pub s: u16,
+    /// Program counter.
+    pub pc: u16,
+}
+
+impl Registers {
+    fn new() -> Self {
+        Self {
+            a: 0,
+            b: 0,
+            dp: 0,
+            cc: ConditionCodes::I | ConditionCodes::F,
+            x: 0,
+            y: 0,
+            u: 0,
+            s: 0,
+            pc: 0,
+        }
+    }
+
+    /// Returns D: A in the high byte, B in the low byte.
+    #[inline]
+    pub fn d(&self) -> u16 {
+        u16::from_be_bytes([self.a, self.b])
+    }
+
+    /// Sets D: A gets the high byte, B the low byte.
+    #[inline]
+    pub fn set_d(&mut self, value: u16) {
+        [self.a, self.b] = value.to_be_bytes();
+    }
+}
+
+/// Controls how undocumented opcodes, and undefined indexed postbytes, are
+/// handled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InvalidOpcodePolicy {
+    /// Skip the instruction: its prefix and opcode bytes, plus the postbyte
+    /// when the postbyte is the undefined part. Takes
+    /// [`INVALID_OPCODE_CYCLES`](opcodes::INVALID_OPCODE_CYCLES) for an
+    /// undocumented opcode, or the instruction's base cycles for an undefined
+    /// postbyte.
+    Nop,
+    /// Return [`ExecError::InvalidOpcode`], leaving PC at the instruction.
+    Error,
+}
+
+/// Result returned by [`Processor::step`]: [`exec::StepResult`] for the
+/// 6809's [`DecodedOp`].
+pub type StepResult = exec::StepResult<DecodedOp>;
+
+/// [`exec::RunHandle`] for the 6809 [`Cpu`].
+pub type RunHandle = exec::RunHandle<Cpu>;
+
+/// [`exec::CpuLiveSnapshot`] for the 6809's [`Registers`].
+pub type CpuLiveSnapshot = exec::CpuLiveSnapshot<Registers>;
+
+/// The 6809 CPU: registers, machine state, and execution state.
+pub struct Cpu {
+    /// The programmer-visible registers.
+    regs: Registers,
+    /// Machine state shared with every CPU: bus, interrupt controller, watch
+    /// evaluator, breakpoints, clock speed, cycle count, vector resolver, and
+    /// log sender.
+    machine: MachineState,
+    /// Governs how undocumented opcodes and undefined postbytes are handled.
+    invalid_opcode_policy: InvalidOpcodePolicy,
+    /// `Waiting` after CWAI or SYNC; the 6809 has no stopped state.
+    halt: HaltState,
+    /// Address of the instruction being executed: its prefix or opcode byte.
+    instr_pc: u16,
+}
+
+impl Cpu {
+    /// Returns a `CpuBuilder` for constructing a `Cpu`.
+    pub fn builder() -> CpuBuilder {
+        CpuBuilder::new()
+    }
+
+    /// Returns the registers, mutably.
+    pub fn registers_mut(&mut self) -> &mut Registers {
+        &mut self.regs
+    }
+
+    /// Returns the invalid-opcode policy.
+    pub fn invalid_opcode_policy(&self) -> InvalidOpcodePolicy {
+        self.invalid_opcode_policy
+    }
+
+    /// Reads the reset vector (through the installed [`VectorResolver`]),
+    /// sets DP to 0, sets the I and F masks, and clears any wait.
+    pub fn reset(&mut self) -> Result<(), ExecError> {
+        self.machine.bus_mut().reset_devices();
+        let vector = self.machine.resolve_vector(RESET_VECTOR);
+        self.regs.pc = self.read16(vector)?;
+        self.regs.dp = 0;
+        self.regs.cc.insert(ConditionCodes::I | ConditionCodes::F);
+        self.machine.reset_cycles();
+        self.halt = HaltState::Running;
+        log_msg!(
+            self.machine.log_sender(),
+            LogLevel::Info,
+            LogCategory::Cpu,
+            "6809 CPU reset"
+        );
+        Ok(())
+    }
+
+    /// Fetches, decodes and executes one instruction, or services a pending
+    /// reset. Skips the breakpoint and watch check at `skip_pc`, and
+    /// everywhere if `check_breakpoints` is `false`.
+    pub fn step(&mut self, skip_pc: Option<u16>, check_breakpoints: bool) -> StepResult {
+        if self.halt == HaltState::Waiting {
+            // Keep devices running while parked. Until interrupt servicing
+            // exists, only a reset ends a CWAI or SYNC wait.
+            self.machine.tick_idle();
+            if !self.machine.interrupts().reset_pending() {
+                return StepResult::Waiting;
+            }
+        }
+
+        let start = self.regs.pc;
+        if check_breakpoints {
+            let regs = &self.regs;
+            if let Some(halt) = self
+                .machine
+                .check_halt(start, skip_pc, |bus| CpuWatchContext { regs, bus })
+            {
+                return halt;
+            }
+        }
+
+        if self.machine.interrupts_mut().take_reset() {
+            return match self.reset() {
+                Ok(()) => StepResult::Reset,
+                Err(e) => StepResult::Error(e),
+            };
+        }
+
+        let first = match self.read8(start) {
+            Ok(b) => b,
+            Err(e) => return StepResult::Error(e),
+        };
+        let decoded = match first {
+            0x10 | 0x11 => {
+                let second = match self.read8(start.wrapping_add(1)) {
+                    Ok(b) => b,
+                    Err(e) => return StepResult::Error(e),
+                };
+                let page = if first == 0x10 {
+                    Page::Page2
+                } else {
+                    Page::Page3
+                };
+                DecodedOp::new(page, second)
+            }
+            _ => DecodedOp::new(Page::Page1, first),
+        };
+        let opcode_len = decoded.page.prefix_len() + 1;
+
+        if decoded.is_invalid() {
+            return match self.invalid_opcode_policy {
+                InvalidOpcodePolicy::Nop => {
+                    self.regs.pc = start.wrapping_add(opcode_len);
+                    self.machine.finish_cycle(opcodes::INVALID_OPCODE_CYCLES);
+                    StepResult::Executed(decoded)
+                }
+                InvalidOpcodePolicy::Error => StepResult::Error(ExecError::InvalidOpcode {
+                    addr: start,
+                    opcode: decoded.opcode,
+                }),
+            };
+        }
+
+        self.instr_pc = start;
+        self.regs.pc = start.wrapping_add(opcode_len);
+        match self.execute(decoded) {
+            Ok(cycles) => {
+                self.machine.finish_cycle(cycles);
+                StepResult::Executed(decoded)
+            }
+            // `execute` reports an undefined indexed postbyte as an invalid
+            // opcode, before the instruction has changed anything but PC.
+            Err(ExecError::InvalidOpcode { .. }) => match self.invalid_opcode_policy {
+                InvalidOpcodePolicy::Nop => {
+                    self.regs.pc = start.wrapping_add(decoded.base_len());
+                    self.machine.finish_cycle(decoded.base_cycles);
+                    StepResult::Executed(decoded)
+                }
+                InvalidOpcodePolicy::Error => {
+                    self.regs.pc = start;
+                    StepResult::Error(ExecError::InvalidOpcode {
+                        addr: start,
+                        opcode: decoded.opcode,
+                    })
+                }
+            },
+            Err(e) => {
+                self.regs.pc = start;
+                StepResult::Error(e)
+            }
+        }
+    }
+
+    // --- bus helpers ---
+
+    #[inline]
+    fn read8(&mut self, addr: u16) -> Result<u8, ExecError> {
+        self.machine.bus_mut().read(addr).map_err(|e| match e {
+            BusError::Unmapped { addr } | BusError::RomWrite { addr } => {
+                ExecError::UnmappedAddress {
+                    addr,
+                    op: BusOp::Read,
+                }
+            }
+        })
+    }
+
+    #[inline]
+    fn write8(&mut self, addr: u16, value: u8) -> Result<(), ExecError> {
+        self.machine
+            .bus_mut()
+            .write(addr, value)
+            .map_err(|e| match e {
+                BusError::Unmapped { addr } => ExecError::UnmappedAddress {
+                    addr,
+                    op: BusOp::Write,
+                },
+                BusError::RomWrite { addr } => ExecError::RomWrite { addr, value },
+            })
+    }
+
+    /// Reads a big-endian word.
+    #[inline]
+    fn read16(&mut self, addr: u16) -> Result<u16, ExecError> {
+        let hi = self.read8(addr)?;
+        let lo = self.read8(addr.wrapping_add(1))?;
+        Ok(u16::from_be_bytes([hi, lo]))
+    }
+
+    /// Writes a big-endian word.
+    #[inline]
+    fn write16(&mut self, addr: u16, value: u16) -> Result<(), ExecError> {
+        let [hi, lo] = value.to_be_bytes();
+        self.write8(addr, hi)?;
+        self.write8(addr.wrapping_add(1), lo)
+    }
+
+    /// Reads the byte at PC and advances PC.
+    #[inline]
+    fn fetch8(&mut self) -> Result<u8, ExecError> {
+        let value = self.read8(self.regs.pc)?;
+        self.regs.pc = self.regs.pc.wrapping_add(1);
+        Ok(value)
+    }
+
+    /// Reads the big-endian word at PC and advances PC past it.
+    #[inline]
+    fn fetch16(&mut self) -> Result<u16, ExecError> {
+        let value = self.read16(self.regs.pc)?;
+        self.regs.pc = self.regs.pc.wrapping_add(2);
+        Ok(value)
+    }
+}
+
+/// Returns the length in bytes of the subroutine call at `pc` (BSR, LBSR or
+/// JSR), or `None` if the instruction there isn't one. Reads with `peek`, so
+/// it has no side effects.
+fn subroutine_call_len(bus: &Bus, pc: u16) -> Option<u16> {
+    let peek = |addr: u16| bus.peek(addr).unwrap_or(0);
+    match peek(pc) {
+        0x8D | 0x9D => Some(2), // BSR, JSR direct
+        0x17 | 0xBD => Some(3), // LBSR, JSR extended
+        0xAD => {
+            // JSR indexed: opcode, postbyte, and the postbyte's offset bytes.
+            Some(2 + indexed::extra_bytes(peek(pc.wrapping_add(1))))
+        }
+        _ => None,
+    }
+}
+
+// Register IDs used by `CpuWatchContext` and returned by `map_register_name`.
+const REG_A: Operand = 0;
+const REG_B: Operand = 1;
+const REG_D: Operand = 2;
+const REG_X: Operand = 3;
+const REG_Y: Operand = 4;
+const REG_U: Operand = 5;
+const REG_S: Operand = 6;
+const REG_PC: Operand = 7;
+const REG_DP: Operand = 8;
+const REG_CC: Operand = 9;
+
+/// Maps a register name to its `Operand` ID for use with `WatchCompiler`.
+///
+/// Accepts `A`, `B`, `D`, `X`, `Y`, `U`, `S`, `PC`, `DP` and `CC`, in any
+/// case. Returns `None` for any other name.
+pub fn map_register_name(name: &str) -> Option<Operand> {
+    match name.to_ascii_uppercase().as_str() {
+        "A" => Some(REG_A),
+        "B" => Some(REG_B),
+        "D" => Some(REG_D),
+        "X" => Some(REG_X),
+        "Y" => Some(REG_Y),
+        "U" => Some(REG_U),
+        "S" => Some(REG_S),
+        "PC" => Some(REG_PC),
+        "DP" => Some(REG_DP),
+        "CC" => Some(REG_CC),
+        _ => None,
+    }
+}
+
+/// Maps a flag name to its `Operand` ID (its bit mask in CC) for use with
+/// `WatchCompiler`.
+///
+/// Accepts `E`, `F`, `H`, `I`, `N`, `Z`, `V` and `C`, in any case. Returns
+/// `None` for any other name.
+pub fn map_flag_name(name: &str) -> Option<Operand> {
+    let flag = match name.to_ascii_uppercase().as_str() {
+        "E" => ConditionCodes::E,
+        "F" => ConditionCodes::F,
+        "H" => ConditionCodes::H,
+        "I" => ConditionCodes::I,
+        "N" => ConditionCodes::N,
+        "Z" => ConditionCodes::Z,
+        "V" => ConditionCodes::V,
+        "C" => ConditionCodes::C,
+        _ => return None,
+    };
+    Some(flag.bits() as Operand)
+}
+
+/// Borrows CPU state to implement `WatchContext`, with side-effect-free,
+/// big-endian memory reads.
+struct CpuWatchContext<'a> {
+    regs: &'a Registers,
+    bus: &'a Bus,
+}
+
+impl CpuWatchContext<'_> {
+    /// Returns a register's value and its width in bits.
+    fn register(&self, id: Operand) -> (u32, u32) {
+        let r = self.regs;
+        match id {
+            REG_A => (r.a as u32, 8),
+            REG_B => (r.b as u32, 8),
+            REG_D => (r.d() as u32, 16),
+            REG_X => (r.x as u32, 16),
+            REG_Y => (r.y as u32, 16),
+            REG_U => (r.u as u32, 16),
+            REG_S => (r.s as u32, 16),
+            REG_PC => (r.pc as u32, 16),
+            REG_DP => (r.dp as u32, 8),
+            REG_CC => (r.cc.to_byte() as u32, 8),
+            _ => (0, 8),
+        }
+    }
+}
+
+/// Sign-extends the low `bits` bits of `value` to 32 bits.
+fn sign_extend(value: u32, bits: u32) -> u32 {
+    let shift = 32 - bits;
+    (((value << shift) as i32) >> shift) as u32
+}
+
+impl WatchContext for CpuWatchContext<'_> {
+    fn read_register_u32(&self, id: Operand) -> Operand {
+        self.register(id).0
+    }
+
+    fn read_register_i32(&self, id: Operand) -> Operand {
+        let (value, bits) = self.register(id);
+        sign_extend(value, bits)
+    }
+
+    fn read_flag(&self, flag_id: Operand) -> Operand {
+        (self.regs.cc.to_byte() as Operand & flag_id != 0) as Operand
+    }
+
+    fn read_mem_u32(&self, addr: u16, width: u8) -> u32 {
+        match width {
+            1 | 2 | 4 => (0..width as u16).fold(0, |value, i| {
+                (value << 8) | self.bus.peek(addr.wrapping_add(i)).unwrap_or(0) as u32
+            }),
+            _ => 0,
+        }
+    }
+
+    fn read_mem_i32(&self, addr: u16, width: u8) -> u32 {
+        match width {
+            1 | 2 | 4 => sign_extend(self.read_mem_u32(addr, width), width as u32 * 8),
+            _ => 0,
+        }
+    }
+}
+
+impl Processor for Cpu {
+    type Registers = Registers;
+    type Op = DecodedOp;
+    /// The hardware stack pointer `S`.
+    type StackMark = u16;
+
+    fn machine(&self) -> &MachineState {
+        &self.machine
+    }
+
+    fn machine_mut(&mut self) -> &mut MachineState {
+        &mut self.machine
+    }
+
+    #[inline]
+    fn step(&mut self, skip_pc: Option<u16>, check_breakpoints: bool) -> StepResult {
+        Cpu::step(self, skip_pc, check_breakpoints)
+    }
+
+    fn reset(&mut self) -> Result<(), ExecError> {
+        Cpu::reset(self)
+    }
+
+    fn registers(&self) -> &Registers {
+        &self.regs
+    }
+
+    fn pc(&self) -> u16 {
+        self.regs.pc
+    }
+
+    /// `Waiting` after CWAI or SYNC. The 6809 has no STP, so it is never
+    /// `Stopped`.
+    fn halt_state(&self) -> HaltState {
+        self.halt
+    }
+
+    fn flush_trace(&mut self) {}
+
+    fn subroutine_call_len(&self, pc: u16) -> Option<u16> {
+        subroutine_call_len(self.machine.bus(), pc)
+    }
+
+    fn stack_mark(&self) -> u16 {
+        self.regs.s
+    }
+
+    /// `S` has risen above `mark`; the stack grows down. The wrapping 16-bit
+    /// comparison tolerates the stack pointer wrapping around the address
+    /// space.
+    fn has_returned_from(&self, mark: u16) -> bool {
+        (self.regs.s.wrapping_sub(mark) as i16) > 0
+    }
+
+    /// From 32 bytes below `S` to 96 bytes above it, clamped to the address
+    /// space.
+    fn stack_window(&self) -> (u16, u16) {
+        let base = self.regs.s.saturating_sub(STACK_WINDOW_BELOW);
+        let end = (self.regs.s as u32 + STACK_WINDOW_ABOVE).min(0x1_0000);
+        (base, (end - base as u32) as u16)
+    }
+
+    fn map_register_name(name: &str) -> Option<Operand> {
+        map_register_name(name)
+    }
+
+    fn map_flag_name(name: &str) -> Option<Operand> {
+        map_flag_name(name)
+    }
+}
+
+/// Builder for [`Cpu`].
+pub struct CpuBuilder {
+    invalid_opcode_policy: InvalidOpcodePolicy,
+    clock_speed: ClockSpeed,
+    bus: Option<Bus>,
+    vector_resolver: Option<Box<dyn VectorResolver>>,
+    log_sender: LogSender,
+    machine: Option<MachineState>,
+}
+
+impl Default for CpuBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CpuBuilder {
+    /// Creates a builder with the [`Nop`](InvalidOpcodePolicy::Nop) policy
+    /// and an unlimited clock speed.
+    pub fn new() -> Self {
+        Self {
+            invalid_opcode_policy: InvalidOpcodePolicy::Nop,
+            clock_speed: ClockSpeed::unlimited(),
+            bus: None,
+            vector_resolver: None,
+            log_sender: LogSender::default(),
+            machine: None,
+        }
+    }
+
+    /// Sets the invalid-opcode handling policy.
+    pub fn invalid_opcode_policy(mut self, policy: InvalidOpcodePolicy) -> Self {
+        self.invalid_opcode_policy = policy;
+        self
+    }
+
+    /// Sets the target clock speed.
+    pub fn clock_speed(mut self, speed: ClockSpeed) -> Self {
+        self.clock_speed = speed;
+        self
+    }
+
+    /// Provides the memory bus.
+    pub fn bus(mut self, bus: Bus) -> Self {
+        self.bus = Some(bus);
+        self
+    }
+
+    /// Installs a custom interrupt-vector resolver, consulted whenever the
+    /// CPU fetches a vector. If not called, `build()` installs
+    /// [`IdentityVectorResolver`].
+    pub fn vector_resolver(mut self, resolver: Box<dyn VectorResolver>) -> Self {
+        self.vector_resolver = Some(resolver);
+        self
+    }
+
+    /// Installs a sender for structured diagnostic messages. If not called,
+    /// `build()` installs a `log`-crate-backed default.
+    pub fn log_sender(mut self, sender: LogSender) -> Self {
+        self.log_sender = sender;
+        self
+    }
+
+    /// Builds the `Cpu` around existing machine state (for example from
+    /// [`build_machine`](emma6k_core::config::build_machine)) instead of a
+    /// bare bus. The machine state already holds the bus, clock speed, vector
+    /// resolver and log sender, so values given to [`bus`](Self::bus),
+    /// [`clock_speed`](Self::clock_speed),
+    /// [`vector_resolver`](Self::vector_resolver) or
+    /// [`log_sender`](Self::log_sender) are ignored.
+    pub fn machine(mut self, machine: MachineState) -> Self {
+        self.machine = Some(machine);
+        self
+    }
+
+    /// Consumes the builder and returns a `Cpu`, or an error if no bus or
+    /// machine state was given. The CPU isn't reset: call
+    /// [`reset`](Cpu::reset) to load PC from the reset vector.
+    pub fn build(self) -> Result<Cpu, CpuBuildError> {
+        let machine = match self.machine {
+            Some(machine) => machine,
+            None => MachineState::new(
+                self.bus.ok_or(CpuBuildError::NoBus)?,
+                self.clock_speed,
+                self.vector_resolver
+                    .unwrap_or_else(|| Box::new(IdentityVectorResolver)),
+                self.log_sender,
+            ),
+        };
+        Ok(Cpu {
+            regs: Registers::new(),
+            machine,
+            invalid_opcode_policy: self.invalid_opcode_policy,
+            halt: HaltState::Running,
+            instr_pc: 0,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests;

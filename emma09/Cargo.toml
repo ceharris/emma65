@@ -1,0 +1,24 @@
+[package]
+name = "emma09"
+# Versioned in lockstep with the root `emma65` crate, like emma6k-core: every
+# emma65 release bumps all three to the same version.
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "The Motorola 6809 for the emma6k emulator: CPU, instruction set, and Processor implementation"
+authors = ["Carl Harris"]
+repository = "https://github.com/ceharris/emma6k"
+# The GPL-2.0 test suite in tests/roms is test-only: keep it out of any package.
+exclude = ["tests/roms"]
+
+[lib]
+name = "emma09"
+path = "src/lib.rs"
+
+[dependencies]
+# The CPU-neutral core. Versioned in lockstep with this crate.
+emma6k-core = { path = "../core", version = "0.1.0" }
+bitflags = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time"] }

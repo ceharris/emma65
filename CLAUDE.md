@@ -43,7 +43,8 @@ cargo build -p emma6k-led-matrix  # build just the SDL2 LED matrix peripheral (n
 cargo build -p emma6k-lcd-display # build just the SDL2 LCD display peripheral (needs libsdl2-dev)
 cargo test                # run emma65's tests (library, binaries, tests/) — NOT emma6k-core's
 cargo test -p emma6k-core # run the core crate's tests
-cargo test --workspace    # every crate's tests: emma65, emma6k-core, debugger, display, led-matrix, lcd-display
+cargo test -p emma09      # run the 6809 crate's tests (unit tests, exec tests, Schwotzer's CPU test suite)
+cargo test --workspace    # every crate's tests: emma65, emma6k-core, emma09, debugger, display, led-matrix, lcd-display
 cargo test <name>         # run a single test by name (partial match)
 cargo clippy              # lint (covers every workspace member, including emma6k-core)
 cargo fmt --all           # format all Rust code in the workspace
@@ -58,7 +59,7 @@ Tauri invokes `npm run build` there automatically as part of `cargo tauri build`
 
 ## Architecture
 
-This repository is the emma6k project: a Cargo workspace (Rust 2024 edition) with seven members.
+This repository is the emma6k project: a Cargo workspace (Rust 2024 edition) with eight members.
 Crates that aren't specific to the 6502 use the `emma6k-` prefix; the 6502 emulator crate and its
 binaries keep the `emma65` name.
 
@@ -70,6 +71,10 @@ binaries keep the `emma65` name.
   and the watch pipeline. It never names a CPU-specific type, and the compiler enforces that.
   Versioned in lockstep with `emma65` and released only as part of an `emma65` release (see the
   release skill)
+- **`emma09`** (crate `emma09`) — the Motorola 6809, built on `emma6k-core` alone: registers,
+  opcode tables, indexed addressing, ALU, and its `Processor` impl. In progress per
+  `plan/multi-cpu-step2-mc6809-plan.md`: it services only RESET so far, and nothing outside its
+  tests runs it yet. Versioned in lockstep with `emma65`, like `emma6k-core`
 - **`build-info`** (crate `emma6k-build-info`) — a `build.rs`-only helper, shared as a
   build-dependency by every other member's `build.rs`, that captures each crate's git commit
   hash, build timestamp, and (for a tagged release commit) version number into `BUILD_VERSION`/
@@ -108,8 +113,8 @@ The `emma65` library exposes three top-level public modules:
 - **`watch`** — a re-export of `emma6k_core::watch`, the watchpoint expression pipeline
 
 A CPU implemented in another crate builds on `MachineState`'s public accessors and per-step helpers
-(`check_halt`, `finish_cycle`, `tick_idle`, `irq_recognized`); `emma6k_core::exec::toy` (test-only)
-is a minimal example. **Cross-crate inlining:** the 6502 calls into core on every instruction, and
+(`check_halt`, `finish_cycle`, `tick_idle`, `irq_recognized`); `emma09` is the real example, and
+`emma6k_core::exec::toy` (test-only) a minimal one. **Cross-crate inlining:** the 6502 calls into core on every instruction, and
 a non-generic core function only inlines across the crate boundary if it is `#[inline]`. Keep the
 hot `Bus`, `InterruptController`, `MachineState`, `LogSender::set_cycles`, and
 `WatchEvaluator::is_empty` paths `#[inline]`; removing one cost ~7% in the PR 4 benchmark.
@@ -163,6 +168,14 @@ core/src/                   — crate emma6k-core, the CPU-neutral core
   logging.rs                — LogSender, log writer/collector threads, log_channel, log_msg!
   watch/                    — watchpoint expression pipeline (see below)
   location.rs, text.rs      — source-text helpers shared by watch and CPU assemblers
+emma09/                     — crate emma09, the Motorola 6809
+  src/cpu/                  — Cpu, CpuBuilder, Registers, Processor impl, big-endian watch
+                               context; opcodes.rs (per-page opcode tables with base cycles),
+                               indexed.rs (postbyte forms), execute.rs (semantics and ALU),
+                               cc.rs (condition codes)
+  src/exec_tests.rs         — exec (run, step-over, step-out) driving the 6809
+  tests/schwotzer_6809.rs   — W. Schwotzer's MC6809 CPU test suite; its GPL-2.0 source, binary,
+                               FLEX shim and license are in tests/roms/ (test-only, never shipped)
 debugger/
   src-tauri/                — emma6k-debugger: Tauri commands/state per UI panel (see below)
   frontend/                 — React/TypeScript/Vite UI (panels, styles, keybindings)

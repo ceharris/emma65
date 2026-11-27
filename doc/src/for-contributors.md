@@ -66,6 +66,11 @@ disassembler, the `cpu-variant` configuration setting, and the bundled
 starter templates, whose ROMs are 6502 programs) all live under `mos6502`.
 The two crates are versioned and released together.
 
+A second CPU, the Motorola 6809, is being added in its own crate, `emma09`,
+built on `emma6k-core` alone. Its instruction set is in place and passes
+W. Schwotzer's MC6809 CPU test suite; interrupts, configuration, and a way to
+run it from the command line are still to come.
+
 ## Bus
 
 `emulator::bus::BusConfig` is a builder: `.ram()`, `.rom()`, and `.device()`

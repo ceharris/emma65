@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'src/**'
+      - 'core/**'
+      - 'emma09/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'doc/**'
@@ -45,7 +47,7 @@ jobs:
         run: mdbook build doc
 
       - name: Build cargo doc
-        run: cargo doc -p emma65 -p emma6k-core --no-deps
+        run: cargo doc -p emma65 -p emma6k-core -p emma09 --no-deps
 
       - name: Add API redirect
         run: echo '<meta http-equiv="refresh" content="0; url=emma65/index.html">' > target/doc/index.html
