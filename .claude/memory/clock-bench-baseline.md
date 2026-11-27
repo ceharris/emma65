@@ -27,6 +27,8 @@ These are about 5–6% above the 2026-09-09 figures (~34 / 34.15 MHz and ~80–8
 
 **After multi-CPU step 1 (Linux, rustc 1.100.0, `balanced`/`powersave`, 2026-11-26).** The refactor made the 6502 faster. With the `emma6k-core` crate (PR 4) and its `#[inline]` hints, the minimal complement stays accurate to ≥100 MHz with a top speed of ~106 MHz, and the default complement to ≥40 MHz with a top speed of ~41 MHz (two A/B runs each). Use these, not the pre-refactor rows above, as the Linux baseline for step 2.
 
+**Re-bracket after step 1 (Linux).** The skill's stock brackets top out at 40 and 100 MHz, below the post-step-1 ceilings, so they never show the falloff. For A/B runs, sed the copied `examples/clock_bench_minimal.rs` to `[34, 36, 38, 39, 40, 41, 42, 44]` (default) and `[90, 95, 100, 102, 104, 106, 108, 110]` (minimal). Build one binary per ref into the scratchpad, then alternate them; each run takes ~55 s. On 2026-11-27, same-day `main` read 40.1–41.0 MHz (default) and 98.9–102 MHz (minimal) for top speed, a bit under the 2026-11-26 figures. Compare against same-day `main`, not just this file. `perf` isn't usable without sudo (`perf_event_paranoid` = 4).
+
 **Power mode barely matters on Linux.** The same day, with the platform profile and governor set to `performance`, two more runs gave a default complement accurate to ~36–38 MHz (top speed 35.9–39.1 MHz) and a minimal complement accurate to ~88 MHz (top speed 92.9–93.1 MHz). That's within about 2% of the `powersave`/`balanced` numbers, so compare runs across either mode. Record the mode anyway.
 
 **Why:** the user asked for a baseline on the current hardware before the multi-CPU refactor, because the documented figures came from different hardware (the Linux workstation).
