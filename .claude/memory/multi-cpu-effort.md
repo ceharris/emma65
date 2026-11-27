@@ -30,7 +30,17 @@ metadata:
 - The core crate is versioned in lockstep with `emma65`.
 - PR 4's timing is decided only after PRs 1–3 are reviewed and merged.
 
-**Where we left off (2026-11-27):** step 1 is complete. PRs 1–3 merged as #664–666, and PR 4 (the `emma6k-core` crate in `core/`) merged as #668 on 2026-11-27. Step 2 is the 6809 crate for the CLI. Don't start step 2 until the user says so, and plan it first: there's no step 2 plan document yet.
+**Where we left off (2026-11-27):** step 1 is complete. PRs 1–3 merged as #664–666, and PR 4 (the `emma6k-core` crate in `core/`) merged as #668 on 2026-11-27. The step 2 plan is drafted at `plan/multi-cpu-step2-mc6809-plan.md` (six units) and has no open decisions. It's in PR #669 (branch `plan/multi-cpu-step2`) for the user's final read-through; once that PR merges, Unit 1 can start when the user says so. Don't start a unit until the user approves the plan.
+
+**Step 2 user decisions (2026-11-27):**
+- A CPU-neutral `emma6k` binary picks the CPU. `emma65` and `emma09` are thin wrappers that exec `emma6k` with the CPU fixed.
+- `cpu` is a synonym for `cpu-variant`. Its values name a variant (`65c02`, `wdc65c02`, `6809`, `6309`), and the variant implies the family. `emma6k` has no default CPU; the wrappers supply it.
+- The tracer becomes `emma6k-tracer`. `emma6k` and `emma09` are versioned in lockstep with `emma65`. Env vars switch to `EMMA6K_` with no `EMMA65_` fallback, in the debugger too. These reverse two names the rename kept ([[emma6k-rename]]).
+- CamelForth's GPL-3 is fine if the template carries the license details.
+- ISA test suite: W. Schwotzer's MC6809 CPU Test Suite, `src/tools/cputest.txt` in github.com/aladur/flexemu (GPL-2.0; found via github.com/adumont/emu6809). It covers no interrupts and reports through FLEX monitor entry points at `$CDxx`, which a shim must provide. Sean Riddle's suite (seanriddle.com/willyemutest04.asm) was rejected: it targets Williams arcade hardware, embeds a copy of Schwotzer's tests, and states no license.
+- The 6809 crate is `emma09`; the 6309 would be a variant inside it.
+- Trace v3 is in step 2, as its last unit.
+- The 6809 template is CamelForth (GPL-3) from github.com/nealcrook/multicomp6809, rebuilt with GForth per its wiki's CamelForthRebuildANS page, with `KEY`/`KEY?`/`EMIT` rewritten for emma's console device. The user has done this rebuild before.
 
 How step 1 ended up, for step 2:
 - **Crates.** `emma6k-core` (`core/`) has its modules at the crate root: `emma6k_core::{bus, config, device, exec, session, transport, watch, ...}`. `emma65` (root) is the 6502 plus a facade, `src/emulator.rs`, that does `pub use emma6k_core::*`, adds the 6502 re-exports, and has a local `config` module adding `Config`/`CpuVariantSpec`/`templates`. Everything outside the workspace's `emma65` code uses `emma65::emulator::*` paths.
@@ -44,7 +54,7 @@ How step 1 ended up, for step 2:
 **CI doesn't build the debugger or the SDL crates for `src/`- or `core/`-only changes**, and that's deliberate; see [[ci-path-filters-deliberate]]. For a refactor PR, verify them locally and say so in the PR.
 
 **To resume in a new session:**
-1. Ask the user what's next: step 2 (the 6809), issue #667, or the macOS port ([[macos-port-effort]]).
-2. For step 2, write a plan document first (`plan/multi-cpu-step2-...md`), as was done for step 1. The step 1 plan's "Not in step 1" section lists its scope: a 6809 crate, the `cpu = "..."` selector, an enum choosing the session at startup, FIRQ/HALT interrupt lines, trace format v3, and a 6809 template. Check its unit split for compile dependencies ([[multi-unit-plan-workflow]]) and get the user's decisions before implementing.
+1. If the step 2 plan isn't approved yet, settle its open decisions with the user and fold the answers into the plan.
+2. Once approved, implement one unit per branch and PR ([[multi-unit-plan-workflow]]), re-checking compile dependencies against the actual file lists before each unit.
 
 **How to apply:** follow the resume steps above. A/B-benchmark every PR that touches a hot path against `main`, alternating builds, using [[clock-bench-baseline]]'s post-step-1 row for the current host. Re-check `nm` for `Cpu::execute` staying inlined into `step`: PR 1's ~14% gain came from that, and every later PR kept it.
