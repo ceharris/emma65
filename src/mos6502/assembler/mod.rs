@@ -17,7 +17,7 @@ mod scanner;
 mod statement;
 mod token;
 
-use crate::emulator::bus::{SymbolSource, SymbolTable};
+use emma6k_core::bus::{SymbolSource, SymbolTable};
 
 pub use driver::Segment;
 pub use error::Error;
@@ -50,10 +50,10 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
-    use crate::emulator::{AddressRange, Bus, RomWritePolicy};
     use crate::mos6502::cpu::opcodes::{AddressingMode, DecodedOp, Mnemonic, decode_table};
     use crate::mos6502::cpu::variant::CpuVariant;
     use crate::mos6502::disassembler::Disassembler;
+    use emma6k_core::{AddressRange, Bus, RomWritePolicy};
 
     fn assemble_ok(source: &str) -> AssembledProgram {
         assemble(source).unwrap_or_else(|errors| {

@@ -3,7 +3,7 @@
 //!
 //! The template mechanism ([`Template`], [`TemplateError`], and writing the
 //! assets out) is CPU-neutral and lives in
-//! [`emulator::config::template`](crate::emulator::config::template); this
+//! [`emulator::config::template`](emma6k_core::config::template); this
 //! module provides the 6502's entries. Adding a template is additive: create
 //! `templates/<id>/` with its three asset files plus a `mod.rs` calling
 //! [`asset::materialize`], then add one [`Template`] entry to [`TEMPLATES`]
@@ -17,8 +17,8 @@ mod taliforth;
 
 use std::path::{Path, PathBuf};
 
-use crate::emulator::config::template;
-pub use crate::emulator::config::template::{
+use emma6k_core::config::template;
+pub use emma6k_core::config::template::{
     MaterializeError, Template, TemplateError, UnknownTemplateError, asset,
 };
 

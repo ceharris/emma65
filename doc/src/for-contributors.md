@@ -50,10 +50,13 @@ for control and a `CpuLiveSnapshot` read without pausing the CPU;
 `step_return()` build the debugger's single-step commands on top of the same
 `step()` primitive.
 
-The emulator is split into a CPU-neutral core (`emulator`) and the 6502
-itself (`mos6502`), so that other CPUs can be added alongside it. A CPU
-implements the `emulator::Processor` trait and embeds an
-`emulator::MachineState`, which holds everything the CPU doesn't own itself:
+The emulator is split into a CPU-neutral core and the 6502 itself, so that
+other CPUs can be added alongside it. The core is its own crate,
+`emma6k-core` (in `core/`), which never refers to any particular CPU; the
+compiler enforces that. The `emma65` crate holds the 6502 (in its `mos6502`
+module) and re-exports the whole core under `emma65::emulator`, so code using
+`emma65` reaches both through one path. A CPU implements the
+`emulator::Processor` trait and embeds an `emulator::MachineState`, which holds everything the CPU doesn't own itself:
 the bus, interrupt controller, watch evaluator, breakpoints, clock speed, and
 cycle count. Everything in `exec` is generic over `Processor`, and its run
 loop is compiled separately for each CPU, so `step()` remains a direct call
@@ -61,6 +64,7 @@ with no dynamic dispatch on the hot path. The 6502's own pieces (the
 instruction set and decoder, the binary trace format, the assembler and
 disassembler, the `cpu-variant` configuration setting, and the bundled
 starter templates, whose ROMs are 6502 programs) all live under `mos6502`.
+The two crates are versioned and released together.
 
 ## Bus
 
@@ -135,7 +139,8 @@ the integration point for contributors adding new device types. The
 
 ## Other Public Modules
 
-Beyond `emulator` and `mos6502`, the crate exposes the `watch` module, plus
+Beyond `emulator` and `mos6502`, the `emma65` crate exposes the `watch`
+module (from `emma6k-core`), plus
 the 6502's assembler and disassembler at the top level (`emma65::assembler`
 and `emma65::disassembler` are re-exports of `mos6502::assembler` and
 `mos6502::disassembler`):
@@ -304,8 +309,8 @@ impl DeviceModule for BlinkerModule {
 
 **Step 3** — Deserialize attributes from the `HashMap`. Follow the pattern
 used by
-`RamModule` in `src/emulator/config/ram.rs` (or `RomModule` in
-`src/emulator/config/rom.rs`): define a serde
+`RamModule` in `core/src/config/ram.rs` (or `RomModule` in
+`core/src/config/rom.rs`): define a serde
 `Deserialize` struct, then extract it with `figment::Figment`:
 
 ```rust
@@ -347,7 +352,7 @@ color = "red"
 `BlinkerDevice` never talks to anything outside the emulator, so its module
 never touches [Transport Options](io-devices.md#transport-options). A device that does —
 follow the pattern used by every built-in transport-attached device (see
-`src/emulator/config/mc6850.rs` for the simplest real example): deserialize
+`core/src/config/mc6850.rs` for the simplest real example): deserialize
 an optional `transport` attribute, convert it to a `TransportSpec`, and hand
 it to `TransportSpec::to_transport_with_reporter()` to get back a connected
 `Transport` and its paired `TransportRelay`. `EchoDevice` below sends

@@ -34,17 +34,18 @@ development host; there's also a macOS workstation). Its index is imported here:
 ## Commands
 
 ```bash
-cargo build              # build the emma65 and emma65-tracer binaries + library
+cargo build              # build the emma65 and emma65-tracer binaries + library (and emma6k-core, which it depends on)
 cargo build --workspace  # also build the debugger crate (emma6k-debugger), the display crate
                           # (emma6k-display), the led-matrix crate (emma6k-led-matrix), and the
                           # lcd-display crate (emma6k-lcd-display)
 cargo build -p emma6k-display     # build just the SDL2 display peripheral (needs libsdl2-dev)
 cargo build -p emma6k-led-matrix  # build just the SDL2 LED matrix peripheral (needs libsdl2-dev)
 cargo build -p emma6k-lcd-display # build just the SDL2 LCD display peripheral (needs libsdl2-dev)
-cargo test                # run the library/binary test suite
-cargo test --workspace    # also run the debugger, display, led-matrix, and lcd-display crates' tests
+cargo test                # run emma65's tests (library, binaries, tests/) — NOT emma6k-core's
+cargo test -p emma6k-core # run the core crate's tests
+cargo test --workspace    # every crate's tests: emma65, emma6k-core, debugger, display, led-matrix, lcd-display
 cargo test <name>         # run a single test by name (partial match)
-cargo clippy              # lint (covers the debugger, display, led-matrix, and lcd-display crates too — all are workspace members)
+cargo clippy              # lint (covers every workspace member, including emma6k-core)
 cargo fmt --all           # format all Rust code in the workspace
 ```
 
@@ -57,12 +58,18 @@ Tauri invokes `npm run build` there automatically as part of `cargo tauri build`
 
 ## Architecture
 
-This repository is the emma6k project: a Cargo workspace (Rust 2024 edition) with six members.
+This repository is the emma6k project: a Cargo workspace (Rust 2024 edition) with seven members.
 Crates that aren't specific to the 6502 use the `emma6k-` prefix; the 6502 emulator crate and its
 binaries keep the `emma65` name.
 
-- **`.`** (crate `emma65`) — the emulator library plus two binaries: `emma65` (the emulator)
-  and `emma65-tracer` (decodes binary trace files)
+- **`.`** (crate `emma65`) — the 6502 crate: the 65C02 CPU and everything specific to it, the
+  `emma65::emulator` facade over the core, and two binaries: `emma65` (the emulator) and
+  `emma65-tracer` (decodes binary trace files)
+- **`core`** (crate `emma6k-core`) — the CPU-neutral emulator core every CPU family shares: bus,
+  devices, transports, configuration framework, execution control behind the `Processor` trait,
+  and the watch pipeline. It never names a CPU-specific type, and the compiler enforces that.
+  Versioned in lockstep with `emma65` and released only as part of an `emma65` release (see the
+  release skill)
 - **`build-info`** (crate `emma6k-build-info`) — a `build.rs`-only helper, shared as a
   build-dependency by every other member's `build.rs`, that captures each crate's git commit
   hash, build timestamp, and (for a tagged release commit) version number into `BUILD_VERSION`/
@@ -83,26 +90,36 @@ binaries keep the `emma65` name.
   renders it in-process instead); spawned by the emulator as a child process over a `pipe:`
   transport, per `plan/lcd-display-external-protocol.md`
 
+`emma6k-core`'s modules sit at its crate root: `emma6k_core::{bus, config, device, error, exec,
+session, transport, watch, location, text}`, plus root re-exports (`Bus`, `Processor`,
+`MachineState`, `log_channel`, the `log_msg!` macro, …).
+
 The `emma65` library exposes three top-level public modules:
 
-- **`emulator`** — the CPU-neutral core: memory bus, devices, transport, configuration framework,
-  execution control, and the `Processor` trait a CPU implements to run on it. It also re-exports
-  the 6502's public types under their pre-split paths (`emma65::emulator::Cpu`,
-  `emma65::emulator::cpu::StepResult`, `emma65::emulator::Config`, …) in a section of
-  `src/emulator/mod.rs` marked "6502 re-exports".
+- **`emulator`** (`src/emulator.rs`) — a facade: `pub use emma6k_core::*`, plus the 6502's public
+  types under their pre-split paths (`emma65::emulator::Cpu`, `emma65::emulator::cpu::StepResult`,
+  `emma65::emulator::Config`, `emma65::emulator::config::templates`, …). The debugger, the
+  peripheral crates, the binaries, and `tests/` all use these paths. New code inside `emma65` should
+  name `emma6k_core` and `crate::mos6502` directly.
 - **`mos6502`** — everything specific to the 65C02: the CPU and its `Processor` impl, the binary
   execution trace, the assembler and disassembler, the top-level `Config` schema, and the bundled
-  templates. `emma65::assembler` and `emma65::disassembler` are re-exports of its submodules.
-- **`watch`** — watchpoint expression pipeline (scanner → parser → compiler → evaluator)
+  templates. `emma65::assembler` and `emma65::disassembler` are re-exports of its submodules. Its
+  `exec_tests` and `device_tests` modules hold the 6502-driven tests of core code.
+- **`watch`** — a re-export of `emma6k_core::watch`, the watchpoint expression pipeline
 
-Outside `src/mos6502/`, only those marked re-exports and tests name a 6502 type. Keep it that
-way: the core is due to move into its own crate (multi-CPU step 1, PR 4).
+A CPU implemented in another crate builds on `MachineState`'s public accessors and per-step helpers
+(`check_halt`, `finish_cycle`, `tick_idle`, `irq_recognized`); `emma6k_core::exec::toy` (test-only)
+is a minimal example. **Cross-crate inlining:** the 6502 calls into core on every instruction, and
+a non-generic core function only inlines across the crate boundary if it is `#[inline]`. Keep the
+hot `Bus`, `InterruptController`, `MachineState`, `LogSender::set_cycles`, and
+`WatchEvaluator::is_empty` paths `#[inline]`; removing one cost ~7% in the PR 4 benchmark.
 
 ### Crate structure
 
 ```
-src/
-  lib.rs                  — pub mod emulator, mos6502, watch; re-exports assembler, disassembler
+src/                        — crate emma65
+  lib.rs                    — pub mod emulator, mos6502; re-exports watch, assembler, disassembler
+  emulator.rs               — the emma65::emulator facade (emma6k_core + 6502 re-exports)
   bin/
     emulator/
       main.rs              — emma65 binary entry point
@@ -111,27 +128,6 @@ src/
     tracer/
       main.rs               — emma65-tracer binary entry point (CLI args, trace decode loop)
       format.rs             — text rendering of decoded trace rows
-  emulator/                 — the CPU-neutral core
-    mod.rs                  — re-exports the public API surface (plus the 6502 re-exports)
-    processor.rs            — Processor trait, HaltState
-    machine.rs              — MachineState: bus, interrupts, watch evaluator, breakpoints, clock
-                               speed, cycles, vector resolver, log sender; shared per-step helpers
-    bus/                    — Bus, BusConfig, address regions, DeviceIdAllocator, symbol
-                               table (VICE label loading), bus loader, Interrupt controller,
-                               IrqSource, VectorResolver (bus/vector.rs)
-    device/                 — IoDevice trait, built-in devices, device/protocol (VIA and PTM
-                               peer-communication message encoders/decoders)
-    error.rs                — BusConfigError, BusError, CpuBuildError, ExecError
-    exec/                   — generic over P: Processor: StepResult<Op>, CpuLiveSnapshot<R>,
-                               RunHandle<P>, RunStopper, ClockSpeed, run(), run_from(),
-                               step_into(), step_over_subroutine(), step_over_breakpoint(),
-                               step_return(); exec/toy.rs is a test-only toy Processor
-    transport/               — Transport trait, ChannelRelay, TransportRelay, TransportReporter,
-                               InternalPipeTransport, PipeTransport, TcpSocketTransport,
-                               UnixSocketTransport, PtyTransport
-    session.rs               — EmulatorSession<P> (owns the CPU, ErrorReceiver, DeviceIdAllocator)
-    config/                  — device spec/module registry, build_machine, template mechanism
-                               (see below)
   mos6502/                  — everything specific to the 65C02
     cpu/                    — Cpu, CpuBuilder, Registers, Processor impl, opcode decode, ALU,
                                status register, variant, bus-access trace recording (binary
@@ -141,7 +137,32 @@ src/
     disassembler/           — Disassembler, and disassembler/trace (reconstructs disassembly
                                lines from a recorded trace stream)
     assembler/              — 65C02 assembler
+    exec_tests.rs, device_tests.rs — 6502-driven tests of core exec and devices
+core/src/                   — crate emma6k-core, the CPU-neutral core
+  lib.rs                    — module declarations and the root re-export surface
+  processor.rs              — Processor trait, HaltState
+  machine.rs                — MachineState: bus, interrupts, watch evaluator, breakpoints, clock
+                               speed, cycles, vector resolver, log sender; accessors and per-step
+                               helpers
+  bus/                      — Bus, BusConfig, address regions, DeviceIdAllocator, symbol
+                               table (VICE label loading), bus loader, Interrupt controller,
+                               IrqSource, VectorResolver (bus/vector.rs)
+  device/                   — IoDevice trait, built-in devices, device/protocol (VIA and PTM
+                               peer-communication message encoders/decoders)
+  error.rs                  — BusConfigError, BusError, CpuBuildError, ExecError
+  exec/                     — generic over P: Processor: StepResult<Op>, CpuLiveSnapshot<R>,
+                               RunHandle<P>, RunStopper, ClockSpeed, run(), run_from(),
+                               step_into(), step_over_subroutine(), step_over_breakpoint(),
+                               step_return(); exec/toy.rs is a test-only toy Processor
+  transport/                — Transport trait, ChannelRelay, TransportRelay, TransportReporter,
+                               InternalPipeTransport, PipeTransport, TcpSocketTransport,
+                               UnixSocketTransport, PtyTransport
+  session.rs                — EmulatorSession<P> (owns the CPU, ErrorReceiver, DeviceIdAllocator)
+  config/                   — device spec/module registry, build_machine, template mechanism
+                               (see below)
+  logging.rs                — LogSender, log writer/collector threads, log_channel, log_msg!
   watch/                    — watchpoint expression pipeline (see below)
+  location.rs, text.rs      — source-text helpers shared by watch and CPU assemblers
 debugger/
   src-tauri/                — emma6k-debugger: Tauri commands/state per UI panel (see below)
   frontend/                 — React/TypeScript/Vite UI (panels, styles, keybindings)
@@ -152,7 +173,7 @@ peripheral over a transport, useful for manually exercising `Via6522`'s shift-re
 
 ---
 
-### `emulator::config` module (`src/emulator/config/`)
+### `emulator::config` module (`core/src/config/`)
 
 Multi-source configuration (TOML < `EMMA65_*` env vars < CLI args) via `figment` + `clap`.
 
@@ -171,7 +192,7 @@ type.
 
 **Templates.** The CPU-neutral mechanism (`Template`, `TemplateError`, `find_in`,
 `materialize_from`, and the asset writer) is `emulator::config::template`
-(`src/emulator/config/template/`). The 6502's entries are **`mos6502::templates`
+(`core/src/config/template/`). The 6502's entries are **`mos6502::templates`
 (`src/mos6502/templates/`)**, also reachable as `emma65::emulator::config::templates` — a
 registry of bundled "starter profile" templates, each its own subdirectory (`taliforth/`, `msbasic/`,
 `ehbasic/`, `rain/`, `lcd/`, `snake/`) holding a checked-in device-layout template
@@ -272,7 +293,7 @@ async I/O task; `TransportReporter` surfaces connect/disconnect/error events as 
 
 ---
 
-### `watch` module (`src/watch/`)
+### `watch` module (`core/src/watch/`)
 
 A self-contained pipeline for evaluating watchpoint expressions against live machine state.
 

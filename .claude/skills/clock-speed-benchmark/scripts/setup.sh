@@ -8,7 +8,7 @@ set -euo pipefail
 
 skill_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-if [ ! -f Cargo.toml ] || [ ! -d src/emulator ]; then
+if [ ! -f Cargo.toml ] || ! grep -q '^name = "emma65"' Cargo.toml; then
   echo "error: run this from the emma6k repository root" >&2
   exit 1
 fi

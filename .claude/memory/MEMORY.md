@@ -4,7 +4,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 
 ## Current work
 - [emma6k rename](emma6k-rename.md) — merged in #661: naming rule, what kept the emma65 name, old tag prefixes, moved-checkout steps (per-user memory pointer, `cargo clean`); both hosts moved (2026-11-26)
-- [Multi-CPU effort](multi-cpu-effort.md) — step 1 PRs 1–3 merged (#664–666); PR 4 (core crate) timing is the user's call; PR 4 notes; 6809 via a `Processor` trait; plan in plan/; user decisions
+- [Multi-CPU effort](multi-cpu-effort.md) — RESUME HERE: step 1 PR 4 (`emma6k-core` crate) open as #668, PRs 1–3 merged; resume checklist; cross-crate #[inline] trap; step 2 (6809) needs a plan first
 - [macOS port effort](macos-port-effort.md) — plan/macos-port-plan.md (#663); Unit 1 (SDL2 use-pkgconfig, cfg the 4 window_for_events clones, commit macOS-schema.json, install.md macOS) exact steps; run on the Mac; ask priority vs multi-CPU
 - [Open issues](open-issues.md) — #646 epic (ask before closing) + follow-ons #656–659; frontend test coverage #559/#560; #667 unmapped writes are silent
 
@@ -35,7 +35,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 - [deny_unknown_fields on attributes](deny-unknown-fields-device-attributes.md) — every device *Attributes struct gets it
 - [Avoid side-effect caveats](avoid-side-effect-caveats.md) — a design needing a caveat is a cue to drop the capability
 - [macOS + Linux portability](macos-linux-portability.md) — Linux primary; no macOS CI, Linux CI cross-checks emma65 for darwin; Intel-only local builds; port progress in macos-port-effort; keep F-keys
-- [Clock bench baselines](clock-bench-baseline.md) — per host, both 2026-11-26 pre-refactor: Linux Ryzen ~36/~87 MHz accurate, macOS i9 ~26/~50 MHz
+- [Clock bench baselines](clock-bench-baseline.md) — per host: Linux Ryzen ~41/~106 MHz top speed after step 1 (pre-refactor ~36/~87), macOS i9 ~26/~50 MHz pre-refactor
 
 ## Docs
 - [plan/ frozen, doc/ current](plan-frozen-doc-current.md) — never retrofit superseded plan docs; always keep the wiki current

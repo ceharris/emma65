@@ -28,9 +28,9 @@ use super::instructions::{InstructionTable, mnemonic_from_str};
 use super::operand::{OperandSyntax, parse_operand};
 use super::parser::Parser;
 use super::token::{Token, TokenType};
-use crate::location::Location;
 use crate::mos6502::cpu::opcodes::{AddressingMode, Mnemonic};
 use crate::mos6502::cpu::variant::CpuVariant;
+use emma6k_core::location::Location;
 
 /// A `.byte` operand: either a numeric expression (truncated to one byte) or
 /// a string literal (each character emitted as one byte).

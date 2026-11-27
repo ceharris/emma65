@@ -6,14 +6,14 @@
 //! [`build_machine`]; this module wraps the resulting machine state in a
 //! [`Cpu`].
 use self::CpuVariantSpec::{Cmos6502, Wdc6502};
-use crate::emulator::config::{
-    BuildError, DeviceRegistry, DeviceSpec, InstantiationContext, MachineSpec, UnmappedPolicySpec,
-    build_machine,
-};
 use crate::mos6502::EmulatorSession;
 use crate::mos6502::cpu::Cpu;
 use crate::mos6502::cpu::variant::CpuVariant;
 use clap::Parser;
+use emma6k_core::config::{
+    BuildError, DeviceRegistry, DeviceSpec, InstantiationContext, MachineSpec, UnmappedPolicySpec,
+    build_machine,
+};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
@@ -161,10 +161,10 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::emulator::BusConfig;
-    use crate::emulator::bus::DeviceIdAllocator;
-    use crate::emulator::config::DeviceModuleError;
-    use crate::emulator::{BusConfigError, DeviceModule, IdentityVectorResolver};
+    use emma6k_core::BusConfig;
+    use emma6k_core::bus::DeviceIdAllocator;
+    use emma6k_core::config::DeviceModuleError;
+    use emma6k_core::{BusConfigError, DeviceModule, IdentityVectorResolver};
     use figment::value::Value;
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
@@ -258,7 +258,7 @@ mod tests {
         let mut session = config.build(&registry).await.unwrap();
         assert!(matches!(
             session.cpu.bus_mut().read(0x1000),
-            Err(crate::emulator::BusError::Unmapped { addr: 0x1000 })
+            Err(emma6k_core::BusError::Unmapped { addr: 0x1000 })
         ));
     }
 

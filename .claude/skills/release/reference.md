@@ -12,11 +12,14 @@ whatever commit is on `main` gets packaged into the next `emma65-v*` combined re
 
 | Crate | Directory | `Cargo.toml` path(s) | Changelog | Tag prefix | Triggers build |
 |---|---|---|---|---|---|
-| `emma65` | repo root | `Cargo.toml` | `CHANGELOG.md` | `emma65-v` | **Yes** — combined `.deb`/`.rpm` |
+| `emma65` (with `emma6k-core`) | repo root, plus `core/` | `Cargo.toml` (`version`, and the `emma6k-core` dependency's `version`), `core/Cargo.toml` — all three must match | `CHANGELOG.md` | `emma65-v` | **Yes** — combined `.deb`/`.rpm` |
 | `emma6k-display` | `display/` | `display/Cargo.toml` | `display/CHANGELOG.md` | `emma6k-display-v` | No |
 | `emma6k-led-matrix` | `led-matrix/` | `led-matrix/Cargo.toml` | `led-matrix/CHANGELOG.md` | `emma6k-led-matrix-v` | No |
 | `emma6k-lcd-display` | `lcd-display/` | `lcd-display/Cargo.toml` | `lcd-display/CHANGELOG.md` | `emma6k-lcd-display-v` | No |
 | `emma6k-debugger` | `debugger/src-tauri/` | `debugger/src-tauri/Cargo.toml`, `debugger/src-tauri/tauri.conf.json` (`.version`), `debugger/frontend/package.json` (`.version`) — all three must match | `debugger/src-tauri/CHANGELOG.md` | `emma6k-debugger-v` | No |
+
+`emma6k-core` has no row of its own: it is versioned in lockstep with `emma65` and released only
+as part of an `emma65` release (see `SKILL.md`).
 
 The four `emma6k-*` crates were named `emma65-*` through 0.1.0, so their tags up to and including
 0.1.0 use the legacy prefixes `emma65-display-v`, `emma65-led-matrix-v`, `emma65-lcd-display-v`,
@@ -53,7 +56,7 @@ override it if they disagree.
 
 | Artifact | Breaking | Additive | Fix-only |
 |---|---|---|---|
-| `emma65` | Remove/rename a public `emulator`/`watch` API item; change a CLI flag's name or required-ness; change/remove a TOML config key or its accepted value shape; change the binary trace format so older `emma65-tracer` builds can't decode newer trace files | New public API item with no existing signature touched; new optional CLI flag; new optional TOML config key with a backward-compatible default; new trace record kind that older readers can skip | Bug fixes, perf improvements, doc-comment fixes with no API/CLI/config/trace-format change |
+| `emma65` (and `emma6k-core`) | Remove/rename a public `emulator`/`watch` API item, or a public `emma6k-core` item (the `emulator` module re-exports it); change a CLI flag's name or required-ness; change/remove a TOML config key or its accepted value shape; change the binary trace format so older `emma65-tracer` builds can't decode newer trace files | New public API item with no existing signature touched; new optional CLI flag; new optional TOML config key with a backward-compatible default; new trace record kind that older readers can skip | Bug fixes, perf improvements, doc-comment fixes with no API/CLI/config/trace-format change |
 | `emma6k-display` | Remove/rename a CLI flag; incompatible change to the wire protocol in `plan/char-display-external-protocol.md` (framing, field meaning/order) | New optional CLI flag; backward-compatible protocol extension (new message type an older peer can ignore) | Rendering/crash bug fixes with no CLI/protocol change |
 | `emma6k-led-matrix` | Remove/rename a CLI flag; incompatible change to `plan/led-matrix-external-protocol.md` | New optional CLI flag; backward-compatible protocol extension | Rendering/timing bug fixes with no CLI/protocol change |
 | `emma6k-lcd-display` | Remove/rename a CLI flag; incompatible change to `plan/lcd-display-external-protocol.md` (including font/geometry negotiation semantics) | New optional CLI flag; backward-compatible protocol extension | Rendering bug fixes with no CLI/protocol change |
