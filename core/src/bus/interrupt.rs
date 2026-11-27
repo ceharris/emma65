@@ -153,7 +153,7 @@ impl InterruptController {
     }
 
     /// Routes the sources whose bits are set in `mask` to the FIRQ line instead of IRQ.
-    /// Called once, when the machine is built; see the [module docs](self#firq-routing).
+    /// Called once, when the machine is built; see the module docs on FIRQ routing.
     pub fn set_firq_mask(&mut self, mask: u64) {
         self.firq_mask = mask;
     }
@@ -183,6 +183,15 @@ impl InterruptController {
     #[inline]
     pub fn consume_irq_pulses(&mut self) {
         let consumed = self.irq_pulse_sources & !self.firq_mask;
+        self.irq_sources &= !consumed;
+        self.irq_pulse_sources &= !consumed;
+    }
+
+    /// Releases all FIRQ-routed sources currently asserted in pulse mode: the FIRQ
+    /// counterpart of [`consume_irq_pulses`](Self::consume_irq_pulses), called once a FIRQ
+    /// has been serviced. Pulsed sources routed to IRQ stay pending.
+    pub fn consume_firq_pulses(&mut self) {
+        let consumed = self.irq_pulse_sources & self.firq_mask;
         self.irq_sources &= !consumed;
         self.irq_pulse_sources &= !consumed;
     }
@@ -531,6 +540,26 @@ mod tests {
         ctrl.assert_irq_pulse(IrqSource(2));
         ctrl.consume_irq_pulses();
         assert!(!ctrl.irq_active());
+        assert!(ctrl.firq_active());
+    }
+
+    #[test]
+    fn consume_firq_pulses_leaves_irq_routed_pulses_pending() {
+        let mut ctrl = InterruptController::new();
+        ctrl.set_firq_mask(1 << 2);
+        ctrl.assert_irq_pulse(IrqSource(1));
+        ctrl.assert_irq_pulse(IrqSource(2));
+        ctrl.consume_firq_pulses();
+        assert!(!ctrl.firq_active());
+        assert!(ctrl.irq_active());
+    }
+
+    #[test]
+    fn consume_firq_pulses_keeps_a_level_asserted_firq_source() {
+        let mut ctrl = InterruptController::new();
+        ctrl.set_firq_mask(1 << 2);
+        ctrl.assert_irq(IrqSource(2));
+        ctrl.consume_firq_pulses();
         assert!(ctrl.firq_active());
     }
 

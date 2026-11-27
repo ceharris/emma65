@@ -67,9 +67,9 @@ starter templates, whose ROMs are 6502 programs) all live under `mos6502`.
 The two crates are versioned and released together.
 
 A second CPU, the Motorola 6809, is being added in its own crate, `emma09`,
-built on `emma6k-core` alone. Its instruction set is in place and passes
-W. Schwotzer's MC6809 CPU test suite; interrupts, configuration, and a way to
-run it from the command line are still to come.
+built on `emma6k-core` alone. Its instruction set, interrupts and
+configuration are in place, and it passes W. Schwotzer's MC6809 CPU test
+suite; a way to run it from the command line is still to come.
 
 ## Bus
 

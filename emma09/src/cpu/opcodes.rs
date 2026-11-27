@@ -85,6 +85,9 @@ impl AddressingMode {
 #[allow(missing_docs)]
 pub enum Mnemonic {
     Invalid,
+    /// Not an instruction: the CPU serviced a hardware interrupt (NMI, FIRQ
+    /// or IRQ) in this step. See [`DecodedOp::interrupt`].
+    Interrupt,
     // Memory read-modify-write, and JMP.
     Neg,
     Com,
@@ -266,7 +269,9 @@ pub struct DecodedOp {
 }
 
 impl DecodedOp {
-    /// Builds the decoded form of `opcode` on `page`.
+    /// Builds the decoded form of `opcode` on `page`. Inlined: `step` calls
+    /// it for every instruction.
+    #[inline]
     pub fn new(page: Page, opcode: u8) -> Self {
         let info = lookup(page, opcode);
         Self {
@@ -275,6 +280,19 @@ impl DecodedOp {
             mnemonic: info.mnemonic,
             mode: info.mode,
             base_cycles: info.cycles,
+        }
+    }
+
+    /// The step result's op for a serviced hardware interrupt, which isn't
+    /// an instruction: mnemonic [`Mnemonic::Interrupt`], opcode 0, and the
+    /// service's cycles.
+    pub fn interrupt(cycles: u8) -> Self {
+        Self {
+            page: Page::Page1,
+            opcode: 0,
+            mnemonic: Mnemonic::Interrupt,
+            mode: AddressingMode::Inherent,
+            base_cycles: cycles,
         }
     }
 

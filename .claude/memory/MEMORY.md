@@ -4,7 +4,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 
 ## Current work
 - [emma6k rename](emma6k-rename.md) — merged in #661: naming rule, what kept the emma65 name, old tag prefixes, moved-checkout steps (per-user memory pointer, `cargo clean`); both hosts moved (2026-11-26)
-- [Multi-CPU effort](multi-cpu-effort.md) — RESUME HERE: step 1 complete (#664–668); step 2 plan in plan/multi-cpu-step2-mc6809-plan.md; Unit 1 merged (#670), Unit 2 (`emma09` crate) PR in review, next Unit 3 (interrupts + config); wiki `interrupt` docs due in Unit 3; cross-crate #[inline] trap
+- [Multi-CPU effort](multi-cpu-effort.md) — RESUME HERE: step 1 complete (#664–668); step 2 plan in plan/multi-cpu-step2-mc6809-plan.md; Units 1–2 merged (#670–671), Unit 3 (6809 interrupts + config) PR in review, next Unit 4 (`emma6k` CLI); wiki `interrupt` docs due in Unit 4; MC6850 TX-IRQ bug filed (#673); cross-crate #[inline] trap
 - [emma09 mutation testing](emma09-mutation-testing.md) — cargo-mutants set up (.cargo/mutants.toml, 893 mutants); run deferred until the 6809 work wraps up
 - [macOS port effort](macos-port-effort.md) — plan/macos-port-plan.md (#663); Unit 1 (SDL2 use-pkgconfig, cfg the 4 window_for_events clones, commit macOS-schema.json, install.md macOS) exact steps; run on the Mac; ask priority vs multi-CPU
 - [Open issues](open-issues.md) — #646 epic (ask before closing) + follow-ons #656–659; frontend test coverage #559/#560; #667 unmapped writes are silent
@@ -37,7 +37,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 - [deny_unknown_fields on attributes](deny-unknown-fields-device-attributes.md) — every device *Attributes struct gets it
 - [Avoid side-effect caveats](avoid-side-effect-caveats.md) — a design needing a caveat is a cue to drop the capability
 - [macOS + Linux portability](macos-linux-portability.md) — Linux primary; no macOS CI, Linux CI cross-checks emma65 for darwin; Intel-only local builds; port progress in macos-port-effort; keep F-keys
-- [Clock bench baselines](clock-bench-baseline.md) — per host: Linux Ryzen ~41/~106 MHz top speed after step 1 (pre-refactor ~36/~87), macOS i9 ~26/~50 MHz pre-refactor; 6809 ~127 MHz (Unit 2 loop); re-bracket the sweep and A/B against same-day main; layout swings ±4%, use perf instructions-per-emulated-cycle to tell
+- [Clock bench baselines](clock-bench-baseline.md) — per host: Linux Ryzen ~41/~106 MHz top speed after step 1 (pre-refactor ~36/~87), macOS i9 ~26/~50 MHz pre-refactor; 6809 ~125 MHz (Unit 3 loop); re-bracket the sweep and A/B against same-day main; layout swings ±4%, use perf instructions-per-emulated-cycle to tell
 
 ## Docs
 - [plan/ frozen, doc/ current](plan-frozen-doc-current.md) — never retrofit superseded plan docs; always keep the wiki current

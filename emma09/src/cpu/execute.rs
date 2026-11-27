@@ -9,8 +9,10 @@
 
 use super::cc::ConditionCodes;
 use super::opcodes::{AddressingMode, DecodedOp, Mnemonic};
-use super::{Cpu, SWI_VECTOR, SWI2_VECTOR, SWI3_VECTOR, indexed};
-use emma6k_core::HaltState;
+use super::{
+    CWAI_WAKE_CYCLES, Cpu, ENTIRE_INTERRUPT_CYCLES, FAST_INTERRUPT_CYCLES, FIRQ_VECTOR, IRQ_VECTOR,
+    Interrupt, NMI_VECTOR, SWI_VECTOR, SWI2_VECTOR, SWI3_VECTOR, Wait, indexed,
+};
 use emma6k_core::error::ExecError;
 
 const C: u8 = ConditionCodes::C.bits();
@@ -59,7 +61,9 @@ impl Cpu {
         let mode = op.mode;
         let mut cycles = op.base_cycles;
         match op.mnemonic {
-            Invalid => unreachable!("step() handles undocumented opcodes"),
+            Invalid | Interrupt => {
+                unreachable!("step() handles undocumented opcodes and interrupts")
+            }
 
             // Memory read-modify-write. The opcode's low nibble selects the
             // operation, as in the accumulator forms. CLR reads before
@@ -90,7 +94,7 @@ impl Cpu {
             }
 
             Nop => {}
-            Sync => self.halt = HaltState::Waiting,
+            Sync => self.wait = Wait::Sync,
             Daa => self.daa(),
             Orcc => {
                 let mask = self.fetch8()?;
@@ -195,7 +199,7 @@ impl Cpu {
                 self.regs.cc = ConditionCodes::from_byte(self.regs.cc.to_byte() & mask);
                 self.regs.cc.insert(ConditionCodes::E);
                 self.push_registers(Stack::S, PUSH_ALL)?;
-                self.halt = HaltState::Waiting;
+                self.wait = Wait::Cwai;
             }
             Mul => {
                 let d = self.regs.a as u16 * self.regs.b as u16;
@@ -627,10 +631,12 @@ impl Cpu {
     }
 
     /// Loads S by an explicit instruction (LDS, LEAS, TFR/EXG, PULU),
-    /// unlike the stack pointer's own pushes and pulls.
+    /// unlike the stack pointer's own pushes and pulls. The first such load
+    /// after a reset arms NMI.
     #[inline]
     fn load_s(&mut self, value: u16) {
         self.regs.s = value;
+        self.nmi_armed = true;
     }
 
     // --- TFR/EXG registers ---
@@ -807,6 +813,40 @@ impl Cpu {
         self.push16(Stack::S, self.regs.pc)?;
         self.regs.pc = target;
         Ok(())
+    }
+
+    /// Services a hardware interrupt: stacks the state (unless a CWAI already
+    /// did), masks interrupts, consumes the request, and jumps through the
+    /// interrupt's vector. Returns the cycles taken.
+    pub(super) fn service_interrupt(&mut self, interrupt: Interrupt) -> Result<u8, ExecError> {
+        let (vector, mask) = match interrupt {
+            Interrupt::Nmi => (NMI_VECTOR, ConditionCodes::I | ConditionCodes::F),
+            Interrupt::Firq => (FIRQ_VECTOR, ConditionCodes::I | ConditionCodes::F),
+            Interrupt::Irq => (IRQ_VECTOR, ConditionCodes::I),
+        };
+        let cycles = if self.wait == Wait::Cwai {
+            // CWAI stacked the entire state and set E.
+            self.wait = Wait::None;
+            CWAI_WAKE_CYCLES
+        } else if interrupt == Interrupt::Firq {
+            self.regs.cc.remove(ConditionCodes::E);
+            self.push_registers(Stack::S, PUSH_PC | PUSH_CC)?;
+            FAST_INTERRUPT_CYCLES
+        } else {
+            self.regs.cc.insert(ConditionCodes::E);
+            self.push_registers(Stack::S, PUSH_ALL)?;
+            ENTIRE_INTERRUPT_CYCLES
+        };
+        self.regs.cc.insert(mask);
+        let interrupts = self.machine.interrupts_mut();
+        match interrupt {
+            Interrupt::Nmi => _ = interrupts.take_nmi(),
+            Interrupt::Firq => interrupts.consume_firq_pulses(),
+            Interrupt::Irq => interrupts.consume_irq_pulses(),
+        }
+        let resolved = self.machine.resolve_vector(vector);
+        self.regs.pc = self.read16(resolved)?;
+        Ok(cycles)
     }
 
     /// SWI, SWI2 or SWI3: sets E, pushes the entire state on S, masks IRQ and

@@ -395,7 +395,7 @@ fn cwai_clears_cc_bits_stacks_the_state_and_waits() {
     assert!(matches!(cpu.step(None, true), StepResult::Waiting));
     assert_eq!(cpu.pc(), START + 2);
 
-    // Until interrupt servicing exists, a reset ends the wait.
+    // A reset ends the wait too.
     cpu.interrupts_mut().signal_reset();
     assert!(matches!(cpu.step(None, true), StepResult::Reset));
     assert_eq!(cpu.halt_state(), HaltState::Running);
@@ -628,4 +628,297 @@ fn watch_context_reads_registers_and_memory_big_endian() {
     assert_eq!(ctx.read_register_i32(REG_B), (-1i32) as u32);
     assert_eq!(ctx.read_flag(0x08), 1);
     assert_eq!(ctx.read_flag(0x04), 0);
+}
+
+// --- hardware interrupts ---
+
+mod interrupts {
+    use super::*;
+    use emma6k_core::IrqSource;
+
+    const HANDLER: u16 = 0x2000;
+    const IRQ_SOURCE: IrqSource = IrqSource(1);
+    const FIRQ_SOURCE: IrqSource = IrqSource(2);
+
+    /// A CPU with `program` at `START`, NMI armed, no interrupts masked, an
+    /// `RTI` at `HANDLER`, and every hardware vector pointing there. Source 2
+    /// is routed to FIRQ.
+    fn interruptible(program: &[u8]) -> Cpu {
+        let mut cpu = cpu(program);
+        for vector in [NMI_VECTOR, FIRQ_VECTOR, IRQ_VECTOR] {
+            write(&mut cpu, vector, &HANDLER.to_be_bytes());
+        }
+        write(&mut cpu, HANDLER, &[0x3B]);
+        cpu.nmi_armed = true;
+        cpu.regs.cc = ConditionCodes::empty();
+        cpu.interrupts_mut().set_firq_mask(1 << FIRQ_SOURCE.0);
+        cpu
+    }
+
+    /// Steps once, expecting an interrupt service; returns its cycles.
+    fn service(cpu: &mut Cpu) -> u64 {
+        let before = cpu.cycles();
+        match cpu.step(None, true) {
+            StepResult::Executed(op) if op.mnemonic == opcodes::Mnemonic::Interrupt => {
+                cpu.cycles() - before
+            }
+            StepResult::Executed(op) => panic!("executed {:?} instead", op.mnemonic),
+            _ => panic!("expected an interrupt service"),
+        }
+    }
+
+    fn stacked(cpu: &Cpu, len: u16) -> Vec<u8> {
+        let s = cpu.registers().s;
+        (0..len).map(|i| peek(cpu, s + i)).collect()
+    }
+
+    #[test]
+    fn irq_stacks_the_entire_state_and_sets_i() {
+        let mut cpu = interruptible(&[0x12]);
+        cpu.regs.a = 0x42;
+        cpu.interrupts_mut().assert_irq(IRQ_SOURCE);
+        assert_eq!(service(&mut cpu), 19);
+        assert_eq!(cpu.pc(), HANDLER);
+        assert_eq!(cpu.registers().s, STACK - 12);
+        let frame = stacked(&cpu, 12);
+        assert_eq!(frame[0], 0x80, "stacked CC: E");
+        assert_eq!(frame[1], 0x42, "stacked A");
+        assert_eq!(&frame[10..], &START.to_be_bytes(), "stacked PC");
+        assert_eq!(cc(&cpu).to_byte(), 0x90, "live CC: E and I, F unchanged");
+
+        cpu.interrupts_mut().release_irq(IRQ_SOURCE);
+        assert_eq!(step(&mut cpu), 15, "RTI pulls the entire state");
+        assert_eq!(cpu.pc(), START);
+        assert_eq!(cpu.registers().s, STACK);
+    }
+
+    #[test]
+    fn firq_stacks_only_pc_and_cc_and_sets_i_and_f() {
+        let mut cpu = interruptible(&[0x12]);
+        cpu.regs.cc = ConditionCodes::E | ConditionCodes::C;
+        cpu.interrupts_mut().assert_irq(FIRQ_SOURCE);
+        assert_eq!(service(&mut cpu), 10);
+        assert_eq!(cpu.pc(), HANDLER);
+        assert_eq!(cpu.registers().s, STACK - 3);
+        let frame = stacked(&cpu, 3);
+        assert_eq!(frame[0], 0x01, "stacked CC: E cleared, C kept");
+        assert_eq!(&frame[1..], &START.to_be_bytes());
+        assert_eq!(cc(&cpu).to_byte(), 0x51, "live CC: F, I and C");
+
+        cpu.interrupts_mut().release_irq(FIRQ_SOURCE);
+        assert_eq!(step(&mut cpu), 6, "RTI pulls CC and PC");
+        assert_eq!(cpu.pc(), START);
+        assert_eq!(cc(&cpu).to_byte(), 0x01);
+    }
+
+    #[test]
+    fn nmi_stacks_the_entire_state_and_sets_i_and_f() {
+        let mut cpu = interruptible(&[0x12]);
+        cpu.interrupts_mut().signal_nmi();
+        assert_eq!(service(&mut cpu), 19);
+        assert_eq!(cpu.pc(), HANDLER);
+        assert_eq!(cpu.registers().s, STACK - 12);
+        assert_eq!(cc(&cpu).to_byte(), 0xD0, "live CC: E, F and I");
+        assert!(!cpu.interrupts().nmi_pending(), "the edge is consumed");
+    }
+
+    #[test]
+    fn interrupts_use_their_own_vectors() {
+        for (vector, trigger) in [(NMI_VECTOR, 0), (FIRQ_VECTOR, 1), (IRQ_VECTOR, 2)] {
+            let mut cpu = interruptible(&[0x12]);
+            write(&mut cpu, vector, &[0x24, 0x68]);
+            match trigger {
+                0 => cpu.interrupts_mut().signal_nmi(),
+                1 => cpu.interrupts_mut().assert_irq(FIRQ_SOURCE),
+                _ => cpu.interrupts_mut().assert_irq(IRQ_SOURCE),
+            }
+            service(&mut cpu);
+            assert_eq!(cpu.pc(), 0x2468, "vector ${vector:04X}");
+        }
+    }
+
+    #[test]
+    fn nmi_waits_until_a_program_loads_s() {
+        // NOP; LDS #STACK; NOP. Disarm NMI as a reset does.
+        let [hi, lo] = STACK.to_be_bytes();
+        let mut cpu = interruptible(&[0x12, 0x10, 0xCE, hi, lo, 0x12]);
+        cpu.nmi_armed = false;
+        cpu.interrupts_mut().signal_nmi();
+        step(&mut cpu); // NOP: the NMI stays pending
+        assert!(cpu.interrupts().nmi_pending());
+        step(&mut cpu); // LDS arms NMI
+        assert_eq!(service(&mut cpu), 19);
+        assert_eq!(cpu.pc(), HANDLER);
+    }
+
+    #[test]
+    fn every_explicit_load_of_s_arms_nmi() {
+        let [hi, lo] = STACK.to_be_bytes();
+        let programs: &[(&str, &[u8])] = &[
+            ("LDS", &[0x10, 0xCE, hi, lo]),
+            ("LEAS", &[0x32, 0x62]), // LEAS 2,S
+            ("TFR X,S", &[0x1F, 0x14]),
+            ("EXG X,S", &[0x1E, 0x14]),
+            ("PULU S", &[0x37, 0x40]),
+        ];
+        for &(name, program) in programs {
+            let mut cpu = interruptible(program);
+            cpu.nmi_armed = false;
+            cpu.regs.u = 0x4000;
+            step(&mut cpu);
+            assert!(cpu.nmi_armed, "{name}");
+        }
+        // A push or pull through S doesn't.
+        let mut cpu = interruptible(&[0x34, 0x02, 0x35, 0x02]);
+        cpu.nmi_armed = false;
+        steps(&mut cpu, 2);
+        assert!(!cpu.nmi_armed, "PSHS/PULS");
+    }
+
+    #[test]
+    fn reset_disarms_nmi() {
+        let mut cpu = interruptible(&[0x12]);
+        cpu.reset().unwrap();
+        assert!(!cpu.nmi_armed);
+    }
+
+    #[test]
+    fn nmi_comes_before_firq_and_firq_before_irq() {
+        let mut cpu = interruptible(&[0x12]);
+        write(&mut cpu, NMI_VECTOR, &[0x30, 0x00]);
+        write(&mut cpu, FIRQ_VECTOR, &[0x31, 0x00]);
+        write(&mut cpu, IRQ_VECTOR, &[0x32, 0x00]);
+        cpu.interrupts_mut().signal_nmi();
+        cpu.interrupts_mut().assert_irq(FIRQ_SOURCE);
+        cpu.interrupts_mut().assert_irq(IRQ_SOURCE);
+        service(&mut cpu);
+        assert_eq!(cpu.pc(), 0x3000, "NMI first");
+
+        let mut cpu = interruptible(&[0x12]);
+        write(&mut cpu, FIRQ_VECTOR, &[0x31, 0x00]);
+        write(&mut cpu, IRQ_VECTOR, &[0x32, 0x00]);
+        cpu.interrupts_mut().assert_irq(FIRQ_SOURCE);
+        cpu.interrupts_mut().assert_irq(IRQ_SOURCE);
+        service(&mut cpu);
+        assert_eq!(cpu.pc(), 0x3100, "FIRQ before IRQ");
+    }
+
+    #[test]
+    fn firq_preempts_an_irq_handler() {
+        // IRQ sets only I, so a FIRQ can interrupt the IRQ handler.
+        let mut cpu = interruptible(&[0x12]);
+        write(&mut cpu, IRQ_VECTOR, &[0x30, 0x00]);
+        write(&mut cpu, 0x3000, &[0x12]);
+        cpu.interrupts_mut().assert_irq(IRQ_SOURCE);
+        service(&mut cpu);
+        assert_eq!(cpu.pc(), 0x3000);
+        cpu.interrupts_mut().assert_irq(FIRQ_SOURCE);
+        assert_eq!(service(&mut cpu), 10);
+        assert_eq!(cpu.pc(), HANDLER);
+        assert_eq!(cpu.registers().s, STACK - 15);
+    }
+
+    #[test]
+    fn masked_interrupts_are_not_serviced() {
+        let mut cpu = interruptible(&[0x12, 0x12]);
+        cpu.regs.cc = ConditionCodes::I | ConditionCodes::F;
+        cpu.interrupts_mut().assert_irq(IRQ_SOURCE);
+        cpu.interrupts_mut().assert_irq(FIRQ_SOURCE);
+        assert_eq!(step(&mut cpu), 2);
+        assert_eq!(cpu.pc(), START + 1);
+    }
+
+    #[test]
+    fn a_pulsed_firq_source_is_serviced_once() {
+        let mut cpu = interruptible(&[0x12, 0x12]);
+        cpu.interrupts_mut().assert_irq_pulse(FIRQ_SOURCE);
+        service(&mut cpu);
+        step(&mut cpu); // RTI
+        assert_eq!(cpu.pc(), START);
+        assert!(!cpu.interrupts().firq_active());
+        step(&mut cpu);
+        assert_eq!(cpu.pc(), START + 1, "the NOP runs; no second FIRQ");
+    }
+
+    // --- CWAI and SYNC ---
+
+    #[test]
+    fn cwai_wakes_on_an_unmasked_interrupt_without_stacking_again() {
+        // CWAI #$EF clears I; then NOP.
+        let mut cpu = interruptible(&[0x3C, 0xEF, 0x12]);
+        cpu.regs.cc = ConditionCodes::I | ConditionCodes::F;
+        step(&mut cpu);
+        assert!(matches!(cpu.step(None, true), StepResult::Waiting));
+        cpu.interrupts_mut().assert_irq(IRQ_SOURCE);
+        assert_eq!(service(&mut cpu), CWAI_WAKE_CYCLES as u64);
+        assert_eq!(cpu.halt_state(), HaltState::Running);
+        assert_eq!(cpu.pc(), HANDLER);
+        assert_eq!(cpu.registers().s, STACK - 12, "stacked once, by CWAI");
+
+        cpu.interrupts_mut().release_irq(IRQ_SOURCE);
+        assert_eq!(step(&mut cpu), 15);
+        assert_eq!(cpu.pc(), START + 2);
+    }
+
+    #[test]
+    fn firq_after_cwai_returns_with_the_entire_state() {
+        // CWAI #$BF clears F. E stays set, so RTI pulls everything.
+        let mut cpu = interruptible(&[0x3C, 0xBF, 0x12]);
+        cpu.regs.cc = ConditionCodes::I | ConditionCodes::F;
+        cpu.regs.a = 0x42;
+        step(&mut cpu);
+        cpu.regs.a = 0;
+        cpu.interrupts_mut().assert_irq(FIRQ_SOURCE);
+        assert_eq!(service(&mut cpu), CWAI_WAKE_CYCLES as u64);
+        cpu.interrupts_mut().release_irq(FIRQ_SOURCE);
+        assert_eq!(step(&mut cpu), 15);
+        assert_eq!(cpu.registers().a, 0x42);
+        assert_eq!(cpu.pc(), START + 2);
+    }
+
+    #[test]
+    fn cwai_keeps_waiting_through_a_masked_interrupt() {
+        // CWAI #$FF leaves I and F set.
+        let mut cpu = interruptible(&[0x3C, 0xFF]);
+        cpu.regs.cc = ConditionCodes::I | ConditionCodes::F;
+        step(&mut cpu);
+        cpu.interrupts_mut().assert_irq(IRQ_SOURCE);
+        cpu.interrupts_mut().assert_irq(FIRQ_SOURCE);
+        assert!(matches!(cpu.step(None, true), StepResult::Waiting));
+        // NMI isn't maskable.
+        cpu.interrupts_mut().signal_nmi();
+        assert_eq!(service(&mut cpu), CWAI_WAKE_CYCLES as u64);
+    }
+
+    #[test]
+    fn sync_resumes_without_servicing_a_masked_interrupt() {
+        // SYNC; NOP with I set.
+        let mut cpu = interruptible(&[0x13, 0x12]);
+        cpu.regs.cc = ConditionCodes::I;
+        step(&mut cpu);
+        assert!(matches!(cpu.step(None, true), StepResult::Waiting));
+        cpu.interrupts_mut().assert_irq(IRQ_SOURCE);
+        assert_eq!(step(&mut cpu), 2, "the NOP after SYNC runs");
+        assert_eq!(cpu.pc(), START + 2);
+        assert_eq!(cpu.registers().s, STACK, "nothing stacked");
+    }
+
+    #[test]
+    fn sync_services_an_unmasked_interrupt() {
+        let mut cpu = interruptible(&[0x13, 0x12]);
+        step(&mut cpu);
+        cpu.interrupts_mut().assert_irq(FIRQ_SOURCE);
+        assert_eq!(service(&mut cpu), 10);
+        assert_eq!(cpu.pc(), HANDLER);
+        assert_eq!(&stacked(&cpu, 3)[1..], &(START + 1).to_be_bytes());
+    }
+
+    #[test]
+    fn a_disarmed_nmi_does_not_end_sync() {
+        let mut cpu = interruptible(&[0x13, 0x12]);
+        cpu.nmi_armed = false;
+        step(&mut cpu);
+        cpu.interrupts_mut().signal_nmi();
+        assert!(matches!(cpu.step(None, true), StepResult::Waiting));
+    }
 }
