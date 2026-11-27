@@ -27,7 +27,9 @@ mod write_policy;
 pub use console::ConsoleModule;
 pub use device::{DeviceModule, DeviceModuleError, DeviceSpec};
 pub use display::CharDisplayModule;
-pub use emulator::{BuildError, BuiltMachine, MachineSpec, UnmappedPolicySpec, build_machine};
+pub use emulator::{
+    BuildError, BuiltMachine, INTERRUPT_ATTRIBUTE, MachineSpec, UnmappedPolicySpec, build_machine,
+};
 pub use finch::FinchModule;
 pub use lcd_display::LcdDisplayModule;
 pub use led_matrix::LedMatrixModule;
