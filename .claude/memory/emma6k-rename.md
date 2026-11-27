@@ -10,7 +10,7 @@ The project was renamed to **emma6k** in PR #661, merged 2026-11-26, before the 
 **Naming rule (from the user):** any crate that isn't 6502-specific gets the `emma6k-` prefix. The apt/rpm package is `emma6k`; splitting it into 6502/6809 packages is a later decision. The future core crate is `emma6k-core`.
 
 **Deliberately kept the old name:**
-- `emma65` (the 6502 crate and binary), `emma65-tracer`, and the `EMMA65_*` env vars.
+- `emma65` (the 6502 crate and binary), `emma65-tracer`, and the `EMMA65_*` env vars. Multi-CPU step 2 plans to replace `emma65-tracer` with `emma6k-tracer` and `EMMA65_*` with `EMMA6K_*` (user, 2026-11-27; see [[multi-cpu-effort]]).
 - The `emma65-vX.Y.Z` tag as the trigger for the combined release build, because the package's version is the root `emma65` crate's version.
 - `~/.emma/...` paths.
 - The historical `plan/` documents, including their links to the old repo names ([[plan-frozen-doc-current]]).
