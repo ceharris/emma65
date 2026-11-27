@@ -4,7 +4,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 
 ## Current work
 - [emma6k rename](emma6k-rename.md) — merged in #661: naming rule, what kept the emma65 name, old tag prefixes, moved-checkout steps (per-user memory pointer, `cargo clean`); both hosts moved (2026-11-26)
-- [Multi-CPU effort](multi-cpu-effort.md) — RESUME HERE: step 1 complete (#664–668); step 2 plan in plan/multi-cpu-step2-mc6809-plan.md; Units 1–4 merged (#670–674), Unit 5 (CamelForth template) PR in review, next Unit 6 (trace v3); CamelForth build needs GForth 0.7.3, not the snap; after step 2: an `exit` device (EXIT + status byte → process exit code) and a CamelForth `BYE` (HCF-as-STP dropped); MC6850 TX-IRQ bug filed (#673); cross-crate #[inline] trap
+- [Multi-CPU effort](multi-cpu-effort.md) — RESUME HERE: step 1 complete (#664–668); step 2 plan in plan/multi-cpu-step2-mc6809-plan.md; Units 1–5 merged (#670–675), Unit 6 (trace v3, 6809 disassembler, emma6k-tracer; const-TRACE perf lesson) PR in review, completing step 2; CamelForth build needs GForth 0.7.3, not the snap; after step 2: an `exit` device (EXIT + status byte → process exit code) and a CamelForth `BYE` (HCF-as-STP dropped); MC6850 TX-IRQ bug filed (#673); cross-crate #[inline] trap
 - [emma09 mutation testing](emma09-mutation-testing.md) — cargo-mutants set up (.cargo/mutants.toml, 893 mutants); run deferred until the 6809 work wraps up
 - [macOS port effort](macos-port-effort.md) — plan/macos-port-plan.md (#663); Unit 1 (SDL2 use-pkgconfig, cfg the 4 window_for_events clones, commit macOS-schema.json, install.md macOS) exact steps; run on the Mac; ask priority vs multi-CPU
 - [Open issues](open-issues.md) — #646 epic (ask before closing) + follow-ons #656–659; frontend test coverage #559/#560; #667 unmapped writes are silent
@@ -18,7 +18,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 - [GitHub bodies: no hard wrap](github-body-no-hard-wrap.md) — one line per paragraph in issue/PR bodies and comments
 - [CI path filters are deliberate](ci-path-filters-deliberate.md) — debugger/SDL jobs skip src/- and core/-only changes on purpose (expensive); verify locally, don't propose widening
 - [CI clippy denies warnings](ci-clippy-deny-warnings.md) — any clippy warning fails CI; run CI's exact `-D warnings` commands before pushing
-- [Headless emulator runs](headless-emulator-runs.md) — use a WDC65C02 ROM ending in STP; never trace an unthrottled unbounded run (filled /tmp)
+- [Headless emulator runs](headless-emulator-runs.md) — use a ROM that ends itself (STP; 6809 SYNC masked); never trace a run that needs a signal to stop (filled /tmp twice; wrappers show as `emma6k`)
 - [Sudo via script](sudo-via-script.md) — no passwordless sudo; write a script for the user to run
 - [Debug the CI image locally](debug-ci-image-locally.md) — build/run .github/docker/ci locally instead of push-and-wait
 - [Check action Node runtime](check-action-node-runtime.md) — verify `runs.using` in action.yml before pinning an action version
@@ -38,7 +38,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 - [deny_unknown_fields on attributes](deny-unknown-fields-device-attributes.md) — every device *Attributes struct gets it
 - [Avoid side-effect caveats](avoid-side-effect-caveats.md) — a design needing a caveat is a cue to drop the capability
 - [macOS + Linux portability](macos-linux-portability.md) — Linux primary; no macOS CI, Linux CI cross-checks emma65 for darwin; Intel-only local builds; port progress in macos-port-effort; keep F-keys
-- [Clock bench baselines](clock-bench-baseline.md) — per host: Linux Ryzen ~41/~106 MHz top speed after step 1 (pre-refactor ~36/~87), macOS i9 ~26/~50 MHz pre-refactor; 6809 ~125 MHz (Unit 3 loop); re-bracket the sweep and A/B against same-day main; layout swings ±4%, use perf instructions-per-emulated-cycle to tell
+- [Clock bench baselines](clock-bench-baseline.md) — per host: Linux Ryzen ~41/~106 MHz top speed after step 1 (pre-refactor ~36/~87), macOS i9 ~26/~50 MHz pre-refactor; 6809 ~125 MHz (Unit 3 loop), ~138 MHz / 119.9 instr per cycle CamelForth idle; re-bracket the sweep and A/B against same-day main; layout swings ±4%, use perf instructions-per-emulated-cycle to tell
 
 ## Docs
 - [plan/ frozen, doc/ current](plan-frozen-doc-current.md) — never retrofit superseded plan docs; always keep the wiki current

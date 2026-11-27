@@ -30,16 +30,20 @@ pub mod cc;
 mod execute;
 pub mod indexed;
 pub mod opcodes;
+pub mod trace;
 
+use crate::config::CpuVariantSpec;
 use cc::ConditionCodes;
 use emma6k_core::bus::vector::{IdentityVectorResolver, VectorResolver};
 use emma6k_core::bus::{Bus, BusOp};
 use emma6k_core::error::{BusError, CpuBuildError, ExecError};
 use emma6k_core::exec::{self, ClockSpeed};
+use emma6k_core::trace::TraceState;
 use emma6k_core::watch::{Operand, WatchContext};
 use emma6k_core::{HaltState, MachineState, Processor};
 use emma6k_core::{LogCategory, LogLevel, LogSender, log_msg};
 use opcodes::{DecodedOp, Page};
+use trace::{TraceCallback, TraceKind, TraceRecord};
 
 /// Bus address of the RESET vector.
 pub const RESET_VECTOR: u16 = 0xFFFE;
@@ -162,6 +166,13 @@ pub struct Cpu {
     nmi_armed: bool,
     /// Address of the instruction being executed: its prefix or opcode byte.
     instr_pc: u16,
+    /// Whether a trace callback is installed.
+    tracing: bool,
+    /// The current step's trace id and not-yet-emitted register snapshot.
+    trace_state: TraceState<Registers>,
+    /// Receives a record for every bus read and write (not `peek`), each
+    /// step's registers, and its cycles.
+    trace_callback: Option<Box<dyn TraceCallback<Registers>>>,
 }
 
 /// What, if anything, the CPU is waiting for.
@@ -207,7 +218,7 @@ impl Cpu {
     pub fn reset(&mut self) -> Result<(), ExecError> {
         self.machine.bus_mut().reset_devices();
         let vector = self.machine.resolve_vector(RESET_VECTOR);
-        self.regs.pc = self.read16(vector)?;
+        self.regs.pc = self.read16::<true>(vector)?;
         self.regs.dp = 0;
         self.regs.cc.insert(ConditionCodes::I | ConditionCodes::F);
         self.machine.reset_cycles();
@@ -222,10 +233,54 @@ impl Cpu {
         Ok(())
     }
 
+    /// The CPU variant: always the MC6809, until the 6309 exists.
+    pub fn variant(&self) -> CpuVariantSpec {
+        CpuVariantSpec::Mc6809
+    }
+
+    /// Installs a trace callback, or removes one with `None`. While one is
+    /// installed, each step records its starting registers, every bus read
+    /// and write (never `peek`), and its cycles.
+    pub fn set_trace_callback(&mut self, callback: Option<Box<dyn TraceCallback<Registers>>>) {
+        self.tracing = callback.is_some();
+        self.trace_callback = callback;
+    }
+
+    /// Flushes the trace callback, if one is installed, making every record
+    /// emitted so far visible to an independent reader of the trace stream.
+    pub fn flush_trace(&mut self) {
+        if let Some(cb) = &mut self.trace_callback {
+            cb.flush();
+        }
+    }
+
     /// Fetches, decodes and executes one instruction, or services a pending
     /// reset or interrupt. Skips the breakpoint and watch check at `skip_pc`,
     /// and everywhere if `check_breakpoints` is `false`.
     pub fn step(&mut self, skip_pc: Option<u16>, check_breakpoints: bool) -> StepResult {
+        // Two compiled copies of the step: an untraced one with no trace
+        // checks at all on the bus path, and a traced one.
+        if self.tracing {
+            self.step_traced(skip_pc, check_breakpoints)
+        } else {
+            self.step_with::<false>(skip_pc, check_breakpoints)
+        }
+    }
+
+    /// The traced step, kept out of line so the untraced one stays lean.
+    #[cold]
+    #[inline(never)]
+    fn step_traced(&mut self, skip_pc: Option<u16>, check_breakpoints: bool) -> StepResult {
+        self.step_with::<true>(skip_pc, check_breakpoints)
+    }
+
+    /// [`step`](Self::step), recording a trace if `TRACE`.
+    #[inline(always)]
+    fn step_with<const TRACE: bool>(
+        &mut self,
+        skip_pc: Option<u16>,
+        check_breakpoints: bool,
+    ) -> StepResult {
         match self.wait {
             Wait::None => {}
             Wait::Cwai => {
@@ -247,6 +302,10 @@ impl Cpu {
             }
         }
 
+        if TRACE {
+            self.trace_state.begin_instruction(self.regs);
+        }
+
         let start = self.regs.pc;
         if check_breakpoints {
             let regs = &self.regs;
@@ -266,9 +325,12 @@ impl Cpu {
         }
 
         // One `finish_cycle` call for every path keeps it inlined here.
-        match self.service_or_execute(start) {
+        match self.service_or_execute::<TRACE>(start) {
             Ok((cycles, op)) => {
                 self.machine.finish_cycle(cycles);
+                if TRACE {
+                    self.emit_trace(TraceKind::Cycles(cycles));
+                }
                 StepResult::Executed(op)
             }
             Err(e) => StepResult::Error(e),
@@ -280,16 +342,19 @@ impl Cpu {
     /// policy. Returns the cycles taken and the step's op. On an error, PC is
     /// left at `start`.
     #[inline]
-    fn service_or_execute(&mut self, start: u16) -> Result<(u8, DecodedOp), ExecError> {
+    fn service_or_execute<const TRACE: bool>(
+        &mut self,
+        start: u16,
+    ) -> Result<(u8, DecodedOp), ExecError> {
         if let Some(interrupt) = self.pending_interrupt() {
-            let cycles = self.service_interrupt(interrupt)?;
+            let cycles = self.service_interrupt::<TRACE>(interrupt)?;
             return Ok((cycles, DecodedOp::interrupt(cycles)));
         }
 
-        let first = self.read8(start)?;
+        let first = self.read8::<TRACE>(start)?;
         let decoded = match first {
             0x10 | 0x11 => {
-                let second = self.read8(start.wrapping_add(1))?;
+                let second = self.read8::<TRACE>(start.wrapping_add(1))?;
                 let page = if first == 0x10 {
                     Page::Page2
                 } else {
@@ -317,7 +382,7 @@ impl Cpu {
 
         self.instr_pc = start;
         self.regs.pc = start.wrapping_add(opcode_len);
-        match self.execute(decoded) {
+        match self.execute::<TRACE>(decoded) {
             Ok(cycles) => Ok((cycles, decoded)),
             // `execute` reports an undefined indexed postbyte as an invalid
             // opcode, before the instruction has changed anything but PC.
@@ -366,21 +431,26 @@ impl Cpu {
 
     // --- bus helpers ---
 
-    #[inline]
-    fn read8(&mut self, addr: u16) -> Result<u8, ExecError> {
-        self.machine.bus_mut().read(addr).map_err(|e| match e {
+    #[inline(always)]
+    fn read8<const TRACE: bool>(&mut self, addr: u16) -> Result<u8, ExecError> {
+        let result = self.machine.bus_mut().read(addr).map_err(|e| match e {
             BusError::Unmapped { addr } | BusError::RomWrite { addr } => {
                 ExecError::UnmappedAddress {
                     addr,
                     op: BusOp::Read,
                 }
             }
-        })
+        });
+        if TRACE && let Ok(value) = result {
+            self.emit_trace(TraceKind::Read { addr, value });
+        }
+        result
     }
 
-    #[inline]
-    fn write8(&mut self, addr: u16, value: u8) -> Result<(), ExecError> {
-        self.machine
+    #[inline(always)]
+    fn write8<const TRACE: bool>(&mut self, addr: u16, value: u8) -> Result<(), ExecError> {
+        let result = self
+            .machine
             .bus_mut()
             .write(addr, value)
             .map_err(|e| match e {
@@ -389,37 +459,60 @@ impl Cpu {
                     op: BusOp::Write,
                 },
                 BusError::RomWrite { addr } => ExecError::RomWrite { addr, value },
-            })
+            });
+        if TRACE && result.is_ok() {
+            self.emit_trace(TraceKind::Write { addr, value });
+        }
+        result
+    }
+
+    /// Records `kind` for the current step, preceded by the step's
+    /// `Registers` record if this is its first record. Kept out of line, so
+    /// the untraced bus helpers stay small.
+    #[cold]
+    #[inline(never)]
+    fn emit_trace(&mut self, kind: TraceKind) {
+        let Some(cb) = &mut self.trace_callback else {
+            return;
+        };
+        let instr_id = self.trace_state.current_instr_id();
+        if let Some(regs) = self.trace_state.take_pending_registers(instr_id) {
+            cb.record(TraceRecord {
+                instr_id,
+                kind: TraceKind::Registers(regs),
+            });
+        }
+        cb.record(TraceRecord { instr_id, kind });
     }
 
     /// Reads a big-endian word.
     #[inline]
-    fn read16(&mut self, addr: u16) -> Result<u16, ExecError> {
-        let hi = self.read8(addr)?;
-        let lo = self.read8(addr.wrapping_add(1))?;
+    fn read16<const TRACE: bool>(&mut self, addr: u16) -> Result<u16, ExecError> {
+        let hi = self.read8::<TRACE>(addr)?;
+        let lo = self.read8::<TRACE>(addr.wrapping_add(1))?;
         Ok(u16::from_be_bytes([hi, lo]))
     }
 
     /// Writes a big-endian word.
     #[inline]
-    fn write16(&mut self, addr: u16, value: u16) -> Result<(), ExecError> {
+    fn write16<const TRACE: bool>(&mut self, addr: u16, value: u16) -> Result<(), ExecError> {
         let [hi, lo] = value.to_be_bytes();
-        self.write8(addr, hi)?;
-        self.write8(addr.wrapping_add(1), lo)
+        self.write8::<TRACE>(addr, hi)?;
+        self.write8::<TRACE>(addr.wrapping_add(1), lo)
     }
 
     /// Reads the byte at PC and advances PC.
     #[inline]
-    fn fetch8(&mut self) -> Result<u8, ExecError> {
-        let value = self.read8(self.regs.pc)?;
+    fn fetch8<const TRACE: bool>(&mut self) -> Result<u8, ExecError> {
+        let value = self.read8::<TRACE>(self.regs.pc)?;
         self.regs.pc = self.regs.pc.wrapping_add(1);
         Ok(value)
     }
 
     /// Reads the big-endian word at PC and advances PC past it.
     #[inline]
-    fn fetch16(&mut self) -> Result<u16, ExecError> {
-        let value = self.read16(self.regs.pc)?;
+    fn fetch16<const TRACE: bool>(&mut self) -> Result<u16, ExecError> {
+        let value = self.read16::<TRACE>(self.regs.pc)?;
         self.regs.pc = self.regs.pc.wrapping_add(2);
         Ok(value)
     }
@@ -597,7 +690,9 @@ impl Processor for Cpu {
         }
     }
 
-    fn flush_trace(&mut self) {}
+    fn flush_trace(&mut self) {
+        Cpu::flush_trace(self)
+    }
 
     fn subroutine_call_len(&self, pc: u16) -> Option<u16> {
         subroutine_call_len(self.machine.bus(), pc)
@@ -727,6 +822,9 @@ impl CpuBuilder {
             wait: Wait::None,
             nmi_armed: false,
             instr_pc: 0,
+            tracing: false,
+            trace_state: TraceState::new(),
+            trace_callback: None,
         })
     }
 }

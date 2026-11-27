@@ -15,8 +15,9 @@ emulator core:
 - **`emma6k-debugger`** — a graphical debugger (registers, disassembly,
   memory, stack, watchpoints, and a live execution trace, in a native desktop
   app) for interactively developing and troubleshooting programs
-- **`emma65-tracer`** — a utility that decodes a recorded binary execution
-  trace into a human-readable, symbol-annotated disassembly listing
+- **`emma6k-tracer`** — a utility that decodes a recorded binary execution
+  trace, from either CPU, into a human-readable, symbol-annotated disassembly
+  listing
 - **`emma6k-display`** — an SDL2 peripheral process that renders the
   character display device (`display`) in its own window when running
   `emma65` standalone (no debugger)

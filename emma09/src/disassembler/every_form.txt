@@ -1,0 +1,386 @@
+00 20          | NEG <$20
+03 20          | COM <$20
+04 20          | LSR <$20
+06 20          | ROR <$20
+07 20          | ASR <$20
+08 20          | ASL <$20
+09 20          | ROL <$20
+0A 20          | DEC <$20
+0C 20          | INC <$20
+0D 20          | TST <$20
+0E 20          | JMP <$20
+0F 20          | CLR <$20
+12             | NOP
+13             | SYNC
+16 01 00       | LBRA $1103
+17 01 00       | LBSR $1103
+19             | DAA
+1A 41          | ORCC #$41
+1C 41          | ANDCC #$41
+1D             | SEX
+1E 12          | EXG X,Y
+1F 12          | TFR X,Y
+20 10          | BRA $1012
+21 10          | BRN $1012
+22 10          | BHI $1012
+23 10          | BLS $1012
+24 10          | BCC $1012
+25 10          | BCS $1012
+26 10          | BNE $1012
+27 10          | BEQ $1012
+28 10          | BVC $1012
+29 10          | BVS $1012
+2A 10          | BPL $1012
+2B 10          | BMI $1012
+2C 10          | BGE $1012
+2D 10          | BLT $1012
+2E 10          | BGT $1012
+2F 10          | BLE $1012
+30 84          | LEAX ,X
+31 84          | LEAY ,X
+32 84          | LEAS ,X
+33 84          | LEAU ,X
+34 96          | PSHS A,B,X,PC
+35 96          | PULS A,B,X,PC
+36 96          | PSHU A,B,X,PC
+37 96          | PULU A,B,X,PC
+39             | RTS
+3A             | ABX
+3B             | RTI
+3C 41          | CWAI #$41
+3D             | MUL
+3F             | SWI
+40             | NEGA
+43             | COMA
+44             | LSRA
+46             | RORA
+47             | ASRA
+48             | ASLA
+49             | ROLA
+4A             | DECA
+4C             | INCA
+4D             | TSTA
+4F             | CLRA
+50             | NEGB
+53             | COMB
+54             | LSRB
+56             | RORB
+57             | ASRB
+58             | ASLB
+59             | ROLB
+5A             | DECB
+5C             | INCB
+5D             | TSTB
+5F             | CLRB
+60 84          | NEG ,X
+63 84          | COM ,X
+64 84          | LSR ,X
+66 84          | ROR ,X
+67 84          | ASR ,X
+68 84          | ASL ,X
+69 84          | ROL ,X
+6A 84          | DEC ,X
+6C 84          | INC ,X
+6D 84          | TST ,X
+6E 84          | JMP ,X
+6F 84          | CLR ,X
+70 12 34       | NEG $1234
+73 12 34       | COM $1234
+74 12 34       | LSR $1234
+76 12 34       | ROR $1234
+77 12 34       | ASR $1234
+78 12 34       | ASL $1234
+79 12 34       | ROL $1234
+7A 12 34       | DEC $1234
+7C 12 34       | INC $1234
+7D 12 34       | TST $1234
+7E 12 34       | JMP $1234
+7F 12 34       | CLR $1234
+80 41          | SUBA #$41
+81 41          | CMPA #$41
+82 41          | SBCA #$41
+83 12 34       | SUBD #$1234
+84 41          | ANDA #$41
+85 41          | BITA #$41
+86 41          | LDA #$41
+88 41          | EORA #$41
+89 41          | ADCA #$41
+8A 41          | ORA #$41
+8B 41          | ADDA #$41
+8C 12 34       | CMPX #$1234
+8D 10          | BSR $1012
+8E 12 34       | LDX #$1234
+90 20          | SUBA <$20
+91 20          | CMPA <$20
+92 20          | SBCA <$20
+93 20          | SUBD <$20
+94 20          | ANDA <$20
+95 20          | BITA <$20
+96 20          | LDA <$20
+97 20          | STA <$20
+98 20          | EORA <$20
+99 20          | ADCA <$20
+9A 20          | ORA <$20
+9B 20          | ADDA <$20
+9C 20          | CMPX <$20
+9D 20          | JSR <$20
+9E 20          | LDX <$20
+9F 20          | STX <$20
+A0 84          | SUBA ,X
+A1 84          | CMPA ,X
+A2 84          | SBCA ,X
+A3 84          | SUBD ,X
+A4 84          | ANDA ,X
+A5 84          | BITA ,X
+A6 84          | LDA ,X
+A7 84          | STA ,X
+A8 84          | EORA ,X
+A9 84          | ADCA ,X
+AA 84          | ORA ,X
+AB 84          | ADDA ,X
+AC 84          | CMPX ,X
+AD 84          | JSR ,X
+AE 84          | LDX ,X
+AF 84          | STX ,X
+B0 12 34       | SUBA $1234
+B1 12 34       | CMPA $1234
+B2 12 34       | SBCA $1234
+B3 12 34       | SUBD $1234
+B4 12 34       | ANDA $1234
+B5 12 34       | BITA $1234
+B6 12 34       | LDA $1234
+B7 12 34       | STA $1234
+B8 12 34       | EORA $1234
+B9 12 34       | ADCA $1234
+BA 12 34       | ORA $1234
+BB 12 34       | ADDA $1234
+BC 12 34       | CMPX $1234
+BD 12 34       | JSR $1234
+BE 12 34       | LDX $1234
+BF 12 34       | STX $1234
+C0 41          | SUBB #$41
+C1 41          | CMPB #$41
+C2 41          | SBCB #$41
+C3 12 34       | ADDD #$1234
+C4 41          | ANDB #$41
+C5 41          | BITB #$41
+C6 41          | LDB #$41
+C8 41          | EORB #$41
+C9 41          | ADCB #$41
+CA 41          | ORB #$41
+CB 41          | ADDB #$41
+CC 12 34       | LDD #$1234
+CE 12 34       | LDU #$1234
+D0 20          | SUBB <$20
+D1 20          | CMPB <$20
+D2 20          | SBCB <$20
+D3 20          | ADDD <$20
+D4 20          | ANDB <$20
+D5 20          | BITB <$20
+D6 20          | LDB <$20
+D7 20          | STB <$20
+D8 20          | EORB <$20
+D9 20          | ADCB <$20
+DA 20          | ORB <$20
+DB 20          | ADDB <$20
+DC 20          | LDD <$20
+DD 20          | STD <$20
+DE 20          | LDU <$20
+DF 20          | STU <$20
+E0 84          | SUBB ,X
+E1 84          | CMPB ,X
+E2 84          | SBCB ,X
+E3 84          | ADDD ,X
+E4 84          | ANDB ,X
+E5 84          | BITB ,X
+E6 84          | LDB ,X
+E7 84          | STB ,X
+E8 84          | EORB ,X
+E9 84          | ADCB ,X
+EA 84          | ORB ,X
+EB 84          | ADDB ,X
+EC 84          | LDD ,X
+ED 84          | STD ,X
+EE 84          | LDU ,X
+EF 84          | STU ,X
+F0 12 34       | SUBB $1234
+F1 12 34       | CMPB $1234
+F2 12 34       | SBCB $1234
+F3 12 34       | ADDD $1234
+F4 12 34       | ANDB $1234
+F5 12 34       | BITB $1234
+F6 12 34       | LDB $1234
+F7 12 34       | STB $1234
+F8 12 34       | EORB $1234
+F9 12 34       | ADCB $1234
+FA 12 34       | ORB $1234
+FB 12 34       | ADDB $1234
+FC 12 34       | LDD $1234
+FD 12 34       | STD $1234
+FE 12 34       | LDU $1234
+FF 12 34       | STU $1234
+10 21 01 00    | LBRN $1104
+10 22 01 00    | LBHI $1104
+10 23 01 00    | LBLS $1104
+10 24 01 00    | LBCC $1104
+10 25 01 00    | LBCS $1104
+10 26 01 00    | LBNE $1104
+10 27 01 00    | LBEQ $1104
+10 28 01 00    | LBVC $1104
+10 29 01 00    | LBVS $1104
+10 2A 01 00    | LBPL $1104
+10 2B 01 00    | LBMI $1104
+10 2C 01 00    | LBGE $1104
+10 2D 01 00    | LBLT $1104
+10 2E 01 00    | LBGT $1104
+10 2F 01 00    | LBLE $1104
+10 3F          | SWI2
+10 83 12 34    | CMPD #$1234
+10 8C 12 34    | CMPY #$1234
+10 8E 12 34    | LDY #$1234
+10 93 20       | CMPD <$20
+10 9C 20       | CMPY <$20
+10 9E 20       | LDY <$20
+10 9F 20       | STY <$20
+10 A3 84       | CMPD ,X
+10 AC 84       | CMPY ,X
+10 AE 84       | LDY ,X
+10 AF 84       | STY ,X
+10 B3 12 34    | CMPD $1234
+10 BC 12 34    | CMPY $1234
+10 BE 12 34    | LDY $1234
+10 BF 12 34    | STY $1234
+10 CE 12 34    | LDS #$1234
+10 DE 20       | LDS <$20
+10 DF 20       | STS <$20
+10 EE 84       | LDS ,X
+10 EF 84       | STS ,X
+10 FE 12 34    | LDS $1234
+10 FF 12 34    | STS $1234
+11 3F          | SWI3
+11 83 12 34    | CMPU #$1234
+11 8C 12 34    | CMPS #$1234
+11 93 20       | CMPU <$20
+11 9C 20       | CMPS <$20
+11 A3 84       | CMPU ,X
+11 AC 84       | CMPS ,X
+11 B3 12 34    | CMPU $1234
+11 BC 12 34    | CMPS $1234
+A6 05          | LDA $05,X
+A6 10          | LDA -$10,X
+A6 80          | LDA ,X+
+A6 81          | LDA ,X++
+A6 91          | LDA [,X++]
+A6 82          | LDA ,-X
+A6 83          | LDA ,--X
+A6 93          | LDA [,--X]
+A6 84          | LDA ,X
+A6 94          | LDA [,X]
+A6 85          | LDA B,X
+A6 95          | LDA [B,X]
+A6 86          | LDA A,X
+A6 96          | LDA [A,X]
+A6 88 40       | LDA $40,X
+A6 88 C0       | LDA -$40,X
+A6 98 40       | LDA [$40,X]
+A6 89 12 34    | LDA $1234,X
+A6 99 12 34    | LDA [$1234,X]
+A6 8B          | LDA D,X
+A6 9B          | LDA [D,X]
+A6 25          | LDA $05,Y
+A6 30          | LDA -$10,Y
+A6 A0          | LDA ,Y+
+A6 A1          | LDA ,Y++
+A6 B1          | LDA [,Y++]
+A6 A2          | LDA ,-Y
+A6 A3          | LDA ,--Y
+A6 B3          | LDA [,--Y]
+A6 A4          | LDA ,Y
+A6 B4          | LDA [,Y]
+A6 A5          | LDA B,Y
+A6 B5          | LDA [B,Y]
+A6 A6          | LDA A,Y
+A6 B6          | LDA [A,Y]
+A6 A8 40       | LDA $40,Y
+A6 A8 C0       | LDA -$40,Y
+A6 B8 40       | LDA [$40,Y]
+A6 A9 12 34    | LDA $1234,Y
+A6 B9 12 34    | LDA [$1234,Y]
+A6 AB          | LDA D,Y
+A6 BB          | LDA [D,Y]
+A6 45          | LDA $05,U
+A6 50          | LDA -$10,U
+A6 C0          | LDA ,U+
+A6 C1          | LDA ,U++
+A6 D1          | LDA [,U++]
+A6 C2          | LDA ,-U
+A6 C3          | LDA ,--U
+A6 D3          | LDA [,--U]
+A6 C4          | LDA ,U
+A6 D4          | LDA [,U]
+A6 C5          | LDA B,U
+A6 D5          | LDA [B,U]
+A6 C6          | LDA A,U
+A6 D6          | LDA [A,U]
+A6 C8 40       | LDA $40,U
+A6 C8 C0       | LDA -$40,U
+A6 D8 40       | LDA [$40,U]
+A6 C9 12 34    | LDA $1234,U
+A6 D9 12 34    | LDA [$1234,U]
+A6 CB          | LDA D,U
+A6 DB          | LDA [D,U]
+A6 65          | LDA $05,S
+A6 70          | LDA -$10,S
+A6 E0          | LDA ,S+
+A6 E1          | LDA ,S++
+A6 F1          | LDA [,S++]
+A6 E2          | LDA ,-S
+A6 E3          | LDA ,--S
+A6 F3          | LDA [,--S]
+A6 E4          | LDA ,S
+A6 F4          | LDA [,S]
+A6 E5          | LDA B,S
+A6 F5          | LDA [B,S]
+A6 E6          | LDA A,S
+A6 F6          | LDA [A,S]
+A6 E8 40       | LDA $40,S
+A6 E8 C0       | LDA -$40,S
+A6 F8 40       | LDA [$40,S]
+A6 E9 12 34    | LDA $1234,S
+A6 F9 12 34    | LDA [$1234,S]
+A6 EB          | LDA D,S
+A6 FB          | LDA [D,S]
+A6 8C 10       | LDA $1013,PCR
+A6 8C F0       | LDA $0FF3,PCR
+A6 9C 10       | LDA [$1013,PCR]
+A6 8D 10 00    | LDA $2004,PCR
+A6 9D 10 00    | LDA [$2004,PCR]
+A6 9F 12 34    | LDA [$1234]
+A6 EC 10       | LDA $1013,PCR
+1F 00          | TFR D,D
+1F 11          | TFR X,X
+1F 22          | TFR Y,Y
+1F 33          | TFR U,U
+1F 44          | TFR S,S
+1F 55          | TFR PC,PC
+1F 88          | TFR A,A
+1F 99          | TFR B,B
+1F AA          | TFR CC,CC
+1F BB          | TFR DP,DP
+1E 89          | EXG A,B
+34 FF          | PSHS CC,A,B,DP,X,Y,U,PC
+34 01          | PSHS CC
+35 FF          | PULS CC,A,B,DP,X,Y,U,PC
+35 01          | PULS CC
+36 FF          | PSHU CC,A,B,DP,X,Y,S,PC
+36 01          | PSHU CC
+37 FF          | PULU CC,A,B,DP,X,Y,S,PC
+37 01          | PULU CC
+20 FE          | BRA $1000
+16 FF FD       | LBRA $1000
+10 27 FF FC    | LBEQ $1000
+01             | <ILL>
+10 00          | <ILL>
+11 8E          | <ILL>
+A6 87          | <ILL>
+10 AE 9A       | <ILL>

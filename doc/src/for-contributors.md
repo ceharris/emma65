@@ -3,9 +3,9 @@
 Emma6k is written in Rust (2024 edition), as a Cargo workspace. Crates that
 aren't specific to the 65C02 use the `emma6k-` prefix; the 65C02 emulator crate
 keeps the `emma65` name. The root
-crate (`emma65`) exposes a library plus the `emma65-tracer` binary; the
+crate (`emma65`) is a library; the
 `emma6k` package in `cli/` holds the command-line emulator (`emma6k`, with
-its `emma65` and `emma09` wrappers), and three further workspace members — `debugger/src-tauri`
+its `emma65` and `emma09` wrappers) and `emma6k-tracer`, and three further workspace members — `debugger/src-tauri`
 (`emma6k-debugger`), `display` (`emma6k-display`), and `led-matrix`
 (`emma6k-led-matrix`) — are thin front ends built on that library. Its
 central public module is `emulator`, which implements everything those front
@@ -144,9 +144,11 @@ family's own `Config` (`emma65::emulator::Config` for the 6502,
 generic over `Processor` and so compiled once per CPU. The `emma65` and
 `emma09` binaries in the same package are small wrappers that run `emma6k`
 with the family fixed. The `emulator::config` module is the integration point
-for contributors adding new device types. The `emma65-tracer` binary
-(`src/bin/tracer/`) and the `emma6k-debugger` crate (`debugger/src-tauri/`)
-are both thin front ends over the same library.
+for contributors adding new device types. The `emma6k-tracer` binary
+(`cli/src/bin/emma6k-tracer/`) reads a trace file's header to learn its CPU
+family, then decodes it with that family's reader and row assembler. The
+`emma6k-debugger` crate (`debugger/src-tauri/`) is a thin front end over the
+same libraries.
 
 ## Other Public Modules
 
@@ -172,8 +174,9 @@ and `emma65::disassembler` are re-exports of `mos6502::assembler` and
   listings via side-effect-free `peek` reads, sharing the same opcode decode
   table and variant logic as the CPU (see [CPU](#cpu) above); its `trace`
   submodule reconstructs a disassembly listing from a previously recorded
-  binary execution trace, used by the `emma65-tracer` binary and the
-  debugger's Trace window.
+  binary execution trace, used by `emma6k-tracer` and the
+  debugger's Trace window. `emma09::disassembler` is the 6809's counterpart,
+  with the same `trace` submodule.
 - **`watch`** — a self-contained watchpoint expression pipeline: `Scanner` →
   `Vec<Token>` → `Parser` → `Expr` AST → `Compiler` → `Vec<OpCode>` →
   `Evaluator` → `Operand`. The scanner and parser use zero-copy techniques —

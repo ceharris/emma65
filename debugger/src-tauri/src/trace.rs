@@ -9,8 +9,8 @@ use tauri::State;
 
 use emma65::disassembler::{Disassembler, TraceBusOp, TraceRowAssembler};
 use emma65::emulator::{
-    BinaryTraceReader, BinaryTraceWriter, ChannelTraceCallback, OverflowPolicy, TraceCallback,
-    TraceKind, TraceRecord, spawn_trace_writer,
+    BinaryTraceReader, BinaryTraceWriter, ChannelTraceCallback, OverflowPolicy, Registers,
+    TraceCallback, TraceKind, TraceRecord, spawn_trace_writer,
 };
 
 use crate::CpuState;
@@ -63,7 +63,7 @@ struct RowIndexingTraceCallback {
     record_count: u64,
 }
 
-impl TraceCallback for RowIndexingTraceCallback {
+impl TraceCallback<Registers> for RowIndexingTraceCallback {
     fn record(&mut self, rec: TraceRecord) {
         if matches!(rec.kind, TraceKind::Registers(_)) {
             self.row_index.lock().unwrap().push(self.record_count);

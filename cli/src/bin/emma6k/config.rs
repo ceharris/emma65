@@ -103,7 +103,7 @@ pub struct AppConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unmapped_policy: Option<UnmappedPolicySpec>,
 
-    /// Path to write a binary CPU execution trace to (6502 only, for now).
+    /// Path to write a binary CPU execution trace to (decode it with emma6k-tracer).
     #[clap(long = "trace-file")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trace_file: Option<ExpandedPathBuf>,
@@ -302,9 +302,6 @@ impl LoadedConfig {
         );
         app.cpu = None;
 
-        if family == Family::Mc6809 && app.trace_file.is_some() {
-            return Err("--trace-file doesn't support the 6809 yet".to_string());
-        }
         Ok(RunPlan {
             family,
             app,
@@ -481,8 +478,8 @@ mod tests {
     }
 
     #[test]
-    fn trace_file_is_6502_only_for_now() {
-        let err = resolve(&[
+    fn trace_file_works_with_the_6809() {
+        let plan = resolve(&[
             "--cpu",
             "6809",
             "--device",
@@ -490,9 +487,9 @@ mod tests {
             "--trace-file",
             "/tmp/x",
         ])
-        .err()
         .unwrap();
-        assert!(err.contains("--trace-file"), "{err}");
+        assert_eq!(plan.family, Family::Mc6809);
+        assert!(plan.app.trace_file.is_some());
     }
 
     #[test]

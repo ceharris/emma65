@@ -32,35 +32,12 @@ pub struct Disassembler {
 }
 
 impl Disassembler {
-    const ASCII_CTRL_MNEMONICS: &str = "NULSOHSTXETXEOTENQACKBELBS HT LF VT FF CR SO SI \
-                                        DLEDC1DC2DC3DC4NAKSYNETBCANEM SUBESCFS GS RS US ";
-
-    fn ascii_ctrl_mnemonic(ctrl: u8) -> &'static str {
-        let i = (3 * ctrl) as usize;
-        &Self::ASCII_CTRL_MNEMONICS[i..i + 3]
-    }
-
     /// Formats a byte as the alternate representations shown alongside
     /// immediate-mode operands in a disassembly comment: decimal value, plus
     /// an ASCII rendering (control-code mnemonic, quoted printable character,
     /// `SPC`, or `DEL`) or, for non-ASCII bytes, the signed interpretation.
     pub fn immediate_mode_comment(operand: u8) -> String {
-        if operand < 0x20 {
-            format!(
-                "; {} ^{} ({})",
-                operand,
-                (operand + b'@') as char,
-                Self::ascii_ctrl_mnemonic(operand).trim()
-            )
-        } else if operand == 0x20 {
-            "; 32 ' ' (SPC)".to_string()
-        } else if operand < 0x7F {
-            format!("; {} '{}'", operand, operand as char)
-        } else if operand == 0x7F {
-            "; 127 (DEL)".to_string()
-        } else {
-            format!("; {} ({})", operand, operand as i8)
-        }
+        emma6k_core::text::immediate_comment(operand)
     }
 
     /// Creates a disassembler for the given CPU variant.
@@ -251,12 +228,19 @@ mod tests {
 
     #[test]
     fn ascii_ctrl_mnemonics() {
-        assert_eq!(Disassembler::ascii_ctrl_mnemonic(0), "NUL");
-        assert_eq!(Disassembler::ascii_ctrl_mnemonic(0x7), "BEL");
-        assert_eq!(Disassembler::ascii_ctrl_mnemonic(0xD), "CR ");
-        assert_eq!(Disassembler::ascii_ctrl_mnemonic(0x15), "NAK");
-        assert_eq!(Disassembler::ascii_ctrl_mnemonic(0x18), "CAN");
-        assert_eq!(Disassembler::ascii_ctrl_mnemonic(0x1F), "US ");
+        for (byte, name) in [
+            (0, "NUL"),
+            (0x7, "BEL"),
+            (0xD, "CR"),
+            (0x15, "NAK"),
+            (0x18, "CAN"),
+            (0x1F, "US"),
+        ] {
+            assert!(
+                Disassembler::immediate_mode_comment(byte).ends_with(&format!("({name})")),
+                "{byte:#04x}"
+            );
+        }
     }
 
     #[test]

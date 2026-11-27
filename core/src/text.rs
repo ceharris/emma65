@@ -48,6 +48,34 @@ impl<'a> Text<'a> {
     }
 }
 
+/// Control-code names for bytes `0x00`–`0x1F`, three characters each.
+const ASCII_CTRL_MNEMONICS: &str = "NULSOHSTXETXEOTENQACKBELBS HT LF VT FF CR SO SI \
+                                    DLEDC1DC2DC3DC4NAKSYNETBCANEM SUBESCFS GS RS US ";
+
+/// Formats a byte as the alternate representations a disassembler shows
+/// beside an 8-bit immediate operand: the decimal value, plus an ASCII
+/// rendering (control-code name, quoted printable character, `SPC`, or `DEL`)
+/// or, for a non-ASCII byte, its signed value. Starts with `"; "`.
+pub fn immediate_comment(operand: u8) -> String {
+    if operand < 0x20 {
+        let i = 3 * operand as usize;
+        format!(
+            "; {} ^{} ({})",
+            operand,
+            (operand + b'@') as char,
+            ASCII_CTRL_MNEMONICS[i..i + 3].trim()
+        )
+    } else if operand == 0x20 {
+        "; 32 ' ' (SPC)".to_string()
+    } else if operand < 0x7F {
+        format!("; {} '{}'", operand, operand as char)
+    } else if operand == 0x7F {
+        "; 127 (DEL)".to_string()
+    } else {
+        format!("; {} ({})", operand, operand as i8)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

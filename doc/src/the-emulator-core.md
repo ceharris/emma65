@@ -181,11 +181,12 @@ above for how the CPU combines IRQ/NMI signals from every device on the bus.
 The CPU can record every register snapshot and bus read/write to a compact
 [binary trace format](appendix-trace-format.md) as it executes — writing is
 offloaded to a background thread so recording does not slow down execution.
-Two tools consume these traces:
+Three tools work with these traces:
 
-- The `emma65` binary writes a trace directly to a file with `--trace-file`
+- The `emma6k` binary (and so `emma65` and `emma09`) writes a trace directly
+  to a file with `--trace-file`, for either CPU
 - The debugger's Trace window records and displays a scrolling, live view of
   recent execution without stopping the CPU
-- The standalone `emma65-tracer` binary decodes a previously recorded trace
+- The standalone `emma6k-tracer` binary decodes a previously recorded trace
   file into a disassembly listing, optionally annotated with symbols from a
   VICE label file and per-instruction bus operation detail

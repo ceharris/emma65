@@ -4,6 +4,8 @@
 //!   condition codes, interrupts) and its
 //!   [`Processor`](emma6k_core::Processor) implementation, which
 //!   `emma6k_core::exec` runs and steps.
+//! - [`disassembler`]: the 6809 disassembler, and rebuilding instruction rows
+//!   from a trace (the trace record itself is [`cpu::trace`]).
 //! - [`config`]: the top-level [`Config`] schema, the 6809's
 //!   device registry, and building a 6809 [`EmulatorSession`].
 //! - [`templates`]: the 6809's bundled starter-profile templates.
@@ -12,6 +14,7 @@
 //! like every CPU family after the 6502.
 pub mod config;
 pub mod cpu;
+pub mod disassembler;
 pub mod templates;
 
 pub use config::{Config, CpuVariantSpec, device_registry};

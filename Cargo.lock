@@ -1109,7 +1109,6 @@ dependencies = [
  "bitflags 2.13.1",
  "clap",
  "crossbeam-channel",
- "emma6k-build-info",
  "emma6k-core",
  "figment",
  "serde",

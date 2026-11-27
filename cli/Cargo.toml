@@ -5,7 +5,7 @@ name = "emma6k"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-description = "The emma6k emulator command line: emma6k, which runs any supported CPU, and the emma65 and emma09 wrappers"
+description = "The emma6k emulator command line: emma6k, which runs any supported CPU, and the emma65 and emma09 wrappers, and emma6k-tracer, which decodes trace files"
 authors = ["Carl Harris"]
 repository = "https://github.com/ceharris/emma6k"
 
@@ -20,6 +20,10 @@ path = "src/bin/emma65.rs"
 [[bin]]
 name = "emma09"
 path = "src/bin/emma09.rs"
+
+[[bin]]
+name = "emma6k-tracer"
+path = "src/bin/emma6k-tracer/main.rs"
 
 [dependencies]
 # The CPU crates and the core, all versioned in lockstep with this crate.

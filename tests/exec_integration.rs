@@ -4,7 +4,7 @@ use emma65::emulator::cpu::StepResult;
 use emma65::emulator::device::{Console, Mc6850, R6551};
 use emma65::emulator::{
     AddressRange, Bus, ChannelRelay, ClockSpeed, CpuBuilder, CpuVariant, DeviceId,
-    InternalPipeTransport, InvalidOpcodePolicy, TraceCallback, TraceKind, TraceRecord,
+    InternalPipeTransport, InvalidOpcodePolicy, Registers, TraceCallback, TraceKind, TraceRecord,
     TransportRelay, run,
 };
 
@@ -13,7 +13,7 @@ struct CapturingCallback {
     records: Arc<Mutex<Vec<TraceRecord>>>,
 }
 
-impl TraceCallback for CapturingCallback {
+impl TraceCallback<Registers> for CapturingCallback {
     fn record(&mut self, rec: TraceRecord) {
         self.records.lock().unwrap().push(rec);
     }
