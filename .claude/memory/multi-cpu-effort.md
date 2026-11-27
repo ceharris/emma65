@@ -30,7 +30,7 @@ metadata:
 - The core crate is versioned in lockstep with `emma65`.
 - PR 4's timing is decided only after PRs 1–3 are reviewed and merged.
 
-**Where we left off (2026-11-26):** PRs 1–3 merged (#664–666). The user chose to do PR 4 now rather than defer it to step 2 (2026-11-26). PR 4 (the `emma6k-core` crate in `core/`) is open as #668 on branch `refactor/extract-core-crate`, awaiting the user's UAT and review. Once it merges, step 1 is complete. Step 2 is the 6809 crate for the CLI. Don't start step 2 until the user says so, and plan it first: there's no step 2 plan document yet.
+**Where we left off (2026-11-27):** step 1 is complete. PRs 1–3 merged as #664–666, and PR 4 (the `emma6k-core` crate in `core/`) merged as #668 on 2026-11-27. Step 2 is the 6809 crate for the CLI. Don't start step 2 until the user says so, and plan it first: there's no step 2 plan document yet.
 
 How step 1 ended up, for step 2:
 - **Crates.** `emma6k-core` (`core/`) has its modules at the crate root: `emma6k_core::{bus, config, device, exec, session, transport, watch, ...}`. `emma65` (root) is the 6502 plus a facade, `src/emulator.rs`, that does `pub use emma6k_core::*`, adds the 6502 re-exports, and has a local `config` module adding `Config`/`CpuVariantSpec`/`templates`. Everything outside the workspace's `emma65` code uses `emma65::emulator::*` paths.
@@ -46,9 +46,7 @@ How step 1 ended up, for step 2:
 **Open offer (2026-11-26, not yet answered):** add `src/**`, `core/**` and the root `Cargo.toml` to the path filters of CI's debugger and SDL jobs, so changes to the libraries they depend on build them. Raise it again if the user doesn't. Do it as its own small PR, not inside a refactor PR.
 
 **To resume in a new session:**
-1. Run `gh pr view 668 --json state`. If it's still open, wait for the user's review feedback and address it on `refactor/extract-core-crate`.
-2. If it merged, fast-forward `main`, delete the local branch, and update this file on `main` to say step 1 is complete (#664–668). There's no PR left, so commit it straight to `main` per [[git-workflow]].
-3. Ask the user what's next: step 2 (the 6809), the CI path-filter fix above, issue #667, or the macOS port ([[macos-port-effort]]).
-4. For step 2, write a plan document first (`plan/multi-cpu-step2-...md`), as was done for step 1. The step 1 plan's "Not in step 1" section lists its scope: a 6809 crate, the `cpu = "..."` selector, an enum choosing the session at startup, FIRQ/HALT interrupt lines, trace format v3, and a 6809 template. Check its unit split for compile dependencies ([[multi-unit-plan-workflow]]) and get the user's decisions before implementing.
+1. Ask the user what's next: step 2 (the 6809), the CI path-filter fix above, issue #667, or the macOS port ([[macos-port-effort]]).
+2. For step 2, write a plan document first (`plan/multi-cpu-step2-...md`), as was done for step 1. The step 1 plan's "Not in step 1" section lists its scope: a 6809 crate, the `cpu = "..."` selector, an enum choosing the session at startup, FIRQ/HALT interrupt lines, trace format v3, and a 6809 template. Check its unit split for compile dependencies ([[multi-unit-plan-workflow]]) and get the user's decisions before implementing.
 
 **How to apply:** follow the resume steps above. A/B-benchmark every PR that touches a hot path against `main`, alternating builds, using [[clock-bench-baseline]]'s post-step-1 row for the current host. Re-check `nm` for `Cpu::execute` staying inlined into `step`: PR 1's ~14% gain came from that, and every later PR kept it.
