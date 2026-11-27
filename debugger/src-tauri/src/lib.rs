@@ -184,7 +184,7 @@ async fn load_session(profile_dir: &Path, log_sender: LogSender) -> Result<Loade
 
     let config: Config = Figment::new()
         .merge(Toml::file(&config_path))
-        .merge(Env::prefixed("EMMA65_").map(|k| k.as_str().replace('_', "-").into()))
+        .merge(Env::prefixed("EMMA6K_").map(|k| k.as_str().replace('_', "-").into()))
         .extract()
         .map_err(|e| format!("Configuration error: {e}"))?;
 

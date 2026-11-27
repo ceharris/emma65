@@ -4,7 +4,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 
 ## Current work
 - [emma6k rename](emma6k-rename.md) — merged in #661: naming rule, what kept the emma65 name, old tag prefixes, moved-checkout steps (per-user memory pointer, `cargo clean`); both hosts moved (2026-11-26)
-- [Multi-CPU effort](multi-cpu-effort.md) — RESUME HERE: step 1 complete (#664–668); step 2 plan in plan/multi-cpu-step2-mc6809-plan.md; Units 1–2 merged (#670–671), Unit 3 (6809 interrupts + config) PR in review, next Unit 4 (`emma6k` CLI); wiki `interrupt` docs due in Unit 4; MC6850 TX-IRQ bug filed (#673); cross-crate #[inline] trap
+- [Multi-CPU effort](multi-cpu-effort.md) — RESUME HERE: step 1 complete (#664–668); step 2 plan in plan/multi-cpu-step2-mc6809-plan.md; Units 1–3 merged (#670–672), Unit 4 (`emma6k` CLI + wrappers) PR in review, next Unit 5 (CamelForth); after step 2: HCF ($14/$15/$CD) stops like STP; MC6850 TX-IRQ bug filed (#673); cross-crate #[inline] trap
 - [emma09 mutation testing](emma09-mutation-testing.md) — cargo-mutants set up (.cargo/mutants.toml, 893 mutants); run deferred until the 6809 work wraps up
 - [macOS port effort](macos-port-effort.md) — plan/macos-port-plan.md (#663); Unit 1 (SDL2 use-pkgconfig, cfg the 4 window_for_events clones, commit macOS-schema.json, install.md macOS) exact steps; run on the Mac; ask priority vs multi-CPU
 - [Open issues](open-issues.md) — #646 epic (ask before closing) + follow-ons #656–659; frontend test coverage #559/#560; #667 unmapped writes are silent
@@ -18,6 +18,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 - [GitHub bodies: no hard wrap](github-body-no-hard-wrap.md) — one line per paragraph in issue/PR bodies and comments
 - [CI path filters are deliberate](ci-path-filters-deliberate.md) — debugger/SDL jobs skip src/- and core/-only changes on purpose (expensive); verify locally, don't propose widening
 - [CI clippy denies warnings](ci-clippy-deny-warnings.md) — any clippy warning fails CI; run CI's exact `-D warnings` commands before pushing
+- [Headless emulator runs](headless-emulator-runs.md) — use a WDC65C02 ROM ending in STP; never trace an unthrottled unbounded run (filled /tmp)
 - [Sudo via script](sudo-via-script.md) — no passwordless sudo; write a script for the user to run
 - [Debug the CI image locally](debug-ci-image-locally.md) — build/run .github/docker/ci locally instead of push-and-wait
 - [Check action Node runtime](check-action-node-runtime.md) — verify `runs.using` in action.yml before pinning an action version

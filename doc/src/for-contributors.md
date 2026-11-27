@@ -3,8 +3,9 @@
 Emma6k is written in Rust (2024 edition), as a Cargo workspace. Crates that
 aren't specific to the 65C02 use the `emma6k-` prefix; the 65C02 emulator crate
 keeps the `emma65` name. The root
-crate (`emma65`) exposes a library plus two binaries, `emma65` and
-`emma65-tracer`; three further workspace members — `debugger/src-tauri`
+crate (`emma65`) exposes a library plus the `emma65-tracer` binary; the
+`emma6k` package in `cli/` holds the command-line emulator (`emma6k`, with
+its `emma65` and `emma09` wrappers), and three further workspace members — `debugger/src-tauri`
 (`emma6k-debugger`), `display` (`emma6k-display`), and `led-matrix`
 (`emma6k-led-matrix`) — are thin front ends built on that library. Its
 central public module is `emulator`, which implements everything those front
@@ -135,12 +136,17 @@ paired relay during `DeviceModule::instantiate()`.
 
 ## Configuration
 
-The `emma65` binary (`src/bin/emulator/`) uses the `emulator::config` module
-to load configuration from all sources (TOML, environment, CLI), build an
-`EmulatorSession`, and run the free loop. The `emulator::config` module is
-the integration point for contributors adding new device types. The
-`emma65-tracer` binary (`src/bin/tracer/`) and the `emma6k-debugger` crate
-(`debugger/src-tauri/`) are both thin front ends over the same library.
+The `emma6k` binary (the `emma6k` package in `cli/`) loads configuration from
+all sources (TOML, environment, CLI) and maps the `cpu-variant` setting to a
+CPU family. It then builds that family's `EmulatorSession` through the
+family's own `Config` (`emma65::emulator::Config` for the 6502,
+`emma09::Config` for the 6809) and runs the free loop, in a function that is
+generic over `Processor` and so compiled once per CPU. The `emma65` and
+`emma09` binaries in the same package are small wrappers that run `emma6k`
+with the family fixed. The `emulator::config` module is the integration point
+for contributors adding new device types. The `emma65-tracer` binary
+(`src/bin/tracer/`) and the `emma6k-debugger` crate (`debugger/src-tauri/`)
+are both thin front ends over the same library.
 
 ## Other Public Modules
 

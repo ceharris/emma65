@@ -34,17 +34,19 @@ development host; there's also a macOS workstation). Its index is imported here:
 ## Commands
 
 ```bash
-cargo build              # build the emma65 and emma65-tracer binaries + library (and emma6k-core, which it depends on)
+cargo build              # build the default members: the emma65 library and emma65-tracer, and the
+                          # emulator CLI (emma6k and its emma65/emma09 wrappers) from cli/
 cargo build --workspace  # also build the debugger crate (emma6k-debugger), the display crate
                           # (emma6k-display), the led-matrix crate (emma6k-led-matrix), and the
                           # lcd-display crate (emma6k-lcd-display)
 cargo build -p emma6k-display     # build just the SDL2 display peripheral (needs libsdl2-dev)
 cargo build -p emma6k-led-matrix  # build just the SDL2 LED matrix peripheral (needs libsdl2-dev)
 cargo build -p emma6k-lcd-display # build just the SDL2 LCD display peripheral (needs libsdl2-dev)
-cargo test                # run emma65's tests (library, binaries, tests/) — NOT emma6k-core's
+cargo test                # run the default members' tests: emma65's (library, tracer, tests/) and the
+                          # CLI's (cli/tests/emulator_binary.rs) — NOT emma6k-core's or emma09's
 cargo test -p emma6k-core # run the core crate's tests
 cargo test -p emma09      # run the 6809 crate's tests (unit tests, exec tests, Schwotzer's CPU test suite)
-cargo test --workspace    # every crate's tests: emma65, emma6k-core, emma09, debugger, display, led-matrix, lcd-display
+cargo test --workspace    # every crate's tests: emma65, emma6k-core, emma09, emma6k, debugger, display, led-matrix, lcd-display
 cargo test <name>         # run a single test by name (partial match)
 cargo clippy              # lint (covers every workspace member, including emma6k-core)
 cargo fmt --all           # format all Rust code in the workspace
@@ -59,13 +61,17 @@ Tauri invokes `npm run build` there automatically as part of `cargo tauri build`
 
 ## Architecture
 
-This repository is the emma6k project: a Cargo workspace (Rust 2024 edition) with eight members.
+This repository is the emma6k project: a Cargo workspace (Rust 2024 edition) with nine members.
 Crates that aren't specific to the 6502 use the `emma6k-` prefix; the 6502 emulator crate and its
 binaries keep the `emma65` name.
 
 - **`.`** (crate `emma65`) — the 6502 crate: the 65C02 CPU and everything specific to it, the
-  `emma65::emulator` facade over the core, and two binaries: `emma65` (the emulator) and
-  `emma65-tracer` (decodes binary trace files)
+  `emma65::emulator` facade over the core, and the `emma65-tracer` binary (decodes binary trace
+  files)
+- **`cli`** (package `emma6k`) — the emulator command line: the `emma6k` binary, which chooses the
+  CPU from `cpu-variant` (or its synonym `cpu`) and runs it, and the `emma65` and `emma09`
+  wrappers, which exec `emma6k` with a hidden `--family` flag fixing the CPU family. Versioned in
+  lockstep with `emma65`
 - **`core`** (crate `emma6k-core`) — the CPU-neutral emulator core every CPU family shares: bus,
   devices, transports, configuration framework, execution control behind the `Processor` trait,
   and the watch pipeline. It never names a CPU-specific type, and the compiler enforces that.
@@ -74,8 +80,8 @@ binaries keep the `emma65` name.
 - **`emma09`** (crate `emma09`) — the Motorola 6809, built on `emma6k-core` alone: registers,
   opcode tables, indexed addressing, ALU, interrupts (NMI, FIRQ, IRQ, CWAI, SYNC), its
   `Processor` impl, and its `Config` and device registry (the built-ins minus `pic/finch`). In
-  progress per `plan/multi-cpu-step2-mc6809-plan.md`: nothing outside its tests runs it yet (the
-  CLI comes in Unit 4). Versioned in lockstep with `emma65`, like `emma6k-core`
+  progress per `plan/multi-cpu-step2-mc6809-plan.md`: `emma09`/`emma6k --cpu 6809` run it, but it
+  has no bundled template yet. Versioned in lockstep with `emma65`, like `emma6k-core`
 - **`build-info`** (crate `emma6k-build-info`) — a `build.rs`-only helper, shared as a
   build-dependency by every other member's `build.rs`, that captures each crate's git commit
   hash, build timestamp, and (for a tagged release commit) version number into `BUILD_VERSION`/
@@ -127,10 +133,6 @@ src/                        — crate emma65
   lib.rs                    — pub mod emulator, mos6502; re-exports watch, assembler, disassembler
   emulator.rs               — the emma65::emulator facade (emma6k_core + 6502 re-exports)
   bin/
-    emulator/
-      main.rs              — emma65 binary entry point
-      config.rs             — AppConfig, CliArgs, apply_default_if_unconfigured
-      tty.rs                — terminal/PTY helpers for the CLI console
     tracer/
       main.rs               — emma65-tracer binary entry point (CLI args, trace decode loop)
       format.rs             — text rendering of decoded trace rows
@@ -169,6 +171,15 @@ core/src/                   — crate emma6k-core, the CPU-neutral core
   logging.rs                — LogSender, log writer/collector threads, log_channel, log_msg!
   watch/                    — watchpoint expression pipeline (see below)
   location.rs, text.rs      — source-text helpers shared by watch and CPU assemblers
+cli/                        — package emma6k, the emulator command line
+  src/bin/emma6k/main.rs    — main, run_6502/run_6809, and run_session<P: Processor> (the console,
+                               logging, tracing and run loop, compiled once per CPU)
+  src/bin/emma6k/config.rs  — CliArgs, AppConfig (CPU-neutral keys), per-source cpu/cpu-variant
+                               checks, LoadedConfig::resolve → RunPlan (family, variant, template)
+  src/bin/emma6k/family.rs  — Family (6502, 6809): variant → family, wrapper names, templates
+  src/bin/emma6k/tty.rs     — terminal raw-mode helpers for the CLI console
+  src/bin/emma65.rs, src/bin/emma09.rs, src/wrapper.rs — the wrappers (exec emma6k --family …)
+  tests/emulator_binary.rs  — subprocess tests of emma6k and the wrappers
 emma09/                     — crate emma09, the Motorola 6809
   src/cpu/                  — Cpu, CpuBuilder, Registers, Processor impl, interrupt servicing,
                                big-endian watch context; opcodes.rs (per-page opcode tables with
@@ -191,7 +202,8 @@ peripheral over a transport, useful for manually exercising `Via6522`'s shift-re
 
 ### `emulator::config` module (`core/src/config/`)
 
-Multi-source configuration (TOML < `EMMA65_*` env vars < CLI args) via `figment` + `clap`.
+Multi-source configuration (TOML < `EMMA6K_*` env vars < CLI args) via `figment` + `clap`, in
+`emma6k` (`cli/src/bin/emma6k/config.rs`) and the debugger. There is no `EMMA65_` fallback.
 
 Building is split in two. The core's `config::build_machine(&registry, MachineSpec, context)`
 iterates the devices, dispatches each to its `DeviceModule`, builds the `Bus`, and returns a
@@ -220,11 +232,12 @@ placeholders) into `dest`, returning the path to the written `emulator.toml`.
 `DEFAULT_TEMPLATE` — the single source of truth for the emulator's zero-config layout: 32K
 zero-filled RAM at `0x0000`, the TaliForth ROM at `0x8000`, a VIA on a Unix-socket transport, an
 R6551 ACIA on `~/.emma/dev/ttyS0` and an MC6850 ACIA on `~/.emma/dev/ttyS1` (both PTYs), an LFSR,
-and a console with `Ctrl+C` as its break key — WDC65C02 at 1.8432 MHz. The `emma65` binary
-materializes the default into a tempdir when no devices are configured
-(`apply_default_if_unconfigured` in `src/bin/emulator/config.rs`, loaded through the normal
-`Toml::file()` path), or any named template via `--profile <id>` (`apply_named_profile`, same
-file); the debugger materializes the default into `~/.emma/debugger/profiles/default/` the first
+and a console with `Ctrl+C` as its break key — WDC65C02 at 1.8432 MHz. `emma6k` merges every
+family's template list (`cli/src/bin/emma6k/family.rs`); a template's `cpu-variant` chooses its
+family. It materializes a family's default template into a tempdir when no devices are configured,
+or any named template via `--profile <id>` (`LoadedConfig::resolve` and `apply_template` in
+`cli/src/bin/emma6k/config.rs`, loaded through the normal `Toml::file()` path); the 6809 has no
+default template yet. The debugger materializes the default into `~/.emma/debugger/profiles/default/` the first
 time that profile directory is created, and offers the full template list in its New Profile
 dialog (see `profile::ensure_profile_dir`/`list_templates` below).
 

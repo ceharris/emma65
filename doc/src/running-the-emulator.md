@@ -1,8 +1,40 @@
 # Running the Emulator
 
+## Choosing the CPU
+
+The emulator is the `emma6k` command, which runs any supported CPU. Two
+shorter commands run it with the CPU family fixed:
+
+- **`emma65`** runs the 65C02 family. With no CPU named, it uses the CMOS
+  `65C02`.
+- **`emma09`** runs the Motorola 6809.
+
+`emma6k` itself has no default CPU, so name one with the `cpu-variant`
+setting, or its shorter synonym `cpu`:
+
+| Value | CPU |
+|---|---|
+| `65C02` (or `C02`) | CMOS 65C02 |
+| `WDC65C02` (or `WDC02`) | WDC 65C02, which adds STP, WAI, BBR/BBS and RMB/SMB |
+| `6809` | Motorola 6809 |
+
+Values are case-insensitive. Set it in a configuration file
+(`cpu-variant = "6809"`), on the command line (`--cpu 6809` or
+`--cpu-variant 6809`), or in the environment (`EMMA6K_CPU=6809`). Use one
+spelling per source: setting both `cpu` and `cpu-variant` in the same file,
+or both flags, is an error.
+
+`emma65` and `emma09` refuse a CPU from the other family. For example,
+`emma65 --cpu 6809` stops and suggests `emma09`.
+
+`--profile <name>` runs one of the bundled starter profiles, which chooses
+its own CPU. The 65C02 profiles are `taliforth`, `msbasic`, `ehbasic`,
+`rain`, `lcd` and `snake`. A profile can't be combined with `--config`, or
+with a CPU from another family.
+
 ## Default configuration
 
-When launched with no devices configured, the emulator runs with a built-in
+When `emma65` is launched with no devices configured, it runs with a built-in
 [TaliForth 2](https://github.com/SamCoVT/TaliForth2) ROM and a full set of
 peripherals:
 
@@ -18,13 +50,16 @@ peripherals:
 
 Interact with the Forth interpreter via standard input and output.
 
+The 6809 has no built-in default yet: `emma09` with nothing configured stops
+and asks for a configuration (`--config` or `--device`).
+
 ## TOML configuration file
 
 Use `--config <file>` to load a TOML configuration file. Top-level keys map
 directly to emulator fields — there is no `[emulator]` wrapper:
 
 ```toml
-cpu-variant = "WDC65C02"      # or "65C02" (CMOS only, default)
+cpu-variant = "WDC65C02"      # or "65C02" (CMOS), or "6809"; `cpu` is a synonym
 clock-speed-hz = 1843200      # omit for unlimited throughput
 unmapped-policy = "ignore"    # or "error"; how unmapped-address accesses
                                # are handled (default: "ignore")
@@ -48,9 +83,9 @@ transport = { pty = { path = "~/.emma/dev/ttyS0" } }
 
 ## CLI flags
 
-All config values can also be set from the command line. CLI takes precedence
-over TOML, which takes precedence over environment variables. CLI arguments
-are the natural fit for the standalone `emma65` binary — a one-off run, a
+All config values can also be set from the command line. Command-line flags
+take precedence over environment variables, which take precedence over the
+TOML file. CLI arguments are the natural fit for the standalone emulator — a one-off run, a
 quick experiment, a shell script — where writing a TOML file is more
 ceremony than the task needs; the debugger drives its own profiles instead
 and has no use for these flags.
@@ -158,13 +193,16 @@ command line. A few representative examples, one `--device` flag per device:
 
 ## Environment variables
 
-Any config key can be set with the `EMMA65_` prefix, using `_` in place of
+Any config key can be set with the `EMMA6K_` prefix, using `_` in place of
 `-`:
 
 ```
-EMMA65_CPU_VARIANT=WDC65C02
-EMMA65_CLOCK_SPEED_HZ=1843200
+EMMA6K_CPU_VARIANT=WDC65C02
+EMMA6K_CLOCK_SPEED_HZ=1843200
 ```
+
+Earlier versions used the `EMMA65_` prefix, which is no longer read. The
+debugger reads the same `EMMA6K_` variables.
 
 ## Built-in device types
 

@@ -1,0 +1,38 @@
+[package]
+name = "emma6k"
+# Versioned in lockstep with the root `emma65` crate, like emma6k-core and
+# emma09: every emma65 release bumps all of them to the same version.
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "The emma6k emulator command line: emma6k, which runs any supported CPU, and the emma65 and emma09 wrappers"
+authors = ["Carl Harris"]
+repository = "https://github.com/ceharris/emma6k"
+
+[[bin]]
+name = "emma6k"
+path = "src/bin/emma6k/main.rs"
+
+[[bin]]
+name = "emma65"
+path = "src/bin/emma65.rs"
+
+[[bin]]
+name = "emma09"
+path = "src/bin/emma09.rs"
+
+[dependencies]
+# The CPU crates and the core, all versioned in lockstep with this crate.
+emma65 = { path = "..", version = "0.1.0" }
+emma09 = { path = "../emma09", version = "0.1.0" }
+emma6k-core = { path = "../core", version = "0.1.0" }
+clap = { version = "4.0", features = ["derive"] }
+env_logger = "0.11.11"
+figment = { version = "0.10", features = ["toml", "env"] }
+libc = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+tempfile = "3.27"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "signal", "sync"] }
+
+[build-dependencies]
+emma6k-build-info = { path = "../build-info" }

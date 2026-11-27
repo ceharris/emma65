@@ -73,6 +73,11 @@ impl FromStr for CpuVariantSpec {
         match us {
             "65C02" | "C02" => Ok(Cmos6502),
             "WDC65C02" | "WDC02" => Ok(Wdc6502),
+            // A 6809 variant, which the emma6k binary runs but the debugger
+            // (this Config's other user) doesn't yet.
+            "6809" | "6309" => Err(format!(
+                "CPU variant '{s}' isn't a 6502: the debugger supports only the 6502 (65c02, wdc65c02)"
+            )),
             _ => Err(format!("Invalid CPU variant '{s}'")),
         }
     }
@@ -83,9 +88,14 @@ impl FromStr for CpuVariantSpec {
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 /// Configuration attributes for the emulator.
 pub struct Config {
-    /// Selected CPU variant (e.g. 65C02, WDC65C02).
-    #[serde(rename = "cpu-variant", skip_serializing_if = "Option::is_none")]
-    #[clap(long = "cpu-variant")]
+    /// Selected CPU variant (e.g. 65C02, WDC65C02). `cpu` is a synonym;
+    /// setting both is an error.
+    #[serde(
+        rename = "cpu-variant",
+        alias = "cpu",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[clap(long = "cpu-variant", visible_alias = "cpu")]
     pub cpu_variant_spec: Option<CpuVariantSpec>,
 
     /// Clock speed to simulate via throttling.
@@ -316,6 +326,34 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(session.cpu.interrupts().firq_mask(), 0);
+    }
+
+    #[test]
+    fn cpu_is_a_synonym_for_cpu_variant() {
+        use figment::Figment;
+        use figment::providers::{Format, Toml};
+
+        let config: Config = Figment::new()
+            .merge(Toml::string(r#"cpu = "wdc02""#))
+            .extract()
+            .unwrap();
+        assert!(matches!(config.cpu_variant_spec, Some(Wdc6502)));
+
+        let both: Result<Config, _> = Figment::new()
+            .merge(Toml::string(
+                r#"
+                cpu = "65c02"
+                cpu-variant = "65c02"
+                "#,
+            ))
+            .extract();
+        assert!(both.is_err(), "setting both spellings is an error");
+    }
+
+    #[test]
+    fn a_6809_variant_is_rejected_as_not_a_6502() {
+        let err = "6809".parse::<CpuVariantSpec>().unwrap_err();
+        assert!(err.contains("the debugger supports only the 6502"), "{err}");
     }
 
     #[test]

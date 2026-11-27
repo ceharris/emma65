@@ -1110,6 +1110,21 @@ dependencies = [
  "crossbeam-channel",
  "emma6k-build-info",
  "emma6k-core",
+ "figment",
+ "serde",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "emma6k"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "emma09",
+ "emma65",
+ "emma6k-build-info",
+ "emma6k-core",
  "env_logger",
  "figment",
  "libc",

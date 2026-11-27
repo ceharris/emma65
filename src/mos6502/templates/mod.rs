@@ -24,7 +24,7 @@ pub use emma6k_core::config::template::{
 
 /// The template [`materialize_default`] writes, and the one the `emma65`
 /// binary and the debugger fall back to when nothing else is configured.
-const DEFAULT_TEMPLATE: &str = "taliforth";
+pub const DEFAULT_TEMPLATE: &str = "taliforth";
 
 /// Every bundled starter-profile template, in display order.
 pub static TEMPLATES: &[Template] = &[

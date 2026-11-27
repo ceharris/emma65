@@ -23,7 +23,8 @@ lockstep with `emma65`: every `emma65` release bumps both to the same version, t
 `emma65`'s `CHANGELOG.md` entry and its single `emma65-vX.Y.Z` tag, and `emma6k-core` never gets a
 release, tag, or changelog of its own. If the user asks to release `emma6k-core`, that is an
 `emma65` release; say so and proceed with `emma65` as the target. The 6809 crate, `emma09`
-(`emma09/`), rides along the same way.
+(`emma09/`), and the CLI package, `emma6k` (`cli/`, the `emma6k`, `emma65` and `emma09`
+binaries), ride along the same way.
 
 Detailed lookup tables (artifact → paths, the full semver policy, changelog/tag format specs)
 live in `reference.md` — load it when you reach a step that needs it, not up front.
@@ -93,8 +94,9 @@ silently picking one.
 - Single-file crates (`emma65`, `emma6k-display`, `emma6k-led-matrix`, `emma6k-lcd-display`):
   edit the `version = "X.Y.Z"` line directly in that crate's `Cargo.toml`.
 - `emma65` additionally: set the same `X.Y.Z` in `core/Cargo.toml`'s `version`, in the
-  `version` of the `emma6k-core` dependency in the root `Cargo.toml`, and in `emma09/Cargo.toml`'s
-  `version` and its `emma6k-core` dependency's `version`. All five must match.
+  `version` of the `emma6k-core` dependency in the root `Cargo.toml`, in `emma09/Cargo.toml`'s
+  `version` and its `emma6k-core` dependency's `version`, and in `cli/Cargo.toml`'s `version` and
+  its `emma65`, `emma09` and `emma6k-core` dependencies' `version`s. All nine must match.
 - `emma6k-debugger`:
   ```bash
   .claude/skills/release/scripts/bump-debugger-version.sh <new-version>
