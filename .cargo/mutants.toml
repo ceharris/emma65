@@ -1,0 +1,9 @@
+# cargo-mutants settings, for one-off mutation-testing passes (not CI).
+# Install with `cargo install --locked cargo-mutants`.
+#
+# Scoped to the 6809 CPU: W. Schwotzer's test suite is less widely used than
+# Klaus Dormann's 6502 suites, so a mutation pass checks that emma09's tests
+# actually catch changes. Run it as `cargo mutants -p emma09`.
+examine_globs = ["emma09/src/**/*.rs"]
+# Test only the mutated package, not the whole workspace.
+test_workspace = false

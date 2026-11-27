@@ -3,6 +3,7 @@ members = [
     ".",
     "build-info",
     "core",
+    "emma09",
     "debugger/src-tauri",
     "display",
     "led-matrix",
