@@ -680,7 +680,7 @@ fn mc6850_irq_driven_receive() {
 
 /// MC6850 TX interrupt: CPU uses IRQ-driven transmit to send 3 bytes.
 ///
-/// MC6850 control = $42 (TC=10 → TX IRQ enabled; RIE=0; CD=10).
+/// MC6850 control = $22 (TC=01 → TX IRQ enabled; RIE=0; CD=10).
 /// IRQ fires immediately when TDRE is set. ISR sends the next byte; after the last
 /// byte is sent, ISR disables TX IRQ (TC=00) so no further interrupts fire.
 /// Main program spins on a zero-page counter until all bytes are sent, then STPs.
@@ -743,7 +743,7 @@ fn mc6850_irq_driven_transmit() {
     //   STA $00     85 00
     //   LDA #$00    A9 00
     //   STA $01     85 01
-    //   LDA #$42    A9 42       -- TC=10 (TX IRQ enabled), RIE=0, CD=10
+    //   LDA #$22    A9 22       -- TC=01 (TX IRQ enabled), RIE=0, CD=10
     //   STA $DF00   8D 00 DF
     //   CLI         58
     //   poll:
@@ -751,7 +751,7 @@ fn mc6850_irq_driven_transmit() {
     //   BNE poll    D0 FD
     //   STP         DB
     let prog: &[u8] = &[
-        0xA9, 0x03, 0x85, 0x00, 0xA9, 0x00, 0x85, 0x01, 0xA9, 0x42, 0x8D, 0x00, 0xDF, 0x58, 0xA5,
+        0xA9, 0x03, 0x85, 0x00, 0xA9, 0x00, 0x85, 0x01, 0xA9, 0x22, 0x8D, 0x00, 0xDF, 0x58, 0xA5,
         0x00, 0xD0, 0xFD, 0xDB,
     ];
     for (i, &b) in prog.iter().enumerate() {
