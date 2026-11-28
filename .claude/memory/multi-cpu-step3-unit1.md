@@ -1,11 +1,11 @@
 ---
 name: multi-cpu-step3-unit1
-description: Starting notes for multi-CPU step 3 Unit 1 (CPU description, register snapshot, trace rows; 6502 only) — exact touch points found 2026-11-28
+description: Multi-CPU step 3 Unit 1 (CPU description, register snapshot, trace rows; 6502 only) — PR #683 open 2026-11-28; what it built and where Units 2–3 extend it
 metadata:
   type: project
 ---
 
-Step 3's plan is `plan/multi-cpu-step3-debugger-plan.md`, merged in #682 on 2026-11-28. Its open decisions were all taken as recommended ([[multi-cpu-effort]]), so the plan's "Open decisions" section still reads as open, but it's settled. Unit 1 is next and no code has been written. Branch from `origin/main` ([[branch-from-origin-main]]), with a name like `step3-unit1-cpu-description`, and follow [[multi-unit-plan-workflow]].
+Step 3's plan is `plan/multi-cpu-step3-debugger-plan.md`, merged in #682 on 2026-11-28. Its open decisions were all taken as recommended ([[multi-cpu-effort]]), so the plan's "Open decisions" section still reads as open, but it's settled. Unit 1 is implemented in PR #683 (branch `step3-unit1-cpu-description`), opened 2026-11-28 and awaiting the user's UAT. The touch-point survey below is kept for reference. Branch from `origin/main` ([[branch-from-origin-main]]), with a name like `step3-unit1-cpu-description`, and follow [[multi-unit-plan-workflow]].
 
 **Unit 1's scope:** the 6502 only, with no visible behavior change. It adds a backend `CpuDescription`, makes `RegisterSnapshot` a `values` map, makes `set_register` take a register name, adds `TraceRowDto.registers`, and drives the frontend's Register panel, Trace panel and status-bar interrupt controls from the description. The stack window and byte order belong to Unit 2. `DebugCpu` and the 6809 belong to Unit 3.
 
@@ -25,5 +25,11 @@ Step 3's plan is `plan/multi-cpu-step3-debugger-plan.md`, merged in #682 on 2026
 
 **Verification for the PR:** `cargo test -p emma6k-debugger`, `cargo clippy -p emma6k-debugger --all-targets -- -D warnings` ([[ci-clippy-deny-warnings]]) and `cargo fmt --all`. In `debugger/frontend` run `npm run lint`, `npm run format:check` and `npm test`, which is what CI runs. GUI UAT is the user's ([[gui-uat-is-the-users]]). The PR's UAT steps are the plan's Unit 1 list: register edits in each radix, the flags row, trace columns and the status bar all unchanged on a TaliForth profile. Update `doc/src/the-debugger.md` only if user-visible text changes ([[wiki-user-facing-writing]]).
 
+**What #683 built, for Units 2–3:**
+- Backend `debugger/src-tauri/src/cpu.rs`: `CpuDescription` and `describe_6502(variant)`; `CpuDescriptionState`, set in `lib.rs` just before `session-loaded`; plus `register_values`, `flags_value` and `set_register_value`, all on the 6502's `Registers`. Unit 3 turns these into `DebugCpu` methods. `ByteOrder` has only `Little`, since clippy denies an unused `Big`, so Unit 3 adds `Big`. `RegisterSnapshot::new(regs, changed, stopped, waiting, bp_hit)` lives in `registers.rs`.
+- The snapshot kept a top-level `pc` beside `values`, and the PR says so.
+- Frontend: `cpuDescription.ts` (types, `flagMask`, `isUnusedFlag`: an unused bit is the one labelled `-`), `CpuDescriptionContext.tsx` (provider inside `App.tsx`, around `ExecutionProvider`), `traceFormat.ts` (trace column helpers), and `test/cpuFixtures.ts` (`DESCRIPTION_6502`, `snapshot6502`). The status bar gates NMI and IRQ on `interrupt_lines`, and Unit 3 adds FIRQ the same way.
+- Register panel grouping: data and index registers go in the data-radix table; pc, stack and flags go in the address table, in description order. The 6502 order is A X Y PC S P.
+
 **Why:** a fresh session should start Unit 1 without re-surveying the debugger.
-**How to apply:** re-check the line numbers, which drift, then implement. Delete this file once Unit 1 merges, and record the merge in [[multi-cpu-effort]].
+**How to apply:** if #683 gets review changes, work on its branch. Once it merges, move the "what #683 built" notes into [[multi-cpu-effort]], record the merge there, and delete this file.
