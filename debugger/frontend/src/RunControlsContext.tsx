@@ -10,22 +10,10 @@ import {
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useExecutionContext } from "./ExecutionContext";
+import type { RegisterSnapshot } from "./RegisterPanel";
 
 /** CPU execution state, used by StatusBar to display the Run/Stop/Step indicator. */
 export type ExecState = "stopped" | "stepping" | "running";
-
-interface RegisterSnapshot {
-  a: number;
-  x: number;
-  y: number;
-  s: number;
-  pc: number;
-  p: number;
-  changed_flags: number;
-  cpu_stopped: boolean;
-  cpu_waiting: boolean;
-  breakpoint_hit: boolean;
-}
 
 /** Auto-step interval bounds in milliseconds. */
 const INTERVAL_MIN = 0;

@@ -5,6 +5,7 @@ import AboutDialog from "./AboutDialog";
 import ClearRecentDialog from "./ClearRecentDialog";
 import { EditMenuProvider } from "./EditMenuContext";
 import ExitConfirmDialog from "./ExitConfirmDialog";
+import { CpuDescriptionProvider } from "./CpuDescriptionContext";
 import { ExecutionProvider } from "./ExecutionContext";
 import NewProfileDialog from "./NewProfileDialog";
 import RestoreLayoutDialog from "./RestoreLayoutDialog";
@@ -108,20 +109,22 @@ export default function App() {
         <header className="app-toolbar">
           <ThemeSelector />
         </header>
-        <ExecutionProvider>
-          <RunControlsProvider>
-            <Suspense
-              fallback={
-                <div className="app-splash">
-                  <span className="status-pending">Initializing…</span>
-                </div>
-              }
-            >
-              <DockLayout />
-            </Suspense>
-            <StatusBar />
-          </RunControlsProvider>
-        </ExecutionProvider>
+        <CpuDescriptionProvider>
+          <ExecutionProvider>
+            <RunControlsProvider>
+              <Suspense
+                fallback={
+                  <div className="app-splash">
+                    <span className="status-pending">Initializing…</span>
+                  </div>
+                }
+              >
+                <DockLayout />
+              </Suspense>
+              <StatusBar />
+            </RunControlsProvider>
+          </ExecutionProvider>
+        </CpuDescriptionProvider>
       </div>
     </EditMenuProvider>
   );

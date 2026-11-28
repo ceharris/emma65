@@ -109,18 +109,7 @@ pub fn reset_cpu(
     *cpu_bus_cache.0.lock().unwrap() = snapshot_cpu_bus(cpu);
     *skip_breakpoint_pc.0.lock().unwrap() = None;
 
-    let snapshot = RegisterSnapshot {
-        a: regs.a,
-        x: regs.x,
-        y: regs.y,
-        s: regs.s,
-        pc: regs.pc,
-        p: regs.p.to_byte(),
-        changed_flags: 0,
-        cpu_stopped: false,
-        cpu_waiting: false,
-        breakpoint_hit: false,
-    };
+    let snapshot = RegisterSnapshot::new(&regs, 0, false, false, false);
 
     let _ = app.emit("debugger-halted", regs.pc);
     let _ = app.emit("debugger-cpu-reset", ());

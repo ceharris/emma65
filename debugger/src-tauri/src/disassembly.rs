@@ -4,6 +4,7 @@ use std::sync::atomic::AtomicU16;
 use std::sync::{Arc, Mutex};
 
 use crate::CpuState;
+use crate::cpu;
 use crate::cpu_bus::{CpuBusCache, UiIrqSourceState, snapshot_cpu_bus};
 use crate::memory::MemoryViewAddr;
 use crate::memory_variables::{self, MemoryVariablesState, ResolvedAddrCache};
@@ -69,7 +70,7 @@ pub fn step_into(
     let mut guard = cpu_state.0.lock().unwrap();
     let cpu = guard.as_mut().ok_or("CPU not ready")?;
 
-    let p_before = cpu.registers().p.to_byte();
+    let flags_before = cpu::flags_value(cpu.registers());
     let pc = cpu.registers().pc;
     // Skip the breakpoint/watch check only if we are halted at that PC because
     // of a prior breakpoint or watch trigger — not on every step.
@@ -80,7 +81,7 @@ pub fn step_into(
         exec_step_into(cpu)
     };
     let regs = *cpu.registers();
-    let changed = p_before ^ regs.p.to_byte();
+    let changed = flags_before ^ cpu::flags_value(&regs);
 
     *changed_flags_state.0.lock().unwrap() = changed;
     *cpu_bus_cache.0.lock().unwrap() = snapshot_cpu_bus(cpu);
@@ -101,18 +102,7 @@ pub fn step_into(
         None
     };
 
-    let snapshot = RegisterSnapshot {
-        a: regs.a,
-        x: regs.x,
-        y: regs.y,
-        s: regs.s,
-        pc: regs.pc,
-        p: regs.p.to_byte(),
-        changed_flags: changed,
-        cpu_stopped,
-        cpu_waiting,
-        breakpoint_hit,
-    };
+    let snapshot = RegisterSnapshot::new(&regs, changed, cpu_stopped, cpu_waiting, breakpoint_hit);
 
     let _ = app.emit("debugger-halted", regs.pc);
     Ok(snapshot)
@@ -305,7 +295,7 @@ pub fn step_over(
     // Consume the skip state; exec_step_over handles the skip internally.
     skip_breakpoint_pc.0.lock().unwrap().take();
     let cpu = cpu_state.0.lock().unwrap().take().ok_or("CPU not ready")?;
-    let p_before = cpu.registers().p.to_byte();
+    let flags_before = cpu::flags_value(cpu.registers());
     let (stopper, stop_rx, mut cmd_rx) = RunStopper::channel();
     *run_stopper_state.0.lock().unwrap() = Some(stopper);
 
@@ -319,7 +309,7 @@ pub fn step_over(
         let result =
             exec_step_over_subroutine(&mut cpu, &stop_rx, &mut cmd_rx, Some(&live_tx), &addr_arc);
         let pc = cpu.registers().pc;
-        let changed = p_before ^ cpu.registers().p.to_byte();
+        let changed = flags_before ^ cpu::flags_value(cpu.registers());
         clear_ui_interrupts_on_reset(&app, &mut cpu, &result);
         let (cpu_stopped, cpu_waiting, breakpoint_hit, skip_pc) = flags_from_result(&result, pc);
         finish_run(
@@ -352,7 +342,7 @@ pub fn step_return(
     // Consume the skip state; exec_step_return handles the skip internally.
     skip_breakpoint_pc.0.lock().unwrap().take();
     let cpu = cpu_state.0.lock().unwrap().take().ok_or("CPU not ready")?;
-    let p_before = cpu.registers().p.to_byte();
+    let flags_before = cpu::flags_value(cpu.registers());
     let (stopper, stop_rx, mut cmd_rx) = RunStopper::channel();
     *run_stopper_state.0.lock().unwrap() = Some(stopper);
 
@@ -365,7 +355,7 @@ pub fn step_return(
         let mut cpu = cpu;
         let result = exec_step_return(&mut cpu, &stop_rx, &mut cmd_rx, Some(&live_tx), &addr_arc);
         let pc = cpu.registers().pc;
-        let changed = p_before ^ cpu.registers().p.to_byte();
+        let changed = flags_before ^ cpu::flags_value(cpu.registers());
         clear_ui_interrupts_on_reset(&app, &mut cpu, &result);
         let (cpu_stopped, cpu_waiting, breakpoint_hit, skip_pc) = flags_from_result(&result, pc);
         finish_run(
@@ -429,7 +419,7 @@ fn flags_from_result(result: &Option<StepResult>, pc: u16) -> (bool, bool, bool,
 fn finish_run(
     app: &AppHandle,
     cpu: Cpu,
-    changed_flags: u8,
+    changed_flags: u32,
     cpu_stopped: bool,
     cpu_waiting: bool,
     breakpoint_hit: bool,
@@ -443,18 +433,13 @@ fn finish_run(
     *app.state::<LiveSnapshotRx>().0.lock().unwrap() = None;
     *app.state::<CpuState>().0.lock().unwrap() = Some(cpu);
 
-    let snapshot = RegisterSnapshot {
-        a: regs.a,
-        x: regs.x,
-        y: regs.y,
-        s: regs.s,
-        pc: regs.pc,
-        p: regs.p.to_byte(),
+    let snapshot = RegisterSnapshot::new(
+        &regs,
         changed_flags,
         cpu_stopped,
         cpu_waiting,
         breakpoint_hit,
-    };
+    );
     let _ = app.emit("debugger-halted", regs.pc);
     let _ = app.emit("debugger-run-stopped", snapshot);
 }
