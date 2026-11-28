@@ -7,6 +7,8 @@
 //!   and the starter-template mechanism.
 //! - [`exec`]: running and stepping a CPU, generic over the [`Processor`]
 //!   trait; [`MachineState`] holds the state every CPU shares.
+//! - [`trace`]: execution tracing and the binary trace file format, generic
+//!   over a CPU's register snapshot.
 //! - [`watch`]: the watchpoint expression pipeline.
 //!
 //! A CPU family lives in its own crate, implements [`Processor`], and builds
@@ -22,6 +24,7 @@ mod logging;
 mod machine;
 mod processor;
 pub mod session;
+pub mod trace;
 pub mod transport;
 pub mod watch;
 

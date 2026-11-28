@@ -231,6 +231,18 @@ pub enum Mnemonic {
     Cmps,
 }
 
+impl std::fmt::Display for Mnemonic {
+    /// Writes the datasheet's upper-case name (`LDA`, `LBEQ`), `<ILL>` for
+    /// an undocumented opcode, or `<INT>` for a serviced interrupt.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Mnemonic::Invalid => f.pad("<ILL>"),
+            Mnemonic::Interrupt => f.pad("<INT>"),
+            other => f.pad(&format!("{other:?}").to_ascii_uppercase()),
+        }
+    }
+}
+
 /// One opcode-table entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OpInfo {

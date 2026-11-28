@@ -98,7 +98,7 @@ pub struct Cpu {
     /// Monotonic clock state; updated by `Cpu::step()` before each instruction.
     trace_state: TraceState,
     /// Optional callback invoked on every `read()` and `write()` (not `peek`).
-    trace_callback: Option<Box<dyn TraceCallback>>,
+    trace_callback: Option<Box<dyn TraceCallback<Registers>>>,
 }
 
 impl Cpu {
@@ -212,7 +212,7 @@ impl Cpu {
     /// Installs a trace callback. Pass `None` to remove an existing callback.
     ///
     /// When set, the callback is invoked on every `read()` and `write()`, but never on `peek`.
-    pub fn set_trace_callback(&mut self, callback: Option<Box<dyn TraceCallback>>) {
+    pub fn set_trace_callback(&mut self, callback: Option<Box<dyn TraceCallback<Registers>>>) {
         self.tracing = callback.is_some();
         self.trace_callback = callback;
     }
@@ -2888,7 +2888,7 @@ mod tests {
 
     struct CapturingCallback(Vec<TraceRecord>);
 
-    impl TraceCallback for CapturingCallback {
+    impl TraceCallback<Registers> for CapturingCallback {
         fn record(&mut self, rec: TraceRecord) {
             self.0.push(rec);
         }

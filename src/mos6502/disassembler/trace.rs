@@ -256,13 +256,13 @@ pub trait DisassemblyListener: Send {
 /// forwarded to `inner` unchanged, and each completed [`DisassembledLine`] is
 /// also delivered to `listener` as a separate output stream, without
 /// changing `TraceRecord`'s wire format.
-pub struct DisassemblingTraceCallback<C: TraceCallback, L: DisassemblyListener> {
+pub struct DisassemblingTraceCallback<C: TraceCallback<Registers>, L: DisassemblyListener> {
     inner: C,
     disassembler: TraceDisassembler,
     listener: L,
 }
 
-impl<C: TraceCallback, L: DisassemblyListener> DisassemblingTraceCallback<C, L> {
+impl<C: TraceCallback<Registers>, L: DisassemblyListener> DisassemblingTraceCallback<C, L> {
     /// Creates a new adapter wrapping `inner`, feeding reconstructed lines to `listener`.
     pub fn new(inner: C, disassembler: TraceDisassembler, listener: L) -> Self {
         Self {
@@ -273,7 +273,9 @@ impl<C: TraceCallback, L: DisassemblyListener> DisassemblingTraceCallback<C, L> 
     }
 }
 
-impl<C: TraceCallback, L: DisassemblyListener> TraceCallback for DisassemblingTraceCallback<C, L> {
+impl<C: TraceCallback<Registers>, L: DisassemblyListener> TraceCallback<Registers>
+    for DisassemblingTraceCallback<C, L>
+{
     fn record(&mut self, rec: TraceRecord) {
         if let Some(line) = self.disassembler.feed(&rec) {
             self.listener.on_line(line);
@@ -293,7 +295,7 @@ mod tests {
 
     struct CapturingCallback(Arc<Mutex<Vec<TraceRecord>>>);
 
-    impl TraceCallback for CapturingCallback {
+    impl TraceCallback<Registers> for CapturingCallback {
         fn record(&mut self, rec: TraceRecord) {
             self.0.lock().unwrap().push(rec);
         }
@@ -437,7 +439,7 @@ mod tests {
 
     struct RecordingCallback(Vec<TraceRecord>);
 
-    impl TraceCallback for RecordingCallback {
+    impl TraceCallback<Registers> for RecordingCallback {
         fn record(&mut self, rec: TraceRecord) {
             self.0.push(rec);
         }

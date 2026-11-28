@@ -56,7 +56,7 @@ enum Stack {
 impl Cpu {
     /// Executes `op`, whose prefix and opcode bytes have been fetched (PC is
     /// past them). Returns the instruction's total cycles.
-    pub(super) fn execute(&mut self, op: DecodedOp) -> Result<u8, ExecError> {
+    pub(super) fn execute<const TRACE: bool>(&mut self, op: DecodedOp) -> Result<u8, ExecError> {
         use Mnemonic::*;
         let mode = op.mode;
         let mut cycles = op.base_cycles;
@@ -69,20 +69,20 @@ impl Cpu {
             // operation, as in the accumulator forms. CLR reads before
             // writing, as the 6809 does.
             Neg | Com | Lsr | Ror | Asr | Asl | Rol | Dec | Inc | Clr => {
-                let (ea, extra) = self.effective_address(mode)?;
+                let (ea, extra) = self.effective_address::<TRACE>(mode)?;
                 cycles += extra;
-                let value = self.read8(ea)?;
+                let value = self.read8::<TRACE>(ea)?;
                 let result = self.unary(op.opcode & 0x0F, value);
-                self.write8(ea, result)?;
+                self.write8::<TRACE>(ea, result)?;
             }
             Tst => {
-                let (ea, extra) = self.effective_address(mode)?;
+                let (ea, extra) = self.effective_address::<TRACE>(mode)?;
                 cycles += extra;
-                let value = self.read8(ea)?;
+                let value = self.read8::<TRACE>(ea)?;
                 self.unary(op.opcode & 0x0F, value);
             }
             Jmp => {
-                let (ea, extra) = self.effective_address(mode)?;
+                let (ea, extra) = self.effective_address::<TRACE>(mode)?;
                 cycles += extra;
                 self.regs.pc = ea;
             }
@@ -97,11 +97,11 @@ impl Cpu {
             Sync => self.wait = Wait::Sync,
             Daa => self.daa(),
             Orcc => {
-                let mask = self.fetch8()?;
+                let mask = self.fetch8::<TRACE>()?;
                 self.regs.cc = ConditionCodes::from_byte(self.regs.cc.to_byte() | mask);
             }
             Andcc => {
-                let mask = self.fetch8()?;
+                let mask = self.fetch8::<TRACE>()?;
                 self.regs.cc = ConditionCodes::from_byte(self.regs.cc.to_byte() & mask);
             }
             Sex => {
@@ -109,14 +109,14 @@ impl Cpu {
                 self.update(N | Z, nz16(self.regs.d()));
             }
             Exg => {
-                let postbyte = self.fetch8()?;
+                let postbyte = self.fetch8::<TRACE>()?;
                 let (r1, r2) = (postbyte >> 4, postbyte & 0x0F);
                 let (v1, v2) = (self.register(r1), self.register(r2));
                 self.set_register(r1, resize(v2, r2, r1));
                 self.set_register(r2, resize(v1, r1, r2));
             }
             Tfr => {
-                let postbyte = self.fetch8()?;
+                let postbyte = self.fetch8::<TRACE>()?;
                 let (src, dst) = (postbyte >> 4, postbyte & 0x0F);
                 let value = self.register(src);
                 self.set_register(dst, resize(value, src, dst));
@@ -124,40 +124,40 @@ impl Cpu {
 
             Bra | Brn | Bhi | Bls | Bcc | Bcs | Bne | Beq | Bvc | Bvs | Bpl | Bmi | Bge | Blt
             | Bgt | Ble => {
-                let offset = self.fetch8()? as i8 as u16;
+                let offset = self.fetch8::<TRACE>()? as i8 as u16;
                 if self.condition(op.opcode) {
                     self.regs.pc = self.regs.pc.wrapping_add(offset);
                 }
             }
             Lbrn | Lbhi | Lbls | Lbcc | Lbcs | Lbne | Lbeq | Lbvc | Lbvs | Lbpl | Lbmi | Lbge
             | Lblt | Lbgt | Lble => {
-                let offset = self.fetch16()?;
+                let offset = self.fetch16::<TRACE>()?;
                 if self.condition(op.opcode) {
                     self.regs.pc = self.regs.pc.wrapping_add(offset);
                     cycles += 1;
                 }
             }
             Lbra => {
-                let offset = self.fetch16()?;
+                let offset = self.fetch16::<TRACE>()?;
                 self.regs.pc = self.regs.pc.wrapping_add(offset);
             }
             Bsr => {
-                let offset = self.fetch8()? as i8 as u16;
-                self.call(self.regs.pc.wrapping_add(offset))?;
+                let offset = self.fetch8::<TRACE>()? as i8 as u16;
+                self.call::<TRACE>(self.regs.pc.wrapping_add(offset))?;
             }
             Lbsr => {
-                let offset = self.fetch16()?;
-                self.call(self.regs.pc.wrapping_add(offset))?;
+                let offset = self.fetch16::<TRACE>()?;
+                self.call::<TRACE>(self.regs.pc.wrapping_add(offset))?;
             }
             Jsr => {
-                let (ea, extra) = self.effective_address(mode)?;
+                let (ea, extra) = self.effective_address::<TRACE>(mode)?;
                 cycles += extra;
-                self.call(ea)?;
+                self.call::<TRACE>(ea)?;
             }
-            Rts => self.regs.pc = self.pull16(Stack::S)?,
+            Rts => self.regs.pc = self.pull16::<TRACE>(Stack::S)?,
 
             Leax | Leay | Leas | Leau => {
-                let (ea, extra) = self.effective_address(mode)?;
+                let (ea, extra) = self.effective_address::<TRACE>(mode)?;
                 cycles += extra;
                 match op.mnemonic {
                     Leax => {
@@ -173,32 +173,32 @@ impl Cpu {
                 }
             }
             Pshs | Puls | Pshu | Pulu => {
-                let list = self.fetch8()?;
+                let list = self.fetch8::<TRACE>()?;
                 let stack = if matches!(op.mnemonic, Pshs | Puls) {
                     Stack::S
                 } else {
                     Stack::U
                 };
                 cycles += if matches!(op.mnemonic, Pshs | Pshu) {
-                    self.push_registers(stack, list)?
+                    self.push_registers::<TRACE>(stack, list)?
                 } else {
-                    self.pull_registers(stack, list)?
+                    self.pull_registers::<TRACE>(stack, list)?
                 };
             }
             Abx => self.regs.x = self.regs.x.wrapping_add(self.regs.b as u16),
             Rti => {
-                self.pull_registers(Stack::S, PUSH_CC)?;
+                self.pull_registers::<TRACE>(Stack::S, PUSH_CC)?;
                 if self.regs.cc.contains(ConditionCodes::E) {
-                    cycles += self.pull_registers(Stack::S, PUSH_ALL & !PUSH_CC)? - 2;
+                    cycles += self.pull_registers::<TRACE>(Stack::S, PUSH_ALL & !PUSH_CC)? - 2;
                 } else {
-                    self.pull_registers(Stack::S, PUSH_PC)?;
+                    self.pull_registers::<TRACE>(Stack::S, PUSH_PC)?;
                 }
             }
             Cwai => {
-                let mask = self.fetch8()?;
+                let mask = self.fetch8::<TRACE>()?;
                 self.regs.cc = ConditionCodes::from_byte(self.regs.cc.to_byte() & mask);
                 self.regs.cc.insert(ConditionCodes::E);
-                self.push_registers(Stack::S, PUSH_ALL)?;
+                self.push_registers::<TRACE>(Stack::S, PUSH_ALL)?;
                 self.wait = Wait::Cwai;
             }
             Mul => {
@@ -206,37 +206,37 @@ impl Cpu {
                 self.regs.set_d(d);
                 self.update(Z | C, (nz16(d) & Z) | ((d >> 7) as u8 & C));
             }
-            Swi => self.software_interrupt(SWI_VECTOR, true)?,
-            Swi2 => self.software_interrupt(SWI2_VECTOR, false)?,
-            Swi3 => self.software_interrupt(SWI3_VECTOR, false)?,
+            Swi => self.software_interrupt::<TRACE>(SWI_VECTOR, true)?,
+            Swi2 => self.software_interrupt::<TRACE>(SWI2_VECTOR, false)?,
+            Swi3 => self.software_interrupt::<TRACE>(SWI3_VECTOR, false)?,
 
             // 8-bit ALU operations on A or B. The opcode's low nibble selects
             // the operation.
             Suba | Cmpa | Sbca | Anda | Bita | Lda | Eora | Adca | Ora | Adda => {
-                let (value, extra) = self.operand8(mode)?;
+                let (value, extra) = self.operand8::<TRACE>(mode)?;
                 cycles += extra;
                 self.regs.a = self.alu8(op.opcode & 0x0F, self.regs.a, value);
             }
             Subb | Cmpb | Sbcb | Andb | Bitb | Ldb | Eorb | Adcb | Orb | Addb => {
-                let (value, extra) = self.operand8(mode)?;
+                let (value, extra) = self.operand8::<TRACE>(mode)?;
                 cycles += extra;
                 self.regs.b = self.alu8(op.opcode & 0x0F, self.regs.b, value);
             }
             Sta | Stb => {
-                let (ea, extra) = self.effective_address(mode)?;
+                let (ea, extra) = self.effective_address::<TRACE>(mode)?;
                 cycles += extra;
                 let value = if op.mnemonic == Sta {
                     self.regs.a
                 } else {
                     self.regs.b
                 };
-                self.write8(ea, value)?;
+                self.write8::<TRACE>(ea, value)?;
                 self.update(N | Z | V, nz8(value));
             }
 
             // 16-bit arithmetic and compares.
             Subd | Addd | Cmpd | Cmpx | Cmpy | Cmpu | Cmps => {
-                let (value, extra) = self.operand16(mode)?;
+                let (value, extra) = self.operand16::<TRACE>(mode)?;
                 cycles += extra;
                 match op.mnemonic {
                     Subd => {
@@ -255,7 +255,7 @@ impl Cpu {
                 }
             }
             Ldd | Ldx | Ldy | Ldu | Lds => {
-                let (value, extra) = self.operand16(mode)?;
+                let (value, extra) = self.operand16::<TRACE>(mode)?;
                 cycles += extra;
                 match op.mnemonic {
                     Ldd => self.regs.set_d(value),
@@ -267,7 +267,7 @@ impl Cpu {
                 self.update(N | Z | V, nz16(value));
             }
             Std | Stx | Sty | Stu | Sts => {
-                let (ea, extra) = self.effective_address(mode)?;
+                let (ea, extra) = self.effective_address::<TRACE>(mode)?;
                 cycles += extra;
                 let value = match op.mnemonic {
                     Std => self.regs.d(),
@@ -276,7 +276,7 @@ impl Cpu {
                     Stu => self.regs.u,
                     _ => self.regs.s,
                 };
-                self.write16(ea, value)?;
+                self.write16::<TRACE>(ea, value)?;
                 self.update(N | Z | V, nz16(value));
             }
         }
@@ -506,14 +506,17 @@ impl Cpu {
     /// Returns the effective address of a direct, extended or indexed
     /// operand, and the extra cycles an indexed postbyte adds.
     #[inline]
-    fn effective_address(&mut self, mode: AddressingMode) -> Result<(u16, u8), ExecError> {
+    fn effective_address<const TRACE: bool>(
+        &mut self,
+        mode: AddressingMode,
+    ) -> Result<(u16, u8), ExecError> {
         match mode {
             AddressingMode::Direct => {
-                let low = self.fetch8()?;
+                let low = self.fetch8::<TRACE>()?;
                 Ok((u16::from_be_bytes([self.regs.dp, low]), 0))
             }
-            AddressingMode::Extended => Ok((self.fetch16()?, 0)),
-            AddressingMode::Indexed => self.indexed(),
+            AddressingMode::Extended => Ok((self.fetch16::<TRACE>()?, 0)),
+            AddressingMode::Indexed => self.indexed::<TRACE>(),
             _ => unreachable!("{mode:?} has no effective address"),
         }
     }
@@ -521,23 +524,26 @@ impl Cpu {
     /// Fetches an 8-bit operand: immediate, or read from its effective
     /// address. Returns the value and any indexed extra cycles.
     #[inline]
-    fn operand8(&mut self, mode: AddressingMode) -> Result<(u8, u8), ExecError> {
+    fn operand8<const TRACE: bool>(&mut self, mode: AddressingMode) -> Result<(u8, u8), ExecError> {
         if mode == AddressingMode::Immediate8 {
-            return Ok((self.fetch8()?, 0));
+            return Ok((self.fetch8::<TRACE>()?, 0));
         }
-        let (ea, extra) = self.effective_address(mode)?;
-        Ok((self.read8(ea)?, extra))
+        let (ea, extra) = self.effective_address::<TRACE>(mode)?;
+        Ok((self.read8::<TRACE>(ea)?, extra))
     }
 
     /// Fetches a 16-bit operand: immediate, or read from its effective
     /// address. Returns the value and any indexed extra cycles.
     #[inline]
-    fn operand16(&mut self, mode: AddressingMode) -> Result<(u16, u8), ExecError> {
+    fn operand16<const TRACE: bool>(
+        &mut self,
+        mode: AddressingMode,
+    ) -> Result<(u16, u8), ExecError> {
         if mode == AddressingMode::Immediate16 {
-            return Ok((self.fetch16()?, 0));
+            return Ok((self.fetch16::<TRACE>()?, 0));
         }
-        let (ea, extra) = self.effective_address(mode)?;
-        Ok((self.read16(ea)?, extra))
+        let (ea, extra) = self.effective_address::<TRACE>(mode)?;
+        Ok((self.read16::<TRACE>(ea)?, extra))
     }
 
     /// Decodes an indexed postbyte and its offset bytes, updating the index
@@ -545,8 +551,8 @@ impl Cpu {
     /// effective address and the postbyte's extra cycles (see
     /// [`indexed`]). An undefined postbyte is reported as
     /// [`ExecError::InvalidOpcode`] before anything changes but PC.
-    fn indexed(&mut self) -> Result<(u16, u8), ExecError> {
-        let postbyte = self.fetch8()?;
+    fn indexed<const TRACE: bool>(&mut self) -> Result<(u16, u8), ExecError> {
+        let postbyte = self.fetch8::<TRACE>()?;
         let register = (postbyte >> 5) & 0x03;
         let base = self.index_register(register);
         if postbyte & indexed::OFFSET5 == 0 {
@@ -584,27 +590,27 @@ impl Cpu {
             0x5 => (base.wrapping_add(self.regs.b as i8 as u16), 1),
             0x6 => (base.wrapping_add(self.regs.a as i8 as u16), 1),
             0x8 => {
-                let offset = self.fetch8()? as i8 as u16;
+                let offset = self.fetch8::<TRACE>()? as i8 as u16;
                 (base.wrapping_add(offset), 1)
             }
             0x9 => {
-                let offset = self.fetch16()?;
+                let offset = self.fetch16::<TRACE>()?;
                 (base.wrapping_add(offset), 4)
             }
             0xB => (base.wrapping_add(self.regs.d()), 4),
             0xC => {
-                let offset = self.fetch8()? as i8 as u16;
+                let offset = self.fetch8::<TRACE>()? as i8 as u16;
                 (self.regs.pc.wrapping_add(offset), 1)
             }
             0xD => {
-                let offset = self.fetch16()?;
+                let offset = self.fetch16::<TRACE>()?;
                 (self.regs.pc.wrapping_add(offset), 5)
             }
             // 0xF: extended indirect, [n16]; the indirection adds 3 more.
-            _ => (self.fetch16()?, 2),
+            _ => (self.fetch16::<TRACE>()?, 2),
         };
         if postbyte & indexed::INDIRECT != 0 {
-            Ok((self.read16(ea)?, extra + 3))
+            Ok((self.read16::<TRACE>(ea)?, extra + 3))
         } else {
             Ok((ea, extra))
         }
@@ -696,38 +702,42 @@ impl Cpu {
         }
     }
 
-    fn push8(&mut self, stack: Stack, value: u8) -> Result<(), ExecError> {
+    fn push8<const TRACE: bool>(&mut self, stack: Stack, value: u8) -> Result<(), ExecError> {
         let sp = self.stack_pointer(stack).wrapping_sub(1);
         self.set_stack_pointer(stack, sp);
-        self.write8(sp, value)
+        self.write8::<TRACE>(sp, value)
     }
 
     /// Pushes a word so it sits big-endian on the stack.
-    fn push16(&mut self, stack: Stack, value: u16) -> Result<(), ExecError> {
+    fn push16<const TRACE: bool>(&mut self, stack: Stack, value: u16) -> Result<(), ExecError> {
         let [hi, lo] = value.to_be_bytes();
-        self.push8(stack, lo)?;
-        self.push8(stack, hi)
+        self.push8::<TRACE>(stack, lo)?;
+        self.push8::<TRACE>(stack, hi)
     }
 
-    fn pull8(&mut self, stack: Stack) -> Result<u8, ExecError> {
+    fn pull8<const TRACE: bool>(&mut self, stack: Stack) -> Result<u8, ExecError> {
         let sp = self.stack_pointer(stack);
-        let value = self.read8(sp)?;
+        let value = self.read8::<TRACE>(sp)?;
         self.set_stack_pointer(stack, sp.wrapping_add(1));
         Ok(value)
     }
 
-    fn pull16(&mut self, stack: Stack) -> Result<u16, ExecError> {
-        let hi = self.pull8(stack)?;
-        let lo = self.pull8(stack)?;
+    fn pull16<const TRACE: bool>(&mut self, stack: Stack) -> Result<u16, ExecError> {
+        let hi = self.pull8::<TRACE>(stack)?;
+        let lo = self.pull8::<TRACE>(stack)?;
         Ok(u16::from_be_bytes([hi, lo]))
     }
 
     /// Pushes the registers in `list` (a PSH postbyte) in the 6809's order:
     /// PC, U or S, Y, X, DP, B, A, CC. Returns the number of bytes pushed.
-    fn push_registers(&mut self, stack: Stack, list: u8) -> Result<u8, ExecError> {
+    fn push_registers<const TRACE: bool>(
+        &mut self,
+        stack: Stack,
+        list: u8,
+    ) -> Result<u8, ExecError> {
         let mut bytes = 0;
         if list & PUSH_PC != 0 {
-            self.push16(stack, self.regs.pc)?;
+            self.push16::<TRACE>(stack, self.regs.pc)?;
             bytes += 2;
         }
         if list & PUSH_OTHER_STACK != 0 {
@@ -735,31 +745,31 @@ impl Cpu {
                 Stack::S => self.regs.u,
                 Stack::U => self.regs.s,
             };
-            self.push16(stack, other)?;
+            self.push16::<TRACE>(stack, other)?;
             bytes += 2;
         }
         if list & PUSH_Y != 0 {
-            self.push16(stack, self.regs.y)?;
+            self.push16::<TRACE>(stack, self.regs.y)?;
             bytes += 2;
         }
         if list & PUSH_X != 0 {
-            self.push16(stack, self.regs.x)?;
+            self.push16::<TRACE>(stack, self.regs.x)?;
             bytes += 2;
         }
         if list & PUSH_DP != 0 {
-            self.push8(stack, self.regs.dp)?;
+            self.push8::<TRACE>(stack, self.regs.dp)?;
             bytes += 1;
         }
         if list & PUSH_B != 0 {
-            self.push8(stack, self.regs.b)?;
+            self.push8::<TRACE>(stack, self.regs.b)?;
             bytes += 1;
         }
         if list & PUSH_A != 0 {
-            self.push8(stack, self.regs.a)?;
+            self.push8::<TRACE>(stack, self.regs.a)?;
             bytes += 1;
         }
         if list & PUSH_CC != 0 {
-            self.push8(stack, self.regs.cc.to_byte())?;
+            self.push8::<TRACE>(stack, self.regs.cc.to_byte())?;
             bytes += 1;
         }
         Ok(bytes)
@@ -767,34 +777,38 @@ impl Cpu {
 
     /// Pulls the registers in `list` (a PUL postbyte) in the reverse of the
     /// push order. Returns the number of bytes pulled.
-    fn pull_registers(&mut self, stack: Stack, list: u8) -> Result<u8, ExecError> {
+    fn pull_registers<const TRACE: bool>(
+        &mut self,
+        stack: Stack,
+        list: u8,
+    ) -> Result<u8, ExecError> {
         let mut bytes = 0;
         if list & PUSH_CC != 0 {
-            self.regs.cc = ConditionCodes::from_byte(self.pull8(stack)?);
+            self.regs.cc = ConditionCodes::from_byte(self.pull8::<TRACE>(stack)?);
             bytes += 1;
         }
         if list & PUSH_A != 0 {
-            self.regs.a = self.pull8(stack)?;
+            self.regs.a = self.pull8::<TRACE>(stack)?;
             bytes += 1;
         }
         if list & PUSH_B != 0 {
-            self.regs.b = self.pull8(stack)?;
+            self.regs.b = self.pull8::<TRACE>(stack)?;
             bytes += 1;
         }
         if list & PUSH_DP != 0 {
-            self.regs.dp = self.pull8(stack)?;
+            self.regs.dp = self.pull8::<TRACE>(stack)?;
             bytes += 1;
         }
         if list & PUSH_X != 0 {
-            self.regs.x = self.pull16(stack)?;
+            self.regs.x = self.pull16::<TRACE>(stack)?;
             bytes += 2;
         }
         if list & PUSH_Y != 0 {
-            self.regs.y = self.pull16(stack)?;
+            self.regs.y = self.pull16::<TRACE>(stack)?;
             bytes += 2;
         }
         if list & PUSH_OTHER_STACK != 0 {
-            let value = self.pull16(stack)?;
+            let value = self.pull16::<TRACE>(stack)?;
             match stack {
                 Stack::S => self.regs.u = value,
                 Stack::U => self.load_s(value),
@@ -802,15 +816,15 @@ impl Cpu {
             bytes += 2;
         }
         if list & PUSH_PC != 0 {
-            self.regs.pc = self.pull16(stack)?;
+            self.regs.pc = self.pull16::<TRACE>(stack)?;
             bytes += 2;
         }
         Ok(bytes)
     }
 
     /// Pushes the return address (PC) on S and jumps to `target`.
-    fn call(&mut self, target: u16) -> Result<(), ExecError> {
-        self.push16(Stack::S, self.regs.pc)?;
+    fn call<const TRACE: bool>(&mut self, target: u16) -> Result<(), ExecError> {
+        self.push16::<TRACE>(Stack::S, self.regs.pc)?;
         self.regs.pc = target;
         Ok(())
     }
@@ -818,7 +832,10 @@ impl Cpu {
     /// Services a hardware interrupt: stacks the state (unless a CWAI already
     /// did), masks interrupts, consumes the request, and jumps through the
     /// interrupt's vector. Returns the cycles taken.
-    pub(super) fn service_interrupt(&mut self, interrupt: Interrupt) -> Result<u8, ExecError> {
+    pub(super) fn service_interrupt<const TRACE: bool>(
+        &mut self,
+        interrupt: Interrupt,
+    ) -> Result<u8, ExecError> {
         let (vector, mask) = match interrupt {
             Interrupt::Nmi => (NMI_VECTOR, ConditionCodes::I | ConditionCodes::F),
             Interrupt::Firq => (FIRQ_VECTOR, ConditionCodes::I | ConditionCodes::F),
@@ -830,11 +847,11 @@ impl Cpu {
             CWAI_WAKE_CYCLES
         } else if interrupt == Interrupt::Firq {
             self.regs.cc.remove(ConditionCodes::E);
-            self.push_registers(Stack::S, PUSH_PC | PUSH_CC)?;
+            self.push_registers::<TRACE>(Stack::S, PUSH_PC | PUSH_CC)?;
             FAST_INTERRUPT_CYCLES
         } else {
             self.regs.cc.insert(ConditionCodes::E);
-            self.push_registers(Stack::S, PUSH_ALL)?;
+            self.push_registers::<TRACE>(Stack::S, PUSH_ALL)?;
             ENTIRE_INTERRUPT_CYCLES
         };
         self.regs.cc.insert(mask);
@@ -845,20 +862,24 @@ impl Cpu {
             Interrupt::Irq => interrupts.consume_irq_pulses(),
         }
         let resolved = self.machine.resolve_vector(vector);
-        self.regs.pc = self.read16(resolved)?;
+        self.regs.pc = self.read16::<TRACE>(resolved)?;
         Ok(cycles)
     }
 
     /// SWI, SWI2 or SWI3: sets E, pushes the entire state on S, masks IRQ and
     /// FIRQ if `mask` (SWI only), and jumps through `vector`.
-    fn software_interrupt(&mut self, vector: u16, mask: bool) -> Result<(), ExecError> {
+    fn software_interrupt<const TRACE: bool>(
+        &mut self,
+        vector: u16,
+        mask: bool,
+    ) -> Result<(), ExecError> {
         self.regs.cc.insert(ConditionCodes::E);
-        self.push_registers(Stack::S, PUSH_ALL)?;
+        self.push_registers::<TRACE>(Stack::S, PUSH_ALL)?;
         if mask {
             self.regs.cc.insert(ConditionCodes::I | ConditionCodes::F);
         }
         let resolved = self.machine.resolve_vector(vector);
-        self.regs.pc = self.read16(resolved)?;
+        self.regs.pc = self.read16::<TRACE>(resolved)?;
         Ok(())
     }
 }

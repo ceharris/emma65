@@ -1,429 +1,74 @@
-//! CPU bus access tracing: callback trait, record type, and binary trace writer/reader.
+//! The 65C02's execution trace: its `Registers` record codec, and the core's
+//! generic trace types specialized to the 65C02's [`Registers`].
+//!
+//! The file format and writer thread live in [`emma6k_core::trace`]. The
+//! 65C02 writes format v3 with family 0 and 16-byte records, so its records
+//! are byte-for-byte the same as format v2's, and v2 files still read.
 use super::Registers;
 use super::status::StatusRegister;
 use super::variant::CpuVariant;
-use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use emma6k_core::trace::{self as core_trace, TraceRegisters};
 
-/// 4-byte magic identifying a binary trace file, followed by a 1-byte format version.
-const MAGIC: [u8; 4] = *b"E65T";
-/// Current binary trace file format version.
-const FORMAT_VERSION: u8 = 2;
-/// Size in bytes of the file header (magic + version + variant + reserved padding).
-const HEADER_LEN: usize = 8;
-/// Size in bytes of each fixed-width trace record.
-const RECORD_LEN: usize = 16;
+pub use emma6k_core::trace::{OverflowPolicy, TraceCallback, TraceHeader, spawn_trace_writer};
 
-const TAG_REGISTERS: u8 = 0;
-const TAG_READ: u8 = 1;
-const TAG_WRITE: u8 = 2;
-const TAG_CYCLES: u8 = 3;
+/// The 65C02's trace family code.
+pub const FAMILY: u8 = 0;
 
 const VARIANT_CMOS_65C02: u8 = 0;
 const VARIANT_WDC_65C02: u8 = 1;
 
-fn variant_to_byte(variant: CpuVariant) -> u8 {
-    match variant {
-        CpuVariant::Cmos65C02 => VARIANT_CMOS_65C02,
-        CpuVariant::Wdc65C02 => VARIANT_WDC_65C02,
-    }
-}
+/// The kind of event a [`TraceRecord`] carries, for the 65C02.
+pub type TraceKind = core_trace::TraceKind<Registers>;
+/// A single recorded 65C02 trace event.
+pub type TraceRecord = core_trace::TraceRecord<Registers>;
+/// Writes 65C02 trace records to a binary trace file.
+pub type BinaryTraceWriter<W> = core_trace::BinaryTraceWriter<W, Registers>;
+/// Reads a 65C02 binary trace file (format v2 or v3).
+pub type BinaryTraceReader<R> = core_trace::BinaryTraceReader<R, Registers>;
+/// A [`TraceCallback`] that hands 65C02 records to a writer thread.
+pub type ChannelTraceCallback = core_trace::ChannelTraceCallback<Registers>;
+/// The 65C02's per-step trace bookkeeping.
+pub(in crate::mos6502) type TraceState = core_trace::TraceState<Registers>;
 
-fn variant_from_byte(byte: u8) -> io::Result<CpuVariant> {
-    match byte {
-        VARIANT_CMOS_65C02 => Ok(CpuVariant::Cmos65C02),
-        VARIANT_WDC_65C02 => Ok(CpuVariant::Wdc65C02),
-        tag => Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("unknown CPU variant tag: {tag}"),
-        )),
-    }
-}
+/// The `Registers` payload: `a`, `x`, `y`, `s` (one byte each), `pc` (u16,
+/// little-endian), `p` (u8), in a 16-byte record.
+impl TraceRegisters for Registers {
+    type Variant = CpuVariant;
+    const FAMILY: u8 = FAMILY;
+    const RECORD_LEN: usize = 16;
 
-/// The kind of event a [`TraceRecord`] carries.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TraceKind {
-    /// Register snapshot taken immediately before this instruction executed.
-    Registers(Registers),
-    /// A bus read of `value` from `addr`.
-    Read {
-        /// The bus address read.
-        addr: u16,
-        /// The byte value read.
-        value: u8,
-    },
-    /// A bus write of `value` to `addr`.
-    Write {
-        /// The bus address written.
-        addr: u16,
-        /// The byte value written.
-        value: u8,
-    },
-    /// The total clock cycle count for the instruction, known only once it
-    /// has finished executing (base cycles plus any addressing-mode or
-    /// branch-taken extra cycles). Emitted once per instruction, after its
-    /// last `Read`/`Write` record.
-    Cycles(u8),
-}
-
-/// A single recorded trace event: either a pre-instruction register snapshot
-/// or a bus read/write, tagged with the instruction it belongs to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TraceRecord {
-    /// Monotonically increasing id shared by every record (the `Registers`
-    /// snapshot plus all bus ops) belonging to the same `Cpu::step()` call.
-    pub instr_id: u64,
-    /// The event this record carries.
-    pub kind: TraceKind,
-}
-
-impl TraceRecord {
-    fn to_bytes(self) -> [u8; RECORD_LEN] {
-        let mut buf = [0u8; RECORD_LEN];
-        buf[0..8].copy_from_slice(&self.instr_id.to_le_bytes());
-        match self.kind {
-            TraceKind::Registers(regs) => {
-                buf[8] = TAG_REGISTERS;
-                buf[9] = regs.a;
-                buf[10] = regs.x;
-                buf[11] = regs.y;
-                buf[12] = regs.s;
-                buf[13..15].copy_from_slice(&regs.pc.to_le_bytes());
-                buf[15] = regs.p.to_byte();
-            }
-            TraceKind::Read { addr, value } => {
-                buf[8] = TAG_READ;
-                buf[9..11].copy_from_slice(&addr.to_le_bytes());
-                buf[11] = value;
-            }
-            TraceKind::Write { addr, value } => {
-                buf[8] = TAG_WRITE;
-                buf[9..11].copy_from_slice(&addr.to_le_bytes());
-                buf[11] = value;
-            }
-            TraceKind::Cycles(cycles) => {
-                buf[8] = TAG_CYCLES;
-                buf[9] = cycles;
-            }
-        }
-        buf
-    }
-
-    fn from_bytes(buf: &[u8; RECORD_LEN]) -> io::Result<Self> {
-        let instr_id = u64::from_le_bytes(buf[0..8].try_into().unwrap());
-        let kind = match buf[8] {
-            TAG_REGISTERS => TraceKind::Registers(Registers {
-                a: buf[9],
-                x: buf[10],
-                y: buf[11],
-                s: buf[12],
-                pc: u16::from_le_bytes([buf[13], buf[14]]),
-                p: StatusRegister::from_byte(buf[15]),
-            }),
-            TAG_READ => TraceKind::Read {
-                addr: u16::from_le_bytes([buf[9], buf[10]]),
-                value: buf[11],
-            },
-            TAG_WRITE => TraceKind::Write {
-                addr: u16::from_le_bytes([buf[9], buf[10]]),
-                value: buf[11],
-            },
-            TAG_CYCLES => TraceKind::Cycles(buf[9]),
-            tag => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("unknown trace record tag: {tag}"),
-                ));
-            }
-        };
-        Ok(TraceRecord { instr_id, kind })
-    }
-}
-
-/// Receives bus trace records as they are generated by the CPU.
-pub trait TraceCallback: Send {
-    /// Called once for each `Registers` snapshot and each bus read or write.
-    /// Never called for `peek`.
-    fn record(&mut self, rec: TraceRecord);
-
-    /// Makes all records recorded so far visible to an independent reader of
-    /// the trace stream (e.g. a live viewer polling the file). Default is a
-    /// no-op; implementations backed by buffered or asynchronous I/O should
-    /// override this to block until pending writes are durable.
-    fn flush(&mut self) {}
-}
-
-/// Writes trace records to a binary trace file.
-///
-/// File layout: an 8-byte header (4-byte magic `b"E65T"`, 1-byte format
-/// version, 1-byte CPU variant tag, 2 reserved zero bytes) written once at
-/// construction, followed by fixed-width 16-byte records, little-endian:
-/// - Bytes 0–7: `instr_id` (u64)
-/// - Byte 8:    tag (0 = `Registers`, 1 = `Read`, 2 = `Write`, 3 = `Cycles`)
-/// - Bytes 9–15: tag-dependent payload, zero-padded to 7 bytes
-///   - `Registers`: `a`, `x`, `y`, `s` (one byte each), `pc` (u16), `p` (u8)
-///   - `Read`/`Write`: `addr` (u16), `value` (u8), then 4 padding bytes
-///   - `Cycles`: cycle count (u8), then 6 padding bytes
-pub struct BinaryTraceWriter<W: Write> {
-    writer: BufWriter<W>,
-}
-
-impl<W: Write> BinaryTraceWriter<W> {
-    /// Creates a new writer wrapping `inner`, writing the file header
-    /// (including `variant`, the CPU variant that produced this trace)
-    /// immediately.
-    pub fn new(inner: W, variant: CpuVariant) -> Self {
-        let mut writer = BufWriter::new(inner);
-        let mut header = [0u8; HEADER_LEN];
-        header[0..4].copy_from_slice(&MAGIC);
-        header[4] = FORMAT_VERSION;
-        header[5] = variant_to_byte(variant);
-        // Best-effort write; errors are silently swallowed to avoid disrupting emulation.
-        let _ = writer.write_all(&header);
-        Self { writer }
-    }
-
-    /// Flushes buffered records to the underlying writer.
-    pub fn flush(&mut self) -> io::Result<()> {
-        self.writer.flush()
-    }
-}
-
-impl<W: Write + Send> TraceCallback for BinaryTraceWriter<W> {
-    fn record(&mut self, rec: TraceRecord) {
-        // Best-effort write; errors are silently swallowed to avoid disrupting emulation.
-        let _ = self.writer.write_all(&rec.to_bytes());
-    }
-
-    fn flush(&mut self) {
-        // Best-effort; errors are silently swallowed to avoid disrupting emulation.
-        let _ = self.flush();
-    }
-}
-
-/// Reads a binary trace file written by [`BinaryTraceWriter`].
-pub struct BinaryTraceReader<R: Read> {
-    reader: BufReader<R>,
-    variant: CpuVariant,
-}
-
-impl<R: Read> BinaryTraceReader<R> {
-    /// Creates a new reader over `inner`, validating the file header eagerly.
-    /// Returns an error if the magic, format version, or CPU variant tag
-    /// doesn't match a known value.
-    pub fn new(inner: R) -> io::Result<Self> {
-        let mut reader = BufReader::new(inner);
-        let mut header = [0u8; HEADER_LEN];
-        reader.read_exact(&mut header)?;
-        if header[0..4] != MAGIC {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "bad trace file magic",
-            ));
-        }
-        if header[4] != FORMAT_VERSION {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("unsupported trace file format version: {}", header[4]),
-            ));
-        }
-        let variant = variant_from_byte(header[5])?;
-        Ok(Self { reader, variant })
-    }
-
-    /// The CPU variant that produced this trace, as recorded in the file header.
-    pub fn variant(&self) -> CpuVariant {
-        self.variant
-    }
-}
-
-impl<R: Read + Seek> BinaryTraceReader<R> {
-    /// Seeks so that the next `next()` call yields the record at `record_index`
-    /// (0-based, counting from the first record after the header), without
-    /// scanning the file from the start.
-    pub fn seek_to_record(&mut self, record_index: u64) -> io::Result<()> {
-        let offset = HEADER_LEN as u64 + record_index * RECORD_LEN as u64;
-        self.reader.seek(SeekFrom::Start(offset))?;
-        Ok(())
-    }
-}
-
-impl<R: Read> Iterator for BinaryTraceReader<R> {
-    type Item = io::Result<TraceRecord>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut buf = [0u8; RECORD_LEN];
-        let mut read = 0;
-        while read < RECORD_LEN {
-            match self.reader.read(&mut buf[read..]) {
-                Ok(0) if read == 0 => return None,
-                Ok(0) => {
-                    return Some(Err(io::Error::new(
-                        io::ErrorKind::UnexpectedEof,
-                        "partial trace record at EOF",
-                    )));
-                }
-                Ok(n) => read += n,
-                Err(e) => return Some(Err(e)),
-            }
-        }
-        Some(TraceRecord::from_bytes(&buf))
-    }
-}
-
-/// Overflow behavior when the trace writer thread can't keep up.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OverflowPolicy {
-    /// Drop the record and count it. Never stalls the CPU thread.
-    DropOnFull,
-    /// Block until the writer thread makes room. Guarantees no lost records,
-    /// at the cost of possibly stalling the CPU thread under sustained write pressure.
-    BlockOnFull,
-}
-
-/// A message sent from the CPU thread to the trace writer thread: either a
-/// record to persist, or a request to flush everything written so far, with
-/// an ack channel the writer signals once the flush completes.
-enum WriterMsg {
-    /// A trace record to write.
-    Record(TraceRecord),
-    /// A request to flush buffered writes; the writer sends `()` on this
-    /// channel once the flush completes, after draining every `Record`
-    /// enqueued ahead of it.
-    Flush(std::sync::mpsc::Sender<()>),
-}
-
-/// A [`TraceCallback`] that hands records off to a writer thread over a bounded channel.
-pub struct ChannelTraceCallback {
-    /// Sending half of the bounded channel to the writer thread.
-    tx: crossbeam_channel::Sender<WriterMsg>,
-    /// Behavior to apply when the channel is full.
-    policy: OverflowPolicy,
-    /// Shared count of records dropped under `OverflowPolicy::DropOnFull`.
-    dropped: std::sync::Arc<std::sync::atomic::AtomicU64>,
-}
-
-impl TraceCallback for ChannelTraceCallback {
-    fn record(&mut self, rec: TraceRecord) {
-        match self.policy {
-            OverflowPolicy::DropOnFull => {
-                if self.tx.try_send(WriterMsg::Record(rec)).is_err() {
-                    self.dropped
-                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                }
-            }
-            OverflowPolicy::BlockOnFull => {
-                // Blocks until the writer drains space, or returns immediately
-                // if the writer thread has exited (receiver disconnected) —
-                // never blocks forever on a dead consumer.
-                let _ = self.tx.send(WriterMsg::Record(rec));
-            }
+    fn variant_to_byte(variant: CpuVariant) -> u8 {
+        match variant {
+            CpuVariant::Cmos65C02 => VARIANT_CMOS_65C02,
+            CpuVariant::Wdc65C02 => VARIANT_WDC_65C02,
         }
     }
 
-    fn flush(&mut self) {
-        // Always sent with a blocking `send` (regardless of `policy`, which only
-        // governs record drops): a flush request must reach the writer thread in
-        // order, after every record enqueued ahead of it, for callers to be able
-        // to rely on "everything written before this call is now visible".
-        let (ack_tx, ack_rx) = std::sync::mpsc::channel();
-        if self.tx.send(WriterMsg::Flush(ack_tx)).is_ok() {
-            let _ = ack_rx.recv();
-        }
-    }
-}
-
-/// Spawns a writer thread that drains trace records from a bounded channel and
-/// writes them via `writer`. Returns a callback for the CPU thread, a join
-/// handle to await flush-on-exit, and a shared counter of dropped records
-/// (only incremented under [`OverflowPolicy::DropOnFull`]).
-///
-/// Writes are only made visible to an independent reader of the same file
-/// (e.g. a live viewer that reopens the file on each poll) when the caller
-/// explicitly calls [`ChannelTraceCallback::flush`] — the underlying
-/// `BinaryTraceWriter` otherwise only flushes when the channel closes.
-pub fn spawn_trace_writer<W: Write + Send + 'static>(
-    writer: BinaryTraceWriter<W>,
-    capacity: usize,
-    policy: OverflowPolicy,
-) -> (
-    ChannelTraceCallback,
-    std::thread::JoinHandle<()>,
-    std::sync::Arc<std::sync::atomic::AtomicU64>,
-) {
-    let (tx, rx) = crossbeam_channel::bounded::<WriterMsg>(capacity);
-    let dropped = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-
-    let mut writer = writer;
-    let handle = std::thread::spawn(move || {
-        // rx.recv() parks the thread until a message arrives, and returns Err
-        // once the sender drops and the channel is drained — no polling loop needed.
-        while let Ok(msg) = rx.recv() {
-            match msg {
-                WriterMsg::Record(rec) => writer.record(rec),
-                WriterMsg::Flush(ack) => {
-                    let _ = writer.flush();
-                    let _ = ack.send(());
-                }
-            }
-        }
-        let _ = writer.flush();
-    });
-
-    (
-        ChannelTraceCallback {
-            tx,
-            policy,
-            dropped: dropped.clone(),
-        },
-        handle,
-        dropped,
-    )
-}
-
-/// Tracks the per-instruction correlation id and the not-yet-flushed register
-/// snapshot for the instruction currently being stepped.
-pub(in crate::mos6502) struct TraceState {
-    /// Id to assign to the next instruction that begins.
-    next_instr_id: u64,
-    /// The `(instr_id, snapshot)` for the current instruction, if its
-    /// `Registers` record hasn't been flushed to the trace stream yet.
-    pending: Option<(u64, Registers)>,
-}
-
-impl TraceState {
-    pub(in crate::mos6502) fn new() -> Self {
-        Self {
-            next_instr_id: 0,
-            pending: None,
+    fn variant_from_byte(byte: u8) -> Option<CpuVariant> {
+        match byte {
+            VARIANT_CMOS_65C02 => Some(CpuVariant::Cmos65C02),
+            VARIANT_WDC_65C02 => Some(CpuVariant::Wdc65C02),
+            _ => None,
         }
     }
 
-    /// Called once per `Cpu::step()`, before any register mutation for that
-    /// step, with the register state as it stood at the start of the step.
-    pub(in crate::mos6502) fn begin_instruction(&mut self, regs: Registers) {
-        let id = self.next_instr_id;
-        self.next_instr_id = self.next_instr_id.wrapping_add(1);
-        self.pending = Some((id, regs));
+    fn encode(&self, payload: &mut [u8]) {
+        payload[0] = self.a;
+        payload[1] = self.x;
+        payload[2] = self.y;
+        payload[3] = self.s;
+        payload[4..6].copy_from_slice(&self.pc.to_le_bytes());
+        payload[6] = self.p.to_byte();
     }
 
-    /// Returns the id of the most recently begun instruction.
-    pub(in crate::mos6502) fn current_instr_id(&self) -> u64 {
-        self.next_instr_id.wrapping_sub(1)
-    }
-
-    /// Takes and returns the pending `Registers` snapshot for `instr_id`, if
-    /// it hasn't already been flushed. Returns `None` (leaving any pending
-    /// snapshot for a different id untouched) once already flushed.
-    pub(in crate::mos6502) fn take_pending_registers(
-        &mut self,
-        instr_id: u64,
-    ) -> Option<Registers> {
-        match self.pending.take() {
-            Some((id, regs)) if id == instr_id => Some(regs),
-            other => {
-                self.pending = other;
-                None
-            }
+    fn decode(payload: &[u8]) -> Self {
+        Registers {
+            a: payload[0],
+            x: payload[1],
+            y: payload[2],
+            s: payload[3],
+            pc: u16::from_le_bytes([payload[4], payload[5]]),
+            p: StatusRegister::from_byte(payload[6]),
         }
     }
 }
@@ -431,14 +76,10 @@ impl TraceState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use emma6k_core::trace::HEADER_LEN;
+    use std::io;
 
-    struct CapturingCallback(Vec<TraceRecord>);
-
-    impl TraceCallback for CapturingCallback {
-        fn record(&mut self, rec: TraceRecord) {
-            self.0.push(rec);
-        }
-    }
+    const RECORD_LEN: usize = 16;
 
     fn sample_registers() -> Registers {
         Registers {
@@ -451,327 +92,103 @@ mod tests {
         }
     }
 
-    #[test]
-    fn trace_record_fields() {
-        let rec = TraceRecord {
-            instr_id: 42,
-            kind: TraceKind::Read {
-                addr: 0x0200,
-                value: 0xAB,
-            },
-        };
-        assert_eq!(rec.instr_id, 42);
-        assert_eq!(
-            rec.kind,
-            TraceKind::Read {
-                addr: 0x0200,
-                value: 0xAB
-            }
-        );
-    }
-
-    #[test]
-    fn binary_writer_record_layout() {
-        let buf = {
-            let mut buf = Vec::new();
-            let mut writer = BinaryTraceWriter::new(&mut buf, CpuVariant::Wdc65C02);
-            writer.record(TraceRecord {
+    fn sample_records() -> Vec<TraceRecord> {
+        vec![
+            TraceRecord {
                 instr_id: 7,
                 kind: TraceKind::Registers(sample_registers()),
-            });
-            writer.record(TraceRecord {
+            },
+            TraceRecord {
                 instr_id: 7,
                 kind: TraceKind::Read {
                     addr: 0x1234,
                     value: 0xAB,
                 },
-            });
-            writer.record(TraceRecord {
+            },
+            TraceRecord {
                 instr_id: 8,
                 kind: TraceKind::Write {
                     addr: 0x5678,
                     value: 0xCD,
                 },
-            });
-            writer.flush().unwrap();
-            drop(writer);
-            buf
-        };
-
-        assert_eq!(buf.len(), HEADER_LEN + 3 * RECORD_LEN);
-        assert_eq!(&buf[0..4], &MAGIC);
-        assert_eq!(buf[4], FORMAT_VERSION);
-        assert_eq!(buf[5], VARIANT_WDC_65C02);
-        assert_eq!(&buf[6..8], &[0, 0]);
-
-        let rec0 = &buf[HEADER_LEN..HEADER_LEN + RECORD_LEN];
-        assert_eq!(&rec0[0..8], &7u64.to_le_bytes());
-        assert_eq!(rec0[8], TAG_REGISTERS);
-        let regs = sample_registers();
-        assert_eq!(rec0[9], regs.a);
-        assert_eq!(rec0[10], regs.x);
-        assert_eq!(rec0[11], regs.y);
-        assert_eq!(rec0[12], regs.s);
-        assert_eq!(&rec0[13..15], &regs.pc.to_le_bytes());
-        assert_eq!(rec0[15], regs.p.to_byte());
-
-        let rec1 = &buf[HEADER_LEN + RECORD_LEN..HEADER_LEN + 2 * RECORD_LEN];
-        assert_eq!(&rec1[0..8], &7u64.to_le_bytes());
-        assert_eq!(rec1[8], TAG_READ);
-        assert_eq!(&rec1[9..11], &0x1234u16.to_le_bytes());
-        assert_eq!(rec1[11], 0xAB);
-        assert_eq!(&rec1[12..16], &[0, 0, 0, 0]);
-
-        let rec2 = &buf[HEADER_LEN + 2 * RECORD_LEN..HEADER_LEN + 3 * RECORD_LEN];
-        assert_eq!(&rec2[0..8], &8u64.to_le_bytes());
-        assert_eq!(rec2[8], TAG_WRITE);
-        assert_eq!(&rec2[9..11], &0x5678u16.to_le_bytes());
-        assert_eq!(rec2[11], 0xCD);
-    }
-
-    #[test]
-    fn binary_writer_cycles_record_layout() {
-        let buf = {
-            let mut buf = Vec::new();
-            let mut writer = BinaryTraceWriter::new(&mut buf, CpuVariant::Wdc65C02);
-            writer.record(TraceRecord {
-                instr_id: 9,
+            },
+            TraceRecord {
+                instr_id: 8,
                 kind: TraceKind::Cycles(4),
-            });
-            writer.flush().unwrap();
-            drop(writer);
-            buf
-        };
-
-        let rec = &buf[HEADER_LEN..HEADER_LEN + RECORD_LEN];
-        assert_eq!(&rec[0..8], &9u64.to_le_bytes());
-        assert_eq!(rec[8], TAG_CYCLES);
-        assert_eq!(rec[9], 4);
-        assert_eq!(&rec[10..16], &[0, 0, 0, 0, 0, 0]);
-    }
-
-    #[test]
-    fn cycles_record_roundtrips_through_reader() {
-        let buf = {
-            let mut buf = Vec::new();
-            let mut writer = BinaryTraceWriter::new(&mut buf, CpuVariant::Wdc65C02);
-            writer.record(TraceRecord {
-                instr_id: 5,
-                kind: TraceKind::Cycles(7),
-            });
-            writer.flush().unwrap();
-            drop(writer);
-            buf
-        };
-
-        let reader = BinaryTraceReader::new(buf.as_slice()).unwrap();
-        let records: Vec<TraceRecord> = reader.collect::<io::Result<Vec<_>>>().unwrap();
-        assert_eq!(
-            records,
-            vec![TraceRecord {
-                instr_id: 5,
-                kind: TraceKind::Cycles(7)
-            }]
-        );
-    }
-
-    #[test]
-    fn capturing_callback_receives_records() {
-        let mut cb = CapturingCallback(Vec::new());
-        cb.record(TraceRecord {
-            instr_id: 1,
-            kind: TraceKind::Write {
-                addr: 0x0100,
-                value: 0x42,
             },
-        });
-        cb.record(TraceRecord {
-            instr_id: 1,
-            kind: TraceKind::Read {
-                addr: 0x0101,
-                value: 0x00,
-            },
-        });
-        assert_eq!(cb.0.len(), 2);
-        assert!(matches!(cb.0[0].kind, TraceKind::Write { .. }));
-        assert!(matches!(cb.0[1].kind, TraceKind::Read { .. }));
+        ]
     }
 
-    #[test]
-    fn begin_instruction_advances_id_and_sets_pending() {
-        let mut state = TraceState::new();
-        state.begin_instruction(sample_registers());
-        let id1 = state.current_instr_id();
-        state.begin_instruction(sample_registers());
-        let id2 = state.current_instr_id();
-        assert_eq!(id2, id1 + 1);
-        assert_eq!(state.take_pending_registers(id2), Some(sample_registers()));
+    fn write(records: &[TraceRecord]) -> Vec<u8> {
+        let mut buf = Vec::new();
+        let mut writer = BinaryTraceWriter::new(&mut buf, CpuVariant::Wdc65C02);
+        for &rec in records {
+            writer.record(rec);
+        }
+        writer.flush().unwrap();
+        drop(writer);
+        buf
     }
 
-    #[test]
-    fn take_pending_registers_returns_none_for_stale_id() {
-        let mut state = TraceState::new();
-        state.begin_instruction(sample_registers());
-        let id = state.current_instr_id();
-        // Wrong id: pending snapshot for `id` must remain untouched.
-        assert_eq!(state.take_pending_registers(id.wrapping_add(1)), None);
-        assert_eq!(state.take_pending_registers(id), Some(sample_registers()));
-        // Already flushed: taking again returns None.
-        assert_eq!(state.take_pending_registers(id), None);
-    }
-
-    #[test]
-    fn binary_writer_registers_record_roundtrips_through_reader() {
-        let buf = {
-            let mut buf = Vec::new();
-            let mut writer = BinaryTraceWriter::new(&mut buf, CpuVariant::Wdc65C02);
-            writer.record(TraceRecord {
-                instr_id: 3,
-                kind: TraceKind::Registers(sample_registers()),
-            });
-            writer.record(TraceRecord {
-                instr_id: 3,
-                kind: TraceKind::Read {
-                    addr: 0x0300,
-                    value: 0x99,
-                },
-            });
-            writer.record(TraceRecord {
-                instr_id: 4,
-                kind: TraceKind::Write {
-                    addr: 0x0301,
-                    value: 0x77,
-                },
-            });
-            writer.flush().unwrap();
-            drop(writer);
-            buf
+    /// The exact bytes the 6502 wrote under format v2: v3 changes only
+    /// header bytes 4, 6 and 7.
+    fn v2_record_bytes() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        let mut rec = |id: u64, tail: &[u8]| {
+            bytes.extend_from_slice(&id.to_le_bytes());
+            let mut rest = [0u8; 8];
+            rest[..tail.len()].copy_from_slice(tail);
+            bytes.extend_from_slice(&rest);
         };
+        let p = (StatusRegister::UNUSED | StatusRegister::N).to_byte();
+        rec(7, &[0, 0x11, 0x22, 0x33, 0xFD, 0x00, 0xC0, p]);
+        rec(7, &[1, 0x34, 0x12, 0xAB]);
+        rec(8, &[2, 0x78, 0x56, 0xCD]);
+        rec(8, &[3, 4]);
+        bytes
+    }
 
+    #[test]
+    fn writes_v3_with_family_0_and_v2_record_bytes() {
+        let buf = write(&sample_records());
+        assert_eq!(&buf[..HEADER_LEN], &[b'E', b'6', b'5', b'T', 3, 1, 0, 16]);
+        assert_eq!(&buf[HEADER_LEN..], v2_record_bytes().as_slice());
+        assert_eq!(buf.len(), HEADER_LEN + 4 * RECORD_LEN);
+    }
+
+    #[test]
+    fn v3_round_trip() {
+        let buf = write(&sample_records());
         let reader = BinaryTraceReader::new(buf.as_slice()).unwrap();
-        let records: Vec<TraceRecord> = reader.collect::<io::Result<Vec<_>>>().unwrap();
-        assert_eq!(records.len(), 3);
-        assert_eq!(
-            records[0],
-            TraceRecord {
-                instr_id: 3,
-                kind: TraceKind::Registers(sample_registers())
-            }
-        );
-        assert_eq!(
-            records[1],
-            TraceRecord {
-                instr_id: 3,
-                kind: TraceKind::Read {
-                    addr: 0x0300,
-                    value: 0x99
-                }
-            }
-        );
-        assert_eq!(
-            records[2],
-            TraceRecord {
-                instr_id: 4,
-                kind: TraceKind::Write {
-                    addr: 0x0301,
-                    value: 0x77
-                }
-            }
-        );
+        assert_eq!(reader.variant(), CpuVariant::Wdc65C02);
+        let records: Vec<TraceRecord> = reader.collect::<io::Result<_>>().unwrap();
+        assert_eq!(records, sample_records());
     }
 
     #[test]
-    fn reader_rejects_bad_magic() {
-        let mut buf = vec![0u8; HEADER_LEN];
-        buf[0..4].copy_from_slice(b"NOPE");
-        buf[4] = FORMAT_VERSION;
-        assert!(BinaryTraceReader::new(buf.as_slice()).is_err());
-    }
-
-    #[test]
-    fn reader_rejects_bad_version() {
-        let mut buf = vec![0u8; HEADER_LEN];
-        buf[0..4].copy_from_slice(&MAGIC);
-        buf[4] = FORMAT_VERSION + 1;
-        assert!(BinaryTraceReader::new(buf.as_slice()).is_err());
+    fn v2_files_still_decode() {
+        let mut buf = vec![b'E', b'6', b'5', b'T', 2, 0, 0, 0];
+        buf.extend_from_slice(&v2_record_bytes());
+        let reader = BinaryTraceReader::new(buf.as_slice()).unwrap();
+        assert_eq!(reader.variant(), CpuVariant::Cmos65C02);
+        assert_eq!(reader.header().version, 2);
+        let records: Vec<TraceRecord> = reader.collect::<io::Result<_>>().unwrap();
+        assert_eq!(records, sample_records());
     }
 
     #[test]
     fn reader_rejects_unknown_variant_tag() {
-        let mut buf = vec![0u8; HEADER_LEN];
-        buf[0..4].copy_from_slice(&MAGIC);
-        buf[4] = FORMAT_VERSION;
+        let mut buf = write(&[]);
         buf[5] = 0xFF;
         assert!(BinaryTraceReader::new(buf.as_slice()).is_err());
     }
 
     #[test]
     fn seek_to_record_jumps_to_arbitrary_record() {
-        let buf = {
-            let mut buf = Vec::new();
-            let mut writer = BinaryTraceWriter::new(&mut buf, CpuVariant::Wdc65C02);
-            for i in 0..5u8 {
-                writer.record(TraceRecord {
-                    instr_id: i as u64,
-                    kind: TraceKind::Cycles(i),
-                });
-            }
-            writer.flush().unwrap();
-            drop(writer);
-            buf
-        };
-
+        let buf = write(&sample_records());
         let mut reader = BinaryTraceReader::new(io::Cursor::new(buf)).unwrap();
-        reader.seek_to_record(3).unwrap();
-        let records: Vec<TraceRecord> = reader.collect::<io::Result<Vec<_>>>().unwrap();
-        assert_eq!(
-            records,
-            vec![
-                TraceRecord {
-                    instr_id: 3,
-                    kind: TraceKind::Cycles(3)
-                },
-                TraceRecord {
-                    instr_id: 4,
-                    kind: TraceKind::Cycles(4)
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn seek_to_record_zero_is_equivalent_to_no_seek() {
-        let buf = {
-            let mut buf = Vec::new();
-            let mut writer = BinaryTraceWriter::new(&mut buf, CpuVariant::Wdc65C02);
-            writer.record(TraceRecord {
-                instr_id: 0,
-                kind: TraceKind::Cycles(1),
-            });
-            writer.flush().unwrap();
-            drop(writer);
-            buf
-        };
-
-        let mut reader = BinaryTraceReader::new(io::Cursor::new(buf)).unwrap();
-        reader.seek_to_record(0).unwrap();
-        let records: Vec<TraceRecord> = reader.collect::<io::Result<Vec<_>>>().unwrap();
-        assert_eq!(
-            records,
-            vec![TraceRecord {
-                instr_id: 0,
-                kind: TraceKind::Cycles(1)
-            }]
-        );
-    }
-
-    #[test]
-    fn reader_reports_variant_from_header() {
-        let mut buf = Vec::new();
-        let writer = BinaryTraceWriter::new(&mut buf, CpuVariant::Wdc65C02);
-        drop(writer);
-
-        let reader = BinaryTraceReader::new(buf.as_slice()).unwrap();
-        assert_eq!(reader.variant(), CpuVariant::Wdc65C02);
+        reader.seek_to_record(2).unwrap();
+        let records: Vec<TraceRecord> = reader.collect::<io::Result<_>>().unwrap();
+        assert_eq!(records, sample_records()[2..]);
     }
 }

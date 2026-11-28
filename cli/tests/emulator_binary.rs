@@ -496,20 +496,115 @@ fn a_wrapper_rejects_another_familys_profile() {
     );
 }
 
+fn tracer_bin() -> PathBuf {
+    PathBuf::from(env!("CARGO_BIN_EXE_emma6k-tracer"))
+}
+
+/// Runs `command` (an emulator whose program stops by itself) with
+/// `--trace-file`, then decodes the trace with `emma6k-tracer`, returning
+/// its listing.
+fn record_and_decode(mut command: std::process::Command, extra: &[&str]) -> String {
+    let dir = tempfile::tempdir().unwrap();
+    let trace = dir.path().join("run.trace");
+    let output = command
+        .arg("--trace-file")
+        .arg(&trace)
+        .stdin(Stdio::piped())
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "stderr: {}", stderr_of(&output));
+    let decoded = std::process::Command::new(tracer_bin())
+        .arg(&trace)
+        .args(extra)
+        .output()
+        .unwrap();
+    assert!(decoded.status.success(), "stderr: {}", stderr_of(&decoded));
+    String::from_utf8(decoded.stdout).unwrap()
+}
+
 #[test]
-fn trace_file_with_the_6809_is_an_error() {
-    let rom = write_6809_rom_tempfile();
-    let mut args = device_args_6809(rom.path());
-    args.extend([
-        "--trace-file".to_string(),
-        "/tmp/emma6k-test.trace".to_string(),
-    ]);
-    let output = std::process::Command::new(emma09_bin())
-        .args(args)
+fn a_6502_trace_decodes_with_emma6k_tracer() {
+    let rom = write_rom_tempfile();
+    let mut command = std::process::Command::new(emulator_bin());
+    command.args(device_args(rom.path()));
+    let listing = record_and_decode(command, &[]);
+    let lines: Vec<&str> = listing.lines().collect();
+    assert!(lines[0].contains("NV-BDIZC"), "{listing}");
+    assert_eq!(lines.len(), 3, "{listing}");
+    assert!(
+        lines[2].contains("8000 DB") && lines[2].ends_with("STP"),
+        "{listing}"
+    );
+}
+
+/// A 6809 ROM for $8000 that counts down B and stops in SYNC (interrupts
+/// are masked from reset, so nothing wakes it and the run ends).
+fn write_6809_counting_rom() -> NamedTempFile {
+    let program = [
+        0xC6, 0x03, // LDB #3
+        0x5A, //       DECB
+        0x26, 0xFD, // BNE $8002
+        0x13, //       SYNC
+    ];
+    let mut rom = vec![0x12u8; 32768];
+    rom[..program.len()].copy_from_slice(&program);
+    rom[0x7FFE] = 0x80;
+    rom[0x7FFF] = 0x00;
+    let f = tempfile::Builder::new().suffix(".bin").tempfile().unwrap();
+    std::fs::write(f.path(), rom).unwrap();
+    f
+}
+
+#[test]
+fn a_6809_trace_decodes_with_emma6k_tracer() {
+    let rom = write_6809_counting_rom();
+    let labels = tempfile::Builder::new().suffix(".lbl").tempfile().unwrap();
+    std::fs::write(labels.path(), "al 8002 .LOOP\n").unwrap();
+    let mut command = std::process::Command::new(emma09_bin());
+    command.args(device_args_6809(rom.path()));
+    let symbol_file = labels.path().to_str().unwrap().to_string();
+    let listing = record_and_decode(command, &["--symbol-file", &symbol_file, "--verbose"]);
+    let lines: Vec<&str> = listing.lines().collect();
+    assert!(lines[0].contains("EFHINZVC"), "{listing}");
+    let instructions: Vec<&str> = lines[2..]
+        .iter()
+        .filter(|l| !l.trim_end().ends_with(':'))
+        .map(|l| l[76..].trim_end())
+        .collect();
+    assert_eq!(
+        instructions,
+        [
+            "LDB   #$03      ; 3 ^C (ETX)",
+            "DECB",
+            "BNE   LOOP",
+            "DECB",
+            "BNE   LOOP",
+            "DECB",
+            "BNE   LOOP",
+            "SYNC",
+        ],
+        "{listing}"
+    );
+    assert_eq!(lines.iter().filter(|l| l.ends_with("LOOP:")).count(), 3);
+    // The first row: 2 cycles, and CC with F and I set from reset.
+    assert!(lines[2].starts_with("         1   2 00 00"), "{listing}");
+    assert!(lines[2].contains(" 50  F I     8000 C6 03 "), "{listing}");
+}
+
+#[test]
+fn emma6k_tracer_rejects_a_file_that_isnt_a_trace() {
+    let not_a_trace = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(not_a_trace.path(), b"not a trace file").unwrap();
+    let output = std::process::Command::new(tracer_bin())
+        .arg(not_a_trace.path())
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(stderr_of(&output).contains("--trace-file"));
+    assert!(
+        stderr_of(&output).contains("magic"),
+        "{}",
+        stderr_of(&output)
+    );
 }
 
 #[test]

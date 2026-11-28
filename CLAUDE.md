@@ -34,18 +34,20 @@ development host; there's also a macOS workstation). Its index is imported here:
 ## Commands
 
 ```bash
-cargo build              # build the default members: the emma65 library and emma65-tracer, and the
-                          # emulator CLI (emma6k and its emma65/emma09 wrappers) from cli/
+cargo build              # build the default members: the emma65 library, and the emulator CLI
+                          # (emma6k, its emma65/emma09 wrappers, and emma6k-tracer) from cli/
 cargo build --workspace  # also build the debugger crate (emma6k-debugger), the display crate
                           # (emma6k-display), the led-matrix crate (emma6k-led-matrix), and the
                           # lcd-display crate (emma6k-lcd-display)
 cargo build -p emma6k-display     # build just the SDL2 display peripheral (needs libsdl2-dev)
 cargo build -p emma6k-led-matrix  # build just the SDL2 LED matrix peripheral (needs libsdl2-dev)
 cargo build -p emma6k-lcd-display # build just the SDL2 LCD display peripheral (needs libsdl2-dev)
-cargo test                # run the default members' tests: emma65's (library, tracer, tests/) and the
-                          # CLI's (cli/tests/emulator_binary.rs) — NOT emma6k-core's or emma09's
+cargo test                # run the default members' tests: emma65's (library, tests/) and the CLI's
+                          # (incl. cli/tests/emulator_binary.rs) — NOT emma6k-core's or emma09's
 cargo test -p emma6k-core # run the core crate's tests
 cargo test -p emma09      # run the 6809 crate's tests (unit tests, exec tests, Schwotzer's CPU test suite)
+EMMA09_BLESS=1 cargo test -p emma09 every_opcode  # rewrite the 6809 disassembler's golden table,
+                          # then check it: python3 emma09/src/disassembler/lwasm_check.py (needs lwasm)
 cargo test --workspace    # every crate's tests: emma65, emma6k-core, emma09, emma6k, debugger, display, led-matrix, lcd-display
 cargo test <name>         # run a single test by name (partial match)
 cargo clippy              # lint (covers every workspace member, including emma6k-core)
@@ -66,24 +68,25 @@ Crates that aren't specific to the 6502 use the `emma6k-` prefix; the 6502 emula
 binaries keep the `emma65` name.
 
 - **`.`** (crate `emma65`) — the 6502 crate: the 65C02 CPU and everything specific to it, the
-  `emma65::emulator` facade over the core, and the `emma65-tracer` binary (decodes binary trace
-  files)
+  `emma65::emulator` facade over the core
 - **`cli`** (package `emma6k`) — the emulator command line: the `emma6k` binary, which chooses the
   CPU from `cpu-variant` (or its synonym `cpu`) and runs it, and the `emma65` and `emma09`
-  wrappers, which exec `emma6k` with a hidden `--family` flag fixing the CPU family. Versioned in
-  lockstep with `emma65`
+  wrappers, which exec `emma6k` with a hidden `--family` flag fixing the CPU family; and
+  `emma6k-tracer`, which decodes either CPU's trace files (it replaced `emma65-tracer`). Versioned
+  in lockstep with `emma65`
 - **`core`** (crate `emma6k-core`) — the CPU-neutral emulator core every CPU family shares: bus,
   devices, transports, configuration framework, execution control behind the `Processor` trait,
-  and the watch pipeline. It never names a CPU-specific type, and the compiler enforces that.
+  the trace file format (generic over a CPU's register record), and the watch pipeline. It never names a CPU-specific type, and the compiler enforces that.
   Versioned in lockstep with `emma65` and released only as part of an `emma65` release (see the
   release skill)
 - **`emma09`** (crate `emma09`) — the Motorola 6809, built on `emma6k-core` alone: registers,
   opcode tables, indexed addressing, ALU, interrupts (NMI, FIRQ, IRQ, CWAI, SYNC), its
-  `Processor` impl, and its `Config` and device registry (the built-ins minus `pic/finch`). In
-  progress per `plan/multi-cpu-step2-mc6809-plan.md`: `emma09`/`emma6k --cpu 6809` run it, with
-  the GPL-3 CamelForth template as its default. Versioned in lockstep with `emma65`, like `emma6k-core`
+  `Processor` impl, tracing, the disassembler, and its `Config` and device registry (the built-ins
+  minus `pic/finch`). `emma09`/`emma6k --cpu 6809` run it, with the GPL-3 CamelForth template as
+  its default; `plan/multi-cpu-step2-mc6809-plan.md` built it. Versioned in lockstep with `emma65`, like `emma6k-core`
 - **`build-info`** (crate `emma6k-build-info`) — a `build.rs`-only helper, shared as a
-  build-dependency by every other member's `build.rs`, that captures each crate's git commit
+  build-dependency by the `build.rs` of each member with binaries (`cli`, `debugger/src-tauri`,
+  and the three SDL2 crates; the library-only `emma65`, `emma6k-core` and `emma09` have none), that captures each crate's git commit
   hash, build timestamp, and (for a tagged release commit) version number into `BUILD_VERSION`/
   `BUILD_INFO_LINE` env vars consumed via `env!` — see `build-info/src/lib.rs`'s doc comment and
   issue #623
@@ -132,14 +135,11 @@ hot `Bus`, `InterruptController`, `MachineState`, `LogSender::set_cycles`, and
 src/                        — crate emma65
   lib.rs                    — pub mod emulator, mos6502; re-exports watch, assembler, disassembler
   emulator.rs               — the emma65::emulator facade (emma6k_core + 6502 re-exports)
-  bin/
-    tracer/
-      main.rs               — emma65-tracer binary entry point (CLI args, trace decode loop)
-      format.rs             — text rendering of decoded trace rows
   mos6502/                  — everything specific to the 65C02
     cpu/                    — Cpu, CpuBuilder, Registers, Processor impl, opcode decode, ALU,
-                               status register, variant, bus-access trace recording (binary
-                               trace format); StepResult/RunHandle/CpuLiveSnapshot aliases
+                               status register, variant, bus-access trace recording (cpu/trace.rs:
+                               the Registers record codec and aliases of core's trace types);
+                               StepResult/RunHandle/CpuLiveSnapshot aliases
     config.rs               — Config (top-level TOML/CLI schema), CpuVariantSpec, Config::build
     templates/              — the bundled starter-profile templates (see below)
     disassembler/           — Disassembler, and disassembler/trace (reconstructs disassembly
@@ -169,8 +169,13 @@ core/src/                   — crate emma6k-core, the CPU-neutral core
   config/                   — device spec/module registry, build_machine, template mechanism
                                (see below)
   logging.rs                — LogSender, log writer/collector threads, log_channel, log_msg!
+  trace.rs                  — the trace file format (v3 header, fixed-length records; reads v2),
+                               TraceRegisters (a CPU's record codec), TraceRecord/TraceKind,
+                               TraceCallback, BinaryTraceWriter/Reader, spawn_trace_writer,
+                               TraceState — all generic over the CPU's Registers
   watch/                    — watchpoint expression pipeline (see below)
-  location.rs, text.rs      — source-text helpers shared by watch and CPU assemblers
+  location.rs, text.rs      — source-text helpers shared by watch and CPU assemblers; text.rs also
+                               has immediate_comment, the disassemblers' 8-bit operand comment
 cli/                        — package emma6k, the emulator command line
   src/bin/emma6k/main.rs    — main, run_6502/run_6809, and run_session<P: Processor> (the console,
                                logging, tracing and run loop, compiled once per CPU)
@@ -179,12 +184,21 @@ cli/                        — package emma6k, the emulator command line
   src/bin/emma6k/family.rs  — Family (6502, 6809): variant → family, wrapper names, templates
   src/bin/emma6k/tty.rs     — terminal raw-mode helpers for the CLI console
   src/bin/emma65.rs, src/bin/emma09.rs, src/wrapper.rs — the wrappers (exec emma6k --family …)
+  src/bin/emma6k-tracer/    — emma6k-tracer: main.rs reads the header's family and dispatches to
+                               mos6502.rs or mc6809.rs (each family's decode loop and column
+                               format); columns.rs is the shared fixed-column row helper
   tests/emulator_binary.rs  — subprocess tests of emma6k and the wrappers
 emma09/                     — crate emma09, the Motorola 6809
   src/cpu/                  — Cpu, CpuBuilder, Registers, Processor impl, interrupt servicing,
                                big-endian watch context; opcodes.rs (per-page opcode tables with
                                base cycles), indexed.rs (postbyte forms), execute.rs (semantics,
-                               ALU, stacking), cc.rs (condition codes)
+                               ALU, stacking), cc.rs (condition codes), trace.rs (the 24-byte
+                               Registers record, family 1). The bus-touching methods take a
+                               `const TRACE: bool`, so the untraced step has no trace checks
+  src/disassembler/         — Disassembler (Motorola syntax), instruction_len, and trace/ (the
+                               TraceRowAssembler; interrupt rows have no line, see vector());
+                               every_form.txt is the golden every-opcode table, lwasm_check.py its
+                               round-trip check
   src/config.rs             — Config (cpu-variant "6809"), CpuVariantSpec, INTERRUPT_LINES (IRQ,
                                FIRQ, NMI), device_registry(), Config::build → EmulatorSession
   src/templates/            — TEMPLATES and DEFAULT_TEMPLATE; camelforth/ holds the GPL-3.0-or-later
@@ -274,12 +288,16 @@ the disassembler, trace tooling, and the debugger to resolve addresses to names.
 `Processor` in scope. `Cpu::step()` returns `StepResult` (an alias for
 `exec::StepResult<DecodedOp>`). `exec::run()` and friends (below) drive execution.
 
-`cpu::trace` implements bus-access tracing: `TraceCallback`/`ChannelTraceCallback` receive
-`TraceRecord`s (`TraceKind::Registers | Read | Write | Cycles`) as the CPU executes;
-`BinaryTraceWriter`/`BinaryTraceReader` persist them to/from a versioned binary format
-(magic `E65T`, currently format version 2, header carries the CPU variant); `spawn_trace_writer`
-runs the writer on a background thread fed by a channel, with a configurable `OverflowPolicy`.
-This is the backbone for both the `emma65-tracer` binary and the debugger's live trace window.
+`cpu::trace` is bus-access tracing. The machinery is core's `emma6k_core::trace`, generic over a
+CPU's `TraceRegisters`; `cpu::trace` supplies the 6502's 16-byte `Registers` record (family 0) and
+aliases (`TraceKind`, `TraceRecord`, `BinaryTraceWriter<W>`, …) under their old paths.
+`TraceCallback<Registers>` receives `TraceRecord`s (`TraceKind::Registers | Read | Write | Cycles`)
+as the CPU executes; `BinaryTraceWriter`/`BinaryTraceReader` persist them to/from a versioned
+binary format (magic `E65T`, format version 3: the header carries the variant, the CPU family and
+the record length; version 2 files still read, and the 6502's records are the same in both);
+`spawn_trace_writer` runs the writer on a background thread fed by a channel, with a configurable
+`OverflowPolicy`. This is the backbone for both `emma6k-tracer` and the debugger's live trace
+window.
 
 ---
 

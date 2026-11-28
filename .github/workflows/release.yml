@@ -2,7 +2,7 @@ name: Release
 
 # Triggered by pushing the `emma65-vX.Y.Z` tag. A release packages every
 # workspace binary — the emulator CLI (emma6k and its emma65 and emma09 wrappers,
-# emma65-tracer), the SDL2
+# emma6k-tracer), the SDL2
 # peripheral binaries (emma6k-display, emma6k-led-matrix, emma6k-lcd-display),
 # and the Tauri debugger GUI (emma6k-debugger) — into one combined `emma6k`
 # .deb and .rpm. The tag keeps the `emma65-v` prefix because the package's version is

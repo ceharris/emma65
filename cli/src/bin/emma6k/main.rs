@@ -85,7 +85,7 @@ async fn run_6809(plan: RunPlan) -> ExitCode {
     run_session(
         app,
         async |context| config.build_with_context(&registry, context).await,
-        |_, _| Err("--trace-file doesn't support the 6809 yet".to_string()),
+        start_6809_trace,
     )
     .await
 }
@@ -110,6 +110,19 @@ fn start_6502_trace(cpu: &mut emma65::emulator::Cpu, path: &Path) -> Result<Trac
         4096,
         emma65::emulator::OverflowPolicy::DropOnFull,
     );
+    cpu.set_trace_callback(Some(Box::new(callback)));
+    Ok(Box::new(move || {
+        let _ = handle.join();
+    }))
+}
+
+/// Starts a binary execution trace of the 6809 into `path`.
+fn start_6809_trace(cpu: &mut emma09::Cpu, path: &Path) -> Result<TraceFinish, String> {
+    use emma09::cpu::trace::{BinaryTraceWriter, OverflowPolicy, spawn_trace_writer};
+    let file = std::fs::File::create(path)
+        .map_err(|e| format!("failed to open trace file {}: {e}", path.display()))?;
+    let writer = BinaryTraceWriter::new(file, cpu.variant());
+    let (callback, handle, _dropped) = spawn_trace_writer(writer, 4096, OverflowPolicy::DropOnFull);
     cpu.set_trace_callback(Some(Box::new(callback)));
     Ok(Box::new(move || {
         let _ = handle.join();

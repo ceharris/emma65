@@ -32,7 +32,7 @@ a crate's last release, check both (see `SKILL.md` step 2).
 An `emma65-v*` release publishes exactly two assets, both built from
 `[package.metadata.deb]`/`[package.metadata.generate-rpm]` in the root `Cargo.toml` (package name
 `emma6k` for both): one combined `.deb` and one combined `.rpm`, each containing every workspace
-binary — `emma65`, `emma65-tracer`, `emma6k-display`, `emma6k-led-matrix`, `emma6k-lcd-display`,
+binary — `emma6k`, `emma65`, `emma09`, `emma6k-tracer`, `emma6k-display`, `emma6k-led-matrix`, `emma6k-lcd-display`,
 `emma6k-debugger` — plus the debugger's desktop entry and icons (`packaging/emma6k-debugger.desktop`,
 `debugger/src-tauri/icons/`). Runtime library dependencies (SDL2, SDL2_gfx, webkit2gtk, gtk3) are
 auto-detected from the packaged binaries (`depends = "$auto"` / `auto-req = "auto"`), not
@@ -57,7 +57,7 @@ override it if they disagree.
 
 | Artifact | Breaking | Additive | Fix-only |
 |---|---|---|---|
-| `emma65` (and `emma6k-core`) | Remove/rename a public `emulator`/`watch` API item, or a public `emma6k-core` item (the `emulator` module re-exports it); change a CLI flag's name or required-ness; change/remove a TOML config key or its accepted value shape; change the binary trace format so older `emma65-tracer` builds can't decode newer trace files | New public API item with no existing signature touched; new optional CLI flag; new optional TOML config key with a backward-compatible default; new trace record kind that older readers can skip | Bug fixes, perf improvements, doc-comment fixes with no API/CLI/config/trace-format change |
+| `emma65` (and `emma6k-core`) | Remove/rename a public `emulator`/`watch` API item, or a public `emma6k-core` item (the `emulator` module re-exports it); change a CLI flag's name or required-ness; change/remove a TOML config key or its accepted value shape; change the binary trace format so older tracer builds (`emma6k-tracer`, or `emma65-tracer` before it) can't decode newer trace files | New public API item with no existing signature touched; new optional CLI flag; new optional TOML config key with a backward-compatible default; new trace record kind that older readers can skip | Bug fixes, perf improvements, doc-comment fixes with no API/CLI/config/trace-format change |
 | `emma6k-display` | Remove/rename a CLI flag; incompatible change to the wire protocol in `plan/char-display-external-protocol.md` (framing, field meaning/order) | New optional CLI flag; backward-compatible protocol extension (new message type an older peer can ignore) | Rendering/crash bug fixes with no CLI/protocol change |
 | `emma6k-led-matrix` | Remove/rename a CLI flag; incompatible change to `plan/led-matrix-external-protocol.md` | New optional CLI flag; backward-compatible protocol extension | Rendering/timing bug fixes with no CLI/protocol change |
 | `emma6k-lcd-display` | Remove/rename a CLI flag; incompatible change to `plan/lcd-display-external-protocol.md` (including font/geometry negotiation semantics) | New optional CLI flag; backward-compatible protocol extension | Rendering bug fixes with no CLI/protocol change |
