@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCycles, splitSpeed } from "./StatusBar";
+import { formatCycles, splitSpeed, stoppedLabel } from "./StatusBar";
 
 describe("splitSpeed", () => {
   it("splits a value and unit separated by a space", () => {
@@ -26,5 +26,17 @@ describe("formatCycles", () => {
 
   it("formats zero", () => {
     expect(formatCycles(0)).toBe("0");
+  });
+});
+
+describe("stoppedLabel", () => {
+  it("names STP when the program didn't exit", () => {
+    expect(stoppedLabel(null)).toBe("STP Executed");
+    expect(stoppedLabel(undefined)).toBe("STP Executed");
+  });
+
+  it("shows the exit status when the program exited", () => {
+    expect(stoppedLabel(0)).toBe("Exit 0");
+    expect(stoppedLabel(42)).toBe("Exit 42");
   });
 });

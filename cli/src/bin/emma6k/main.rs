@@ -220,9 +220,18 @@ async fn run_session<P: Processor>(
         Vec::new(),
         app.park_on_halt,
     );
-    let (cpu_done_tx, mut cpu_done_rx) = tokio::sync::oneshot::channel::<StepResult<P::Op>>();
+    // The run's result, and the status the program asked to exit with (see
+    // the `exit` device), if it did.
+    let (cpu_done_tx, mut cpu_done_rx) =
+        tokio::sync::oneshot::channel::<(StepResult<P::Op>, Option<u8>)>();
+    let stopper = run_handle.stopper();
     tokio::spawn(async move {
-        let _ = cpu_done_tx.send(run_handle.wait().await);
+        let (result, cpu) = run_handle.take_cpu_with_result().await;
+        let exit_status = cpu.machine().exit_status();
+        // Dropping the CPU drops its trace callback, which lets the trace
+        // writer finish.
+        drop(cpu);
+        let _ = cpu_done_tx.send((result, exit_status));
     });
 
     let mut events_open = true;
@@ -237,16 +246,29 @@ async fn run_session<P: Processor>(
             },
 
             result = &mut cpu_done_rx => {
-                if let StepResult::Error(e) = result.unwrap_or(StepResult::Stopped) {
-                    eprintln!("CPU error: {e}");
-                    exit_code = ExitCode::FAILURE;
+                match result.unwrap_or((StepResult::Stopped, None)) {
+                    (StepResult::Error(e), _) => {
+                        eprintln!("CPU error: {e}");
+                        exit_code = ExitCode::FAILURE;
+                    }
+                    (_, Some(status)) => exit_code = ExitCode::from(status),
+                    _ => {}
                 }
                 break;
             },
-            _ = tokio::signal::ctrl_c() => break,
+            _ = tokio::signal::ctrl_c() => {
+                // Stop the CPU and wait for the task to drop it: the CPU
+                // and its devices hold the trace callback and log senders,
+                // and the writers below finish only once those are gone.
+                stopper.stop();
+                let _ = (&mut cpu_done_rx).await;
+                break;
+            },
         }
     }
 
+    // The log writer finishes when its last sender is dropped.
+    drop(log_sender_for_events);
     if let Some(finish) = finish_trace {
         finish();
     }

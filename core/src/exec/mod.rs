@@ -67,6 +67,9 @@ pub struct CpuLiveSnapshot<R> {
     pub cpu_stopped: bool,
     /// True when the CPU executed WAI and is waiting for an interrupt.
     pub cpu_waiting: bool,
+    /// The status the program asked to exit with, once the CPU has stopped for
+    /// it (see [`MachineState::exit_status`](crate::MachineState::exit_status)).
+    pub exit_status: Option<u8>,
     /// Paragraph-aligned start address of the memory page captured in `memory_page`.
     pub memory_page_addr: u16,
     /// 256 bytes of memory starting at `memory_page_addr`.
@@ -114,6 +117,7 @@ fn build_live_snapshot<P: Processor>(
         irq_active: cpu.interrupts().irq_active(),
         nmi_pending: cpu.interrupts().nmi_pending(),
         cpu_stopped: cpu.is_stopped(),
+        exit_status: cpu.machine().exit_status(),
         cpu_waiting: cpu.is_waiting(),
         memory_page_addr,
         memory_page,

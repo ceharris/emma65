@@ -309,8 +309,19 @@ All built-in devices implement `IoDevice`:
 fn read(&mut self, offset: u16) -> u8;
 fn write(&mut self, offset: u16, value: u8);
 fn peek(&self, offset: u16) -> u8;   // side-effect-free (watchpoints, disassembler)
-// optional: tick(), irq_active(), take_nmi(), take_reset(), name()
+// optional: tick(), irq_active(), take_nmi(), take_request(), is_passive(), name()
 ```
+
+**Device requests and passive devices.** `take_request()` returns a `CpuRequest` (`Reset`, or
+`Exit(status)`). The bus asks for it right after each write (or patch) to the device, never in
+the per-step poll, and keeps it for `Bus::take_written_request`, which `MachineState`'s per-step
+poll latches into the `InterruptController`. Each CPU takes the pending request once per step
+(`take_request`): `Exit` stops it as STP does and records `MachineState::exit_status`, which
+`emma6k` uses as its process exit code. A device whose `is_passive()` is true never ticks or
+interrupts; `BusConfig::build` moves passive devices behind the polled ones, so the per-step
+tick and poll skip them at no cost. The `exit` device (`device::ExitDevice`: write `EXIT`, then
+the status) is the one built-in passive device. Keep both rules: polling requests per device and
+ticking a do-nothing device each cost measurable speed.
 
 Devices that need byte-stream I/O hold a `TransportRelay` connected to
 an `Option<Box<dyn Transport>>`; the VIA and MC6840 additionally support a structured

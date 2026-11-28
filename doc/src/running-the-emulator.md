@@ -58,12 +58,13 @@ by Neal Crook:
 - CamelForth ROM at `0xE000`–`0xFFFF`
 - Console device at `0xFFD0`–`0xFFD1`, with `Ctrl+C` (`0x03`) as its break
   key, connected to the process's own standard input and output
+- [Exit device](io-devices.md#exit-exit) at `0xFFD2`
 - 6809 at 2 MHz
 
 Type Forth at the `OK` prompt. Ctrl+C abandons a running word, such as an
 endless loop, and returns to the interpreter with a fresh `OK` prompt. To
-quit, close the terminal, or start the emulator with `--keep-isig` so that
-Ctrl+C ends it instead.
+quit, type `BYE`: the emulator exits with status 0. Or start the emulator
+with `--keep-isig` so that Ctrl+C ends it instead.
 
 CamelForth is licensed under the GNU General Public License, version 3 or
 later, unlike the rest of Emma6k, which is MIT-licensed. The license text,

@@ -13,6 +13,13 @@ breaking/additive/fix-only definitions and pre-1.0 policy.
 
 ## [Unreleased]
 
+### Added
+
+- The `exit` device: a program writes `EXIT` and a status byte to it to stop
+  the CPU, and `emma6k` (or `emma65`/`emma09`) exits with that status. It works
+  on either CPU. CamelForth's new `BYE` word uses it. Like the other devices,
+  it logs a message when it's reset.
+
 ### Removed
 
 - `emma65-tracer`. Its replacement, `emma6k-tracer`, decodes 6502 and 6809
@@ -21,8 +28,17 @@ breaking/additive/fix-only definitions and pre-1.0 policy.
 
 ### Changed
 
+- `IoDevice::take_reset() -> bool` is now `take_request() -> Option<CpuRequest>`
+  (a reset or an exit), and the bus asks for it right after each write to the
+  device rather than every step. Devices can also declare themselves passive
+  (`is_passive`), which leaves them out of the per-step tick and poll.
 - Trace files are format version 3, which records the CPU family. The 6502's
   records are unchanged, and version 2 files still read.
+
+### Fixed
+
+- A run with `--log-file` no longer hangs after the CPU stops (STP, or the
+  `exit` device) or on Ctrl+C: the emulator now exits once the log is written.
 
 ## [0.1.0] - 2026-09-07
 

@@ -36,6 +36,9 @@ pub struct MachineState {
     pub(crate) vector_resolver: Box<dyn VectorResolver>,
     /// Sender for structured diagnostic messages.
     pub(crate) log_sender: LogSender,
+    /// The status a program asked to exit with (see the `exit` device), once
+    /// the CPU has stopped for it.
+    pub(crate) exit_status: Option<u8>,
 }
 
 impl MachineState {
@@ -56,7 +59,23 @@ impl MachineState {
             cycles: 0,
             vector_resolver,
             log_sender,
+            exit_status: None,
         }
+    }
+
+    /// The status a program asked to exit with through the `exit` device, if
+    /// the CPU has stopped for one since its last reset. A host ends the run
+    /// with this as its exit code.
+    #[inline]
+    pub fn exit_status(&self) -> Option<u8> {
+        self.exit_status
+    }
+
+    /// Records (or, with `None`, clears) the exit status. A CPU sets it when it
+    /// stops for a [`CpuRequest::Exit`](crate::bus::CpuRequest::Exit) and
+    /// clears it on reset.
+    pub fn set_exit_status(&mut self, status: Option<u8>) {
+        self.exit_status = status;
     }
 
     /// Returns the bus.
@@ -168,8 +187,18 @@ impl MachineState {
         self.cycles += cycles as u64;
         self.log_sender.set_cycles(self.cycles);
         self.bus.tick_devices(cycles as u32);
+        self.poll_devices();
+    }
+
+    /// Syncs device interrupt state, and any request a device made, into the
+    /// interrupt controller.
+    #[inline]
+    fn poll_devices(&mut self) {
         self.interrupts
             .poll_devices(self.bus.device_interrupt_states());
+        if let Some(request) = self.bus.take_written_request() {
+            self.interrupts.latch_request(request);
+        }
     }
 
     /// Ticks all bus devices by one cycle and re-polls interrupt state, without
@@ -178,8 +207,7 @@ impl MachineState {
     #[inline]
     pub fn tick_idle(&mut self) {
         self.bus.tick_devices(1);
-        self.interrupts
-            .poll_devices(self.bus.device_interrupt_states());
+        self.poll_devices();
     }
 
     /// Checks whether execution should halt before the instruction at `pc`:

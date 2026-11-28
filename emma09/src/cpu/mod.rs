@@ -35,7 +35,7 @@ pub mod trace;
 use crate::config::CpuVariantSpec;
 use cc::ConditionCodes;
 use emma6k_core::bus::vector::{IdentityVectorResolver, VectorResolver};
-use emma6k_core::bus::{Bus, BusOp};
+use emma6k_core::bus::{Bus, BusOp, CpuRequest};
 use emma6k_core::error::{BusError, CpuBuildError, ExecError};
 use emma6k_core::exec::{self, ClockSpeed};
 use emma6k_core::trace::TraceState;
@@ -186,6 +186,9 @@ enum Wait {
     /// After SYNC: any interrupt line, masked or not (or a reset), ends the
     /// wait.
     Sync,
+    /// Stopped for a program's exit request (see the `exit` device): only a
+    /// reset ends it, as with the 65C02's STP.
+    Stopped,
 }
 
 /// A hardware interrupt the CPU can service.
@@ -222,6 +225,7 @@ impl Cpu {
         self.regs.dp = 0;
         self.regs.cc.insert(ConditionCodes::I | ConditionCodes::F);
         self.machine.reset_cycles();
+        self.machine.set_exit_status(None);
         self.wait = Wait::None;
         self.nmi_armed = false;
         log_msg!(
@@ -231,6 +235,22 @@ impl Cpu {
             "6809 CPU reset"
         );
         Ok(())
+    }
+
+    /// Stops the CPU for a program's exit request with `status`, until a
+    /// reset.
+    #[cold]
+    fn stop_for_exit(&mut self, status: u8) -> StepResult {
+        self.wait = Wait::Stopped;
+        self.machine.set_exit_status(Some(status));
+        log_msg!(
+            self.machine.log_sender(),
+            LogLevel::Info,
+            LogCategory::Cpu,
+            "exit requested with status {status} at 0x{:04x}; CPU stopped",
+            self.regs.pc
+        );
+        StepResult::Stopped
     }
 
     /// The CPU variant: always the MC6809, until the 6309 exists.
@@ -286,19 +306,26 @@ impl Cpu {
             Wait::Cwai => {
                 // Keep devices running while parked, so one can interrupt.
                 self.machine.tick_idle();
-                if !self.machine.interrupts().reset_pending() && self.pending_interrupt().is_none()
+                if !self.machine.interrupts().request_pending()
+                    && self.pending_interrupt().is_none()
                 {
                     return StepResult::Waiting;
                 }
             }
             Wait::Sync => {
                 self.machine.tick_idle();
-                if !self.machine.interrupts().reset_pending() && !self.interrupt_line_asserted() {
+                if !self.machine.interrupts().request_pending() && !self.interrupt_line_asserted() {
                     return StepResult::Waiting;
                 }
                 // Any interrupt line ends SYNC. An unmasked one is serviced
                 // below; a masked one isn't, and execution continues.
                 self.wait = Wait::None;
+            }
+            Wait::Stopped => {
+                self.machine.tick_idle();
+                if !self.machine.interrupts().request_pending() {
+                    return StepResult::Stopped;
+                }
             }
         }
 
@@ -317,11 +344,15 @@ impl Cpu {
             }
         }
 
-        if self.machine.interrupts_mut().take_reset() {
-            return match self.reset() {
-                Ok(()) => StepResult::Reset,
-                Err(e) => StepResult::Error(e),
-            };
+        match self.machine.interrupts_mut().take_request() {
+            None => {}
+            Some(CpuRequest::Reset) => {
+                return match self.reset() {
+                    Ok(()) => StepResult::Reset,
+                    Err(e) => StepResult::Error(e),
+                };
+            }
+            Some(CpuRequest::Exit(status)) => return self.stop_for_exit(status),
         }
 
         // One `finish_cycle` call for every path keeps it inlined here.
@@ -681,12 +712,13 @@ impl Processor for Cpu {
         self.regs.pc
     }
 
-    /// `Waiting` after CWAI or SYNC. The 6809 has no STP, so it is never
-    /// `Stopped`.
+    /// `Waiting` after CWAI or SYNC; `Stopped` after a program's exit
+    /// request (the 6809 itself has no STP).
     fn halt_state(&self) -> HaltState {
         match self.wait {
             Wait::None => HaltState::Running,
             Wait::Cwai | Wait::Sync => HaltState::Waiting,
+            Wait::Stopped => HaltState::Stopped,
         }
     }
 

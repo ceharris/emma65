@@ -27,3 +27,9 @@ labels = "{{LABELS}}"
 type = "console"
 address = 0xFFD0
 break = 0x3
+
+# The exit device, beside the console: CamelForth's BYE writes "EXIT" and a
+# status of 0 to it, which ends the run.
+[[devices]]
+type = "exit"
+address = 0xFFD2

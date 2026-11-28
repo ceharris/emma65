@@ -37,7 +37,7 @@ mod test_support;
 
 pub use bus::vector::{IdentityVectorResolver, VectorResolver};
 pub use bus::{
-    AddressRange, Bus, BusConfig, BusOp, InterruptController, InterruptLine, IrqSource,
+    AddressRange, Bus, BusConfig, BusOp, CpuRequest, InterruptController, InterruptLine, IrqSource,
     RomWritePolicy, SymbolSource, SymbolTable, UnmappedPolicy,
 };
 pub use config::{

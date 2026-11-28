@@ -1,6 +1,7 @@
 //! IO device trait, device identification, and async device event channel, built-in devices.
 pub mod console;
 pub mod display;
+pub mod exit;
 pub mod finch;
 pub(crate) mod input_buffer;
 pub mod lcd_display;
@@ -17,6 +18,7 @@ pub mod via6522;
 pub mod vireo;
 
 pub use self::console::Console;
+pub use self::exit::ExitDevice;
 pub use self::finch::Finch;
 pub use self::lcd_display::LcdDisplay;
 pub use self::lfsr::Lfsr16;
@@ -39,6 +41,7 @@ pub use protocol::{ProtocolMessageDecoder, ProtocolMessageEncoder, ProtocolMessa
 
 use tokio::sync::mpsc;
 
+use crate::bus::CpuRequest;
 use crate::{BusError, LogCategory, LogLevel, LogSender, log_msg};
 
 /// Uniquely identifies a device registered on the bus.
@@ -270,13 +273,20 @@ pub trait IoDevice: Send {
         false
     }
 
-    /// Consumes a pending device-initiated CPU RESET request, returning `true` if one was pending.
+    /// Consumes a request of the CPU that the last write to this device made: a reset (e.g.
+    /// from a reset-button register) or an exit (from the [`ExitDevice`]).
     ///
-    /// Called once per CPU step, alongside `take_nmi`. Implementations set an internal flag when
-    /// the device wants to reset the CPU (e.g. a watchdog timer or reset-button peripheral) and
-    /// clear it here. The default returns `false` (no reset capability); none of this crate's
-    /// built-in devices use it.
-    fn take_reset(&mut self) -> bool {
+    /// The bus calls this right after each write (or patch) to the device, not every step,
+    /// so a device makes requests only in response to writes. The default returns `None`.
+    fn take_request(&mut self) -> Option<CpuRequest> {
+        None
+    }
+
+    /// Returns `true` for a passive device: one that never ticks and never interrupts. The
+    /// bus leaves passive devices out of the per-step tick and interrupt poll, so they cost
+    /// nothing while the program doesn't touch them. Asked once, when the bus is built. The
+    /// default is `false`.
+    fn is_passive(&self) -> bool {
         false
     }
 

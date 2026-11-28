@@ -17,6 +17,13 @@ interface CpuBusState {
   is_running: boolean;
   cpu_stopped: boolean;
   cpu_waiting: boolean;
+  /** The status the program asked to exit with through the `exit` device, once stopped for it. */
+  exit_status: number | null;
+}
+
+/** The stopped CPU's indicator label: the exit status if the program exited, else STP. */
+export function stoppedLabel(exitStatus: number | null | undefined): string {
+  return exitStatus == null ? "STP Executed" : `Exit ${exitStatus}`;
 }
 
 /** Splits "1.8432 MHz" into ["1.8432", "MHz"] so the value and unit can be styled separately. */
@@ -184,7 +191,7 @@ export default function StatusBar() {
   let runStopClass: string;
   if (displayExecState === "running") {
     if (cpuBus?.cpu_stopped) {
-      runStopLabel = "STP Executed";
+      runStopLabel = stoppedLabel(cpuBus.exit_status);
       runStopClass = "indicator-stp";
     } else if (cpuBus?.cpu_waiting) {
       runStopLabel = "WAI Executed";
@@ -197,7 +204,7 @@ export default function StatusBar() {
     runStopLabel = "Stop";
     runStopClass = "indicator-step";
   } else if (cpuBus?.cpu_stopped) {
-    runStopLabel = "STP Executed";
+    runStopLabel = stoppedLabel(cpuBus.exit_status);
     runStopClass = "indicator-stp";
   } else if (cpuBus?.cpu_waiting) {
     runStopLabel = "WAI Executed";

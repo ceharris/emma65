@@ -564,6 +564,51 @@ mode = "step"
   gives a maximal-length, 65535-state sequence.
 - `mode` (optional, `"continuous"` or `"step"`, default `"continuous"`).
 
+## Exit (`exit`)
+
+A one-byte, write-only register that lets a program end the emulator run,
+on any CPU, with an exit status of its choosing. Write the four ASCII
+bytes `E`, `X`, `I`, `T` and then the status byte:
+
+```
+        LDA #'E'      ; on the 6502; the 6809 is the same with
+        STA EXIT      ; its own LDA #/STA encodings
+        LDA #'X'
+        STA EXIT
+        LDA #'I'
+        STA EXIT
+        LDA #'T'
+        STA EXIT
+        LDA #0        ; the exit status
+        STA EXIT
+```
+
+The CPU then stops, as it does after the WDC 65C02's `STP`: it ignores
+interrupts, and only a reset starts it again. The emulator exits with the
+status byte as its process exit code, so a test program can report
+success (0) or failure (anything else) to a shell script or CI job. With
+`--park-on-halt`, the emulator keeps running instead, parked until a reset.
+In the debugger, the CPU stops and the status bar shows `Exit` and the
+status.
+
+A byte that breaks the sequence starts it over (an `E` starts a new one), so
+a stray write, or a loop clearing memory, can't end the run by accident.
+Reads return 0, and a reset forgets a partly written sequence. The CamelForth
+profile uses this device for its `BYE` word.
+
+This device is not IRQ-capable, and it costs nothing while the program
+doesn't touch it.
+
+### Configuration
+
+```toml
+[[devices]]
+type = "exit"
+address = 0xFFD2
+```
+
+It takes no attributes.
+
 ## Priority Interrupt Controller (`pic/finch`)
 
 An optional vectored interrupt controller for the 65C02. It isn't available

@@ -12,7 +12,7 @@ pub use emma6k_core::config::template::Template;
 pub static TEMPLATES: &[Template] = &[Template::new(
     "camelforth",
     "CamelForth",
-    "6809 CamelForth (GPL-3.0) with 56K RAM, 8K ROM, and a console; Ctrl+C interrupts a running word",
+    "6809 CamelForth (GPL-3.0) with 56K RAM, 8K ROM, a console and an exit device; Ctrl+C interrupts a running word, and BYE quits",
     camelforth::materialize_config,
 )];
 

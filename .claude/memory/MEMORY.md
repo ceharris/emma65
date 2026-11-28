@@ -4,7 +4,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 
 ## Current work
 - [emma6k rename](emma6k-rename.md) — merged in #661: naming rule, what kept the emma65 name, old tag prefixes, moved-checkout steps (per-user memory pointer, `cargo clean`); both hosts moved (2026-11-26)
-- [Multi-CPU effort](multi-cpu-effort.md) — RESUME HERE: step 1 complete (#664–668); step 2 plan in plan/multi-cpu-step2-mc6809-plan.md; Units 1–5 merged (#670–675), Unit 6 (trace v3, 6809 disassembler, emma6k-tracer; const-TRACE perf lesson) PR in review, completing step 2; CamelForth build needs GForth 0.7.3, not the snap; after step 2: an `exit` device (EXIT + status byte → process exit code) and a CamelForth `BYE` (HCF-as-STP dropped); MC6850 TX-IRQ bug filed (#673); cross-crate #[inline] trap
+- [Multi-CPU effort](multi-cpu-effort.md) — RESUME HERE: step 1 complete (#664–668); step 2 plan in plan/multi-cpu-step2-mc6809-plan.md; step 2 complete (Units 1–6, #670–676; const-TRACE perf lesson); exit device + CamelForth BYE PR in review (requests only on writes, passive devices); CamelForth build needs GForth 0.7.3, not the snap; MC6850 TX-IRQ bug filed (#673); cross-crate #[inline] trap
 - [emma09 mutation testing](emma09-mutation-testing.md) — cargo-mutants set up (.cargo/mutants.toml, 893 mutants); run deferred until the 6809 work wraps up
 - [macOS port effort](macos-port-effort.md) — plan/macos-port-plan.md (#663); Unit 1 (SDL2 use-pkgconfig, cfg the 4 window_for_events clones, commit macOS-schema.json, install.md macOS) exact steps; run on the Mac; ask priority vs multi-CPU
 - [Open issues](open-issues.md) — #646 epic (ask before closing) + follow-ons #656–659; frontend test coverage #559/#560; #667 unmapped writes are silent

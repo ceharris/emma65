@@ -10,7 +10,7 @@ pub mod trace;
 pub mod variant;
 
 use emma6k_core::bus::vector::{IdentityVectorResolver, VectorResolver};
-use emma6k_core::bus::{Bus, BusOp, InterruptController};
+use emma6k_core::bus::{Bus, BusOp, CpuRequest, InterruptController};
 use emma6k_core::error::{BusError, CpuBuildError, ExecError};
 use emma6k_core::exec::{self, ClockSpeed};
 use emma6k_core::watch::{Operand, WatchContext, WatchError, WatchEvaluator};
@@ -147,6 +147,12 @@ impl Cpu {
         self.stopped
     }
 
+    /// The status the program asked to exit with through the `exit` device, if
+    /// the CPU has stopped for one since its last reset.
+    pub fn exit_status(&self) -> Option<u8> {
+        self.machine.exit_status()
+    }
+
     /// Returns a reference to the watch evaluator.
     pub fn evaluator(&self) -> &WatchEvaluator {
         self.machine.evaluator()
@@ -244,6 +250,7 @@ impl Cpu {
         self.regs.s = 0xFF;
         self.regs.p = StatusRegister::UNUSED | StatusRegister::I;
         self.machine.reset_cycles();
+        self.machine.set_exit_status(None);
         self.waiting = false;
         self.stopped = false;
         log_msg!(
@@ -255,14 +262,30 @@ impl Cpu {
         Ok(())
     }
 
+    /// Stops the CPU, as STP does, for a program's exit request with `status`.
+    #[cold]
+    fn stop_for_exit(&mut self, status: u8) -> StepResult {
+        self.stopped = true;
+        self.machine.set_exit_status(Some(status));
+        log_msg!(
+            self.machine.log_sender(),
+            LogLevel::Info,
+            LogCategory::Cpu,
+            "exit requested with status {status} at 0x{:04x}; CPU stopped",
+            self.regs.pc
+        );
+        StepResult::Stopped
+    }
+
     /// Fetches, decodes, and executes one instruction. Returns the step result.
     /// Skips a breakpoint at `skip_pc` if specified.
     pub fn step(&mut self, skip_pc: Option<u16>, check_breakpoints: bool) -> StepResult {
         if self.stopped {
-            // Tick devices and poll for a device-triggered reset; unlike WAI, only
-            // RESET wakes STP — real 65C02 hardware ignores IRQ/NMI while stopped.
+            // Tick devices and poll for a device-triggered reset (or exit); unlike
+            // WAI, only RESET wakes STP — real 65C02 hardware ignores IRQ/NMI while
+            // stopped.
             self.machine.tick_idle();
-            if !self.machine.interrupts().reset_pending() {
+            if !self.machine.interrupts().request_pending() {
                 return StepResult::Stopped;
             }
             // Fall through to service the reset below.
@@ -272,7 +295,7 @@ impl Cpu {
             // Tick devices and poll for interrupts; stay in WAI until one arrives.
             // RESET wakes WAI too, same as real 65C02 hardware.
             self.machine.tick_idle();
-            if !self.machine.interrupts().reset_pending()
+            if !self.machine.interrupts().request_pending()
                 && !self.machine.irq_recognized()
                 && !self.machine.interrupts().nmi_pending()
             {
@@ -307,13 +330,17 @@ impl Cpu {
             }
         }
 
-        // RESET takes priority over NMI and IRQ
-        if self.machine.interrupts_mut().take_reset() {
-            return if let Err(e) = self.reset() {
-                StepResult::Error(e)
-            } else {
-                StepResult::Reset
-            };
+        // A reset or exit request takes priority over NMI and IRQ.
+        match self.machine.interrupts_mut().take_request() {
+            None => {}
+            Some(CpuRequest::Reset) => {
+                return if let Err(e) = self.reset() {
+                    StepResult::Error(e)
+                } else {
+                    StepResult::Reset
+                };
+            }
+            Some(CpuRequest::Exit(status)) => return self.stop_for_exit(status),
         }
         // NMI takes priority over IRQ.
         if self.machine.interrupts_mut().take_nmi() {
@@ -2025,15 +2052,18 @@ mod tests {
             fn read(&mut self, _address: u16) -> u8 {
                 0
             }
-            fn write(&mut self, _address: u16, _value: u8) {}
+            // A reset-button register: any write requests a reset.
+            fn write(&mut self, _address: u16, _value: u8) {
+                self.pending = true;
+            }
             fn peek(&self, _address: u16) -> u8 {
                 0
             }
             fn identity_address(&self) -> u16 {
                 0x9000
             }
-            fn take_reset(&mut self) -> bool {
-                std::mem::take(&mut self.pending)
+            fn take_request(&mut self) -> Option<CpuRequest> {
+                std::mem::take(&mut self.pending).then_some(CpuRequest::Reset)
             }
         }
 
@@ -2043,7 +2073,7 @@ mod tests {
             .device(
                 AddressRange::new(0x9000, 0x9000),
                 DeviceId(1),
-                Box::new(ResetOnce { pending: true }),
+                Box::new(ResetOnce { pending: false }),
             )
             .unwrap()
             .build();
@@ -2056,7 +2086,9 @@ mod tests {
         cpu.step(None, true); // execute STP
         assert!(cpu.is_stopped());
 
-        // The device's pending reset request should wake the CPU on the next step.
+        // Pressing the reset button (a write from outside the CPU) should wake
+        // the CPU on the next step.
+        cpu.bus_mut().write(0x9000, 1).unwrap();
         let result = cpu.step(None, true);
         assert!(
             matches!(result, StepResult::Reset),
@@ -2064,6 +2096,63 @@ mod tests {
         );
         assert!(!cpu.is_stopped());
         assert_eq!(cpu.regs.pc, 0x0400); // back at the reset vector target
+    }
+
+    /// A 6502 with an `exit` device at $9000 and a program at $0400 that
+    /// writes `EXIT` and `status` to it.
+    fn cpu_that_exits(status: u8) -> Cpu {
+        use emma6k_core::device::{DeviceId, ExitDevice};
+        let mut bus = Bus::config()
+            .ram_with_fill(AddressRange::new(0x0000, 0xFFFF), 0)
+            .unwrap()
+            .device(
+                AddressRange::new(0x9000, 0x9000),
+                DeviceId(1),
+                Box::new(ExitDevice::new(0x9000)),
+            )
+            .unwrap()
+            .build();
+        bus.write(RESET_VECTOR, 0x00).unwrap();
+        bus.write(RESET_VECTOR + 1, 0x04).unwrap();
+        let mut cpu = Cpu::builder(CpuVariant::Cmos65C02)
+            .bus(bus)
+            .build()
+            .unwrap();
+        cpu.reset().unwrap();
+        let mut program = Vec::new();
+        for b in [b'E', b'X', b'I', b'T', status] {
+            program.extend_from_slice(&[0xA9, b, 0x8D, 0x00, 0x90]); // LDA #b; STA $9000
+        }
+        program.push(0xEA); // NOP, never reached
+        write_program(&mut cpu, 0x0400, &program);
+        cpu
+    }
+
+    #[test]
+    fn an_exit_request_stops_the_cpu_with_its_status() {
+        let mut cpu = cpu_that_exits(3);
+        for _ in 0..10 {
+            assert!(matches!(cpu.step(None, true), StepResult::Executed(_)));
+        }
+        assert_eq!(cpu.exit_status(), None);
+        assert!(matches!(cpu.step(None, true), StepResult::Stopped));
+        assert!(cpu.is_stopped());
+        assert_eq!(cpu.halt_state(), HaltState::Stopped);
+        assert_eq!(cpu.exit_status(), Some(3));
+        assert_eq!(cpu.regs.pc, 0x0419); // stopped before the NOP
+    }
+
+    #[test]
+    fn after_an_exit_only_a_reset_wakes_the_cpu() {
+        let mut cpu = cpu_that_exits(0);
+        while !matches!(cpu.step(None, true), StepResult::Stopped) {}
+        cpu.interrupts_mut().signal_nmi();
+        cpu.interrupts_mut().assert_irq(emma6k_core::IrqSource(2));
+        assert!(matches!(cpu.step(None, true), StepResult::Stopped));
+        cpu.interrupts_mut().signal_reset();
+        assert!(matches!(cpu.step(None, true), StepResult::Reset));
+        assert!(!cpu.is_stopped());
+        assert_eq!(cpu.exit_status(), None);
     }
 
     #[test]
@@ -2536,15 +2625,18 @@ mod tests {
             fn read(&mut self, _address: u16) -> u8 {
                 0
             }
-            fn write(&mut self, _address: u16, _value: u8) {}
+            // A reset-button register: any write requests a reset.
+            fn write(&mut self, _address: u16, _value: u8) {
+                self.pending = true;
+            }
             fn peek(&self, _address: u16) -> u8 {
                 0
             }
             fn identity_address(&self) -> u16 {
                 0x9000
             }
-            fn take_reset(&mut self) -> bool {
-                std::mem::take(&mut self.pending)
+            fn take_request(&mut self) -> Option<CpuRequest> {
+                std::mem::take(&mut self.pending).then_some(CpuRequest::Reset)
             }
         }
 
@@ -2554,7 +2646,7 @@ mod tests {
             .device(
                 AddressRange::new(0x9000, 0x9000),
                 DeviceId(1),
-                Box::new(ResetOnce { pending: true }),
+                Box::new(ResetOnce { pending: false }),
             )
             .unwrap()
             .build();
@@ -2567,7 +2659,8 @@ mod tests {
         cpu.step(None, true); // execute WAI
         assert!(cpu.is_waiting());
 
-        // The device's pending reset request should wake the CPU on the next step.
+        // Pressing the reset button should wake the CPU on the next step.
+        cpu.bus_mut().write(0x9000, 1).unwrap();
         let result = cpu.step(None, true);
         assert!(
             matches!(result, StepResult::Reset),

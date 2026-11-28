@@ -798,7 +798,7 @@ PRESUME WORD       AKA WORD IWORD
 
 
 === screen 48
-\ console I/O for emma6k's console device              27nov26
+\ console I/O and BYE for emma6k's devices            27nov26
 HEX FFD0 EQU CONDAT   FFD1 EQU CONLAT   \ data, latch registers
 
 CODE KEY    \ -- c    get char from the console
@@ -811,9 +811,9 @@ CODE KEY?   \ -- f    return true if char waiting
 
 CODE EMIT   \ c --    output character to the console
    CONDAT STB,   6 # ( D) PULS,   NEXT ;C
-
-
-
+FFD2 EQU EXITR   CODE BYE   \ --   end the run: exit device
+   45 # LDA, EXITR STA,  58 # LDA, EXITR STA,  49 # LDA,
+   EXITR STA,  54 # LDA, EXITR STA,  CLRA, EXITR STA,  NEXT ;C
 === screen 49
 \ like scr119 but for multicomp; emma6k Ctrl+C on IRQ  27nov26
 : BREAK-OK   CR ." OK " ABORT ;   \ new prompt, then to QUIT
