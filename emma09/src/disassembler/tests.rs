@@ -257,3 +257,18 @@ fn disassemble_range_stops_at_the_top_of_memory() {
     let lines = Disassembler::new().disassemble_range(&bus, 0xFFFE, 0, 10);
     assert_eq!(lines.len(), 2);
 }
+
+#[test]
+fn disassemble_range_with_end_equal_to_start_has_no_end() {
+    let bus = bus_with(0x2000, &[0x12, 0x12, 0x12], &[]);
+    let lines = Disassembler::new().disassemble_range(&bus, 0x2000, 0x2000, 2);
+    assert_eq!(lines.len(), 2);
+}
+
+#[test]
+fn a_zero_offset_is_not_negative() {
+    // LDA $00,X (8-bit offset form)
+    let bus = bus_with(0x2000, &[0xA6, 0x88, 0x00], &[]);
+    let line = Disassembler::new().disassemble_one(&bus, 0x2000);
+    assert_eq!(line.operand_text, "$00,X");
+}

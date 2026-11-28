@@ -197,3 +197,67 @@ fn removing_the_callback_stops_tracing() {
     step(&mut cpu);
     assert_eq!(rows(&records.lock().unwrap()).len(), 1);
 }
+
+#[test]
+fn every_vector_has_a_name() {
+    use crate::cpu::{FIRQ_VECTOR, IRQ_VECTOR, SWI_VECTOR, SWI2_VECTOR, SWI3_VECTOR};
+    for (vector, name) in [
+        (NMI_VECTOR, "NMI"),
+        (FIRQ_VECTOR, "FIRQ"),
+        (IRQ_VECTOR, "IRQ"),
+        (SWI_VECTOR, "SWI"),
+        (SWI2_VECTOR, "SWI2"),
+        (SWI3_VECTOR, "SWI3"),
+        (RESET_VECTOR, "RESET"),
+    ] {
+        assert_eq!(vector_name(vector), Some(name));
+    }
+    assert_eq!(vector_name(0x1234), None);
+}
+
+#[test]
+fn records_of_another_step_dont_join_the_pending_row() {
+    // Step 1 ends without its Cycles record (as after an error), and step
+    // 2's records arrive without its Registers record (as in a stream that
+    // starts mid-step). Step 2's records don't belong to step 1's row.
+    let (cpu, _) = traced_cpu();
+    let regs = *cpu.registers();
+    let records = [
+        TraceRecord {
+            instr_id: 1,
+            kind: TraceKind::Registers(regs),
+        },
+        TraceRecord {
+            instr_id: 1,
+            kind: TraceKind::Read {
+                addr: START,
+                value: 0x12,
+            },
+        },
+        TraceRecord {
+            instr_id: 2,
+            kind: TraceKind::Read {
+                addr: 0x3000,
+                value: 0x01,
+            },
+        },
+        TraceRecord {
+            instr_id: 2,
+            kind: TraceKind::Write {
+                addr: 0x3001,
+                value: 0x02,
+            },
+        },
+        TraceRecord {
+            instr_id: 2,
+            kind: TraceKind::Cycles(4),
+        },
+    ];
+    let mut assembler = TraceRowAssembler::new(SymbolTable::new());
+    assert!(records.iter().all(|r| assembler.feed(r).is_none()));
+    let row = assembler.flush().expect("step 1's unfinished row");
+    assert_eq!(row.instr_id, 1);
+    assert_eq!(row.bus_ops.len(), 1);
+    assert_eq!(row.cycles, None);
+    assert!(assembler.flush().is_none());
+}
