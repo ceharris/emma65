@@ -10,7 +10,7 @@ One line per memory file in this directory. See CLAUDE.md's "Agent memory" secti
 - [Open issues](open-issues.md) — #646 epic (ask before closing) + follow-ons #656–659; frontend test coverage #559/#560; #667 unmapped writes are silent
 
 ## Workflow
-- [Git workflow](git-workflow.md) — branch → verify → commit → PR with UAT steps + `Closes #n` → wait for human review; "prepare memory" means memory only
+- [Git workflow](git-workflow.md) — branch → verify → commit → PR with UAT steps + `Closes #n` → wait for human review; memory with no PR to ride in goes straight to main (commit + push, no PR); "prepare memory" means memory only
 - [Multi-unit plan workflow](multi-unit-plan-workflow.md) — one branch+PR per unit, stop after each; check up front that each unit compiles on its own
 - [Branch from origin/main](branch-from-origin-main.md) — unpushed local-main commits get swept into squash merges
 - [No worktrees](no-worktrees.md) — plain `git checkout -b` in the main checkout; worktrees broke the user's UAT
