@@ -1,5 +1,6 @@
 //! Trace panel: live-recorded execution trace and windowed reads.
 
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -14,6 +15,7 @@ use emma65::emulator::{
 };
 
 use crate::CpuState;
+use crate::cpu;
 
 /// Capacity of the bounded channel between the CPU thread and the trace writer thread.
 const TRACE_CHANNEL_CAPACITY: usize = 4096;
@@ -112,18 +114,9 @@ pub struct TraceRowDto {
     pub is_valid: bool,
     /// The instruction's total cycle count, if known.
     pub cycles: Option<u8>,
-    /// Accumulator, as it stood immediately before this instruction executed.
-    pub a: u8,
-    /// X index register, as it stood immediately before this instruction executed.
-    pub x: u8,
-    /// Y index register, as it stood immediately before this instruction executed.
-    pub y: u8,
-    /// Stack pointer, as it stood immediately before this instruction executed.
-    pub s: u8,
-    /// Status register, as it stood immediately before this instruction executed.
-    pub p: u8,
-    /// Program counter, as it stood immediately before this instruction executed.
-    pub pc: u16,
+    /// Every register in the CPU description, keyed by its name, as it stood immediately
+    /// before this instruction executed.
+    pub registers: BTreeMap<&'static str, u32>,
     /// Bus reads and writes observed while this instruction executed, in stream order.
     pub bus_ops: Vec<TraceBusOpDto>,
 }
@@ -289,12 +282,7 @@ pub fn get_trace_window(
                 comment: row.line.comment_text.unwrap_or_default(),
                 is_valid: row.line.is_valid,
                 cycles: row.cycles,
-                a: row.regs.a,
-                x: row.regs.x,
-                y: row.regs.y,
-                s: row.regs.s,
-                p: row.regs.p.to_byte(),
-                pc: row.regs.pc,
+                registers: cpu::register_values(&row.regs),
                 bus_ops,
             });
         }

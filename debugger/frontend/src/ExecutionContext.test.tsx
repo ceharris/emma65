@@ -1,25 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ExecutionProvider, useExecutionContext } from "./ExecutionContext";
-import type { RegisterSnapshot } from "./RegisterPanel";
+import { snapshot6502 as snapshot } from "./test/cpuFixtures";
 import { expectHookThrows } from "./test/expectHookThrows";
 import { emitMockEvent, invoke, resetTauriMocks } from "./test/tauriMock";
-
-function snapshot(overrides: Partial<RegisterSnapshot> = {}): RegisterSnapshot {
-  return {
-    a: 0,
-    x: 0,
-    y: 0,
-    s: 0xff,
-    pc: 0x8000,
-    p: 0x20,
-    changed_flags: 0,
-    cpu_stopped: false,
-    cpu_waiting: false,
-    breakpoint_hit: false,
-    ...overrides,
-  };
-}
 
 beforeEach(() => {
   resetTauriMocks();
@@ -50,7 +34,7 @@ describe("ExecutionProvider", () => {
     expect(result.current.cpuStopped).toBe(false);
 
     act(() => result.current.onEdit(snapshot({ pc: 0x9001, a: 0x42 })));
-    expect(result.current.lastSnapshot?.a).toBe(0x42);
+    expect(result.current.lastSnapshot?.values.A).toBe(0x42);
 
     act(() => result.current.onReset(snapshot({ cpu_stopped: true })));
     expect(result.current.cpuStopped).toBe(true);

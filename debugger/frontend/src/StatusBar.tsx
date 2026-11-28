@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { ExecState } from "./RunControlsContext";
+import { useCpuDescription } from "./CpuDescriptionContext";
 import { useExecutionContext } from "./ExecutionContext";
-import { RegisterSnapshot } from "./RegisterPanel";
+import type { RegisterSnapshot } from "./RegisterPanel";
 import "./styles/status-bar.scss";
 
 /** Minimum time in ms that the Step indicator remains visible so users can perceive it. */
@@ -46,6 +47,10 @@ export function formatCycles(n: number): string {
  */
 export default function StatusBar() {
   const { execState, onReset } = useExecutionContext();
+  // The interrupt controls shown are the CPU's interrupt lines.
+  const interruptLines = useCpuDescription()?.interrupt_lines ?? [];
+  const hasNmi = interruptLines.includes("NMI");
+  const hasIrq = interruptLines.includes("IRQ");
   const [cpuBus, setCpuBus] = useState<CpuBusState | null>(null);
   // Local toggle state for the IRQ control, independent of the aggregate
   // cpuBus.irq_active indicator (which reflects all IRQ sources, including devices).
@@ -228,30 +233,34 @@ export default function StatusBar() {
         <span className="cycles-value">{speedValue}</span>
         <span className="status-bar-label">{speedUnit}</span>
       </div>
-      <button
-        className="status-bar-cell status-bar-toggle"
-        onClick={handleTriggerNmi}
-        title="Trigger NMI"
-      >
-        <span
-          className={`indicator ${cpuBus?.nmi_pending ? "indicator-nmi-active" : "indicator-idle"}`}
+      {hasNmi && (
+        <button
+          className="status-bar-cell status-bar-toggle"
+          onClick={handleTriggerNmi}
+          title="Trigger NMI"
         >
-          ●
-        </span>
-        <span className="status-bar-label">NMI</span>
-      </button>
-      <button
-        className={`status-bar-cell status-bar-toggle${irqAsserted ? " active" : ""}`}
-        onClick={handleToggleIrq}
-        title={cpuBus?.is_running ? "Trigger IRQ (one-shot while running)" : "Assert/Release IRQ"}
-      >
-        <span
-          className={`indicator ${cpuBus?.irq_active ? "indicator-irq-active" : "indicator-idle"}`}
+          <span
+            className={`indicator ${cpuBus?.nmi_pending ? "indicator-nmi-active" : "indicator-idle"}`}
+          >
+            ●
+          </span>
+          <span className="status-bar-label">NMI</span>
+        </button>
+      )}
+      {hasIrq && (
+        <button
+          className={`status-bar-cell status-bar-toggle${irqAsserted ? " active" : ""}`}
+          onClick={handleToggleIrq}
+          title={cpuBus?.is_running ? "Trigger IRQ (one-shot while running)" : "Assert/Release IRQ"}
         >
-          ●
-        </span>
-        <span className="status-bar-label">IRQ</span>
-      </button>
+          <span
+            className={`indicator ${cpuBus?.irq_active ? "indicator-irq-active" : "indicator-idle"}`}
+          >
+            ●
+          </span>
+          <span className="status-bar-label">IRQ</span>
+        </button>
+      )}
       <div className="status-bar-cell status-bar-run">
         <span className={`indicator ${runStopClass}`}>●</span>
         <span className="status-bar-label status-bar-run-label">{runStopLabel}</span>

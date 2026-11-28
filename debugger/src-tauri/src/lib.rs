@@ -44,6 +44,9 @@ mod watchpoints;
 /// Register panel: register snapshot/edit commands and changed-flag tracking.
 mod registers;
 
+/// What the session's CPU looks like to the panels: its description and register access.
+mod cpu;
+
 /// CPU/bus panel: IRQ/NMI controls, reset, and cached bus-signal snapshot.
 mod cpu_bus;
 
@@ -566,8 +569,11 @@ pub(crate) async fn load_or_reload_session(app: &AppHandle, profile_dir: &Path) 
             // reload that lands on a profile with a different geometry (e.g. a changed LCD
             // `geometry=` attribute) left them showing the stale dimensions/colors until closed
             // and reopened (issue #605). They each re-fetch their own `get_*_geometry` on this
-            // broadcast instead.
-            let _ = app.emit("session-loaded", ());
+            // broadcast instead. Its payload is the new session's CPU description, which the
+            // panels that render registers, flags and interrupt controls follow.
+            let description = cpu::describe_6502(variant);
+            *app.state::<cpu::CpuDescriptionState>().0.lock().unwrap() = Some(description.clone());
+            let _ = app.emit("session-loaded", description);
 
             // Reset the rest of the per-panel state that assumes one
             // long-lived session, so nothing from the previous profile lingers.
@@ -814,6 +820,7 @@ pub fn run() {
         .manage(cpu_bus::UiIrqSourceState(Mutex::new(None)))
         .manage(disassembly::DisassemblerState(Mutex::new(None)))
         .manage(registers::ChangedFlagsState(Mutex::new(0)))
+        .manage(cpu::CpuDescriptionState(Mutex::new(None)))
         .manage(disassembly::RunStopperState(Mutex::new(None)))
         .manage(disassembly::SkipBreakpointPc(Mutex::new(None)))
         .manage(breakpoints::BreakpointState(Mutex::new(
@@ -1096,6 +1103,7 @@ pub fn run() {
             cpu_bus::assert_irq,
             cpu_bus::release_irq,
             registers::get_registers,
+            cpu::get_cpu_description,
             disassembly::get_disassembly,
             memory::get_memory,
             memory::write_memory,

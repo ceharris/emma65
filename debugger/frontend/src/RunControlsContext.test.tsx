@@ -2,7 +2,6 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ExecutionProvider } from "./ExecutionContext";
-import type { RegisterSnapshot } from "./RegisterPanel";
 import {
   intervalToSlider,
   RunControlsProvider,
@@ -10,24 +9,10 @@ import {
   sliderToInterval,
   useRunControlsContext,
 } from "./RunControlsContext";
+import type { RegisterSnapshot } from "./RegisterPanel";
+import { snapshot6502 as snapshot } from "./test/cpuFixtures";
 import { expectHookThrows } from "./test/expectHookThrows";
 import { emitMockEvent, invoke, resetTauriMocks } from "./test/tauriMock";
-
-function snapshot(overrides: Partial<RegisterSnapshot> = {}): RegisterSnapshot {
-  return {
-    a: 0,
-    x: 0,
-    y: 0,
-    s: 0xff,
-    pc: 0x8000,
-    p: 0x20,
-    changed_flags: 0,
-    cpu_stopped: false,
-    cpu_waiting: false,
-    breakpoint_hit: false,
-    ...overrides,
-  };
-}
 
 function Providers({ children }: { children: ReactNode }) {
   return (

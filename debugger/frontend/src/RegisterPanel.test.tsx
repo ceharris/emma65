@@ -3,24 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { ReactNode, useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ExecutionProvider, useExecutionContext } from "./ExecutionContext";
-import RegisterPanel, { RegisterSnapshot } from "./RegisterPanel";
+import { CpuDescriptionProvider } from "./CpuDescriptionContext";
+import RegisterPanel from "./RegisterPanel";
+import { DESCRIPTION_6502, snapshot6502 as snapshot } from "./test/cpuFixtures";
 import { invoke, resetTauriMocks } from "./test/tauriMock";
-
-function snapshot(overrides: Partial<RegisterSnapshot> = {}): RegisterSnapshot {
-  return {
-    a: 0x42,
-    x: 0x01,
-    y: 0xff,
-    s: 0xfd,
-    pc: 0x8000,
-    p: 0x20,
-    changed_flags: 0,
-    cpu_stopped: false,
-    cpu_waiting: false,
-    breakpoint_hit: false,
-    ...overrides,
-  };
-}
 
 /** Drives `execState` via the real `ExecutionContext` before rendering children, so tests can exercise `isEditable`. */
 function ExecStateSetter({ execState }: { execState: "stopped" | "stepping" | "running" }) {
@@ -39,10 +25,12 @@ function Providers({
   execState?: "stopped" | "stepping" | "running";
 }) {
   return (
-    <ExecutionProvider>
-      <ExecStateSetter execState={execState} />
-      {children}
-    </ExecutionProvider>
+    <CpuDescriptionProvider>
+      <ExecutionProvider>
+        <ExecStateSetter execState={execState} />
+        {children}
+      </ExecutionProvider>
+    </CpuDescriptionProvider>
   );
 }
 
@@ -52,15 +40,20 @@ function renderPanel(execState: "stopped" | "stepping" | "running" = "stopped") 
   });
 }
 
+/** Mocks `invoke` with `handler`, answering `get_cpu_description` with the 6502's. */
+function mockInvoke(handler: (cmd: string) => Promise<unknown>) {
+  vi.mocked(invoke).mockImplementation(async (cmd) =>
+    cmd === "get_cpu_description" ? DESCRIPTION_6502 : handler(cmd),
+  );
+}
+
 beforeEach(() => {
   resetTauriMocks();
 });
 
 describe("RegisterPanel", () => {
   it("shows a waiting placeholder, then the fetched registers formatted in hex", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd) =>
-      cmd === "get_registers" ? snapshot() : undefined,
-    );
+    mockInvoke(async (cmd) => (cmd === "get_registers" ? snapshot() : undefined));
     renderPanel();
 
     expect(screen.getByText("Waiting…")).toBeInTheDocument();
@@ -76,9 +69,7 @@ describe("RegisterPanel", () => {
   });
 
   it("does not show an ASCII hint for a non-printable A value", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd) =>
-      cmd === "get_registers" ? snapshot({ a: 0x00 }) : undefined,
-    );
+    mockInvoke(async (cmd) => (cmd === "get_registers" ? snapshot({ a: 0x00 }) : undefined));
     renderPanel();
 
     const aRow = (await screen.findByText("A")).closest("tr")!;
@@ -88,9 +79,7 @@ describe("RegisterPanel", () => {
 
   it("cycling the data radix reformats A/X/Y but not PC/S (a separate radix cycle)", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) =>
-      cmd === "get_registers" ? snapshot({ a: 0x0a }) : undefined,
-    );
+    mockInvoke(async (cmd) => (cmd === "get_registers" ? snapshot({ a: 0x0a }) : undefined));
     renderPanel();
     const aRow = (await screen.findByText("A")).closest("tr")!;
     expect(within(aRow).getByText("0A")).toBeInTheDocument();
@@ -104,7 +93,7 @@ describe("RegisterPanel", () => {
 
   it("double-clicking a register value opens an editable input; Enter commits set_register", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) => {
+    mockInvoke(async (cmd) => {
       if (cmd === "get_registers") return snapshot();
       if (cmd === "set_register") return snapshot({ a: 0xff });
       return undefined;
@@ -117,14 +106,12 @@ describe("RegisterPanel", () => {
     await user.clear(input);
     await user.type(input, "FF{Enter}");
 
-    expect(invoke).toHaveBeenCalledWith("set_register", { field: "a", value: 0xff });
+    expect(invoke).toHaveBeenCalledWith("set_register", { name: "A", value: 0xff });
   });
 
   it("double-clicking a register value auto-selects the input text", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) =>
-      cmd === "get_registers" ? snapshot() : undefined,
-    );
+    mockInvoke(async (cmd) => (cmd === "get_registers" ? snapshot() : undefined));
     renderPanel();
     const aRow = (await screen.findByText("A")).closest("tr")!;
 
@@ -137,9 +124,7 @@ describe("RegisterPanel", () => {
 
   it("Escape cancels an in-progress edit without committing", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) =>
-      cmd === "get_registers" ? snapshot() : undefined,
-    );
+    mockInvoke(async (cmd) => (cmd === "get_registers" ? snapshot() : undefined));
     renderPanel();
     const aRow = (await screen.findByText("A")).closest("tr")!;
 
@@ -153,9 +138,7 @@ describe("RegisterPanel", () => {
 
   it("an out-of-range value marks the input invalid and does not commit", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) =>
-      cmd === "get_registers" ? snapshot() : undefined,
-    );
+    mockInvoke(async (cmd) => (cmd === "get_registers" ? snapshot() : undefined));
     renderPanel();
     const aRow = (await screen.findByText("A")).closest("tr")!;
 
@@ -170,9 +153,7 @@ describe("RegisterPanel", () => {
 
   it("PC rejects a signed value since it has no signed display mode", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) =>
-      cmd === "get_registers" ? snapshot() : undefined,
-    );
+    mockInvoke(async (cmd) => (cmd === "get_registers" ? snapshot() : undefined));
     renderPanel();
     const pcRow = (await screen.findByText("PC")).closest("tr")!;
 
@@ -186,9 +167,7 @@ describe("RegisterPanel", () => {
   });
 
   it("editing is disabled while the CPU is not stopped", async () => {
-    vi.mocked(invoke).mockImplementation(async (cmd) =>
-      cmd === "get_registers" ? snapshot() : undefined,
-    );
+    mockInvoke(async (cmd) => (cmd === "get_registers" ? snapshot() : undefined));
     const user = userEvent.setup();
     renderPanel("running");
     const aRow = (await screen.findByText("A")).closest("tr")!;
@@ -200,7 +179,7 @@ describe("RegisterPanel", () => {
 
   it("double-clicking the flags cell opens a toggle editor; clicking a flag then Enter commits", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) => {
+    mockInvoke(async (cmd) => {
       if (cmd === "get_registers") return snapshot({ p: 0x20 });
       if (cmd === "set_register") return snapshot({ p: 0x21 });
       return undefined;
@@ -212,21 +191,19 @@ describe("RegisterPanel", () => {
     await user.dblClick(within(flagsCell as HTMLElement).getAllByText("-")[0]);
 
     // With p=0x20 (only the always-"-" unused bit set), all 8 flag positions
-    // display "-" in edit mode; FLAG_CHARS orders them N V - B D I Z C, so the
+    // display "-" in edit mode; the description orders them N V - B D I Z C, so the
     // last of the 8 is C.
     const dashSpans = within(flagsCell as HTMLElement).getAllByText("-");
     const carryFlag = dashSpans[dashSpans.length - 1];
     await user.click(carryFlag);
     await user.keyboard("{Enter}");
 
-    expect(invoke).toHaveBeenCalledWith("set_register", { field: "p", value: 0x21 });
+    expect(invoke).toHaveBeenCalledWith("set_register", { name: "P", value: 0x21 });
   });
 
   it("Escape cancels a flags edit without committing", async () => {
     const user = userEvent.setup();
-    vi.mocked(invoke).mockImplementation(async (cmd) =>
-      cmd === "get_registers" ? snapshot({ p: 0x20 }) : undefined,
-    );
+    mockInvoke(async (cmd) => (cmd === "get_registers" ? snapshot({ p: 0x20 }) : undefined));
     renderPanel();
     await screen.findByText("A");
 
@@ -235,8 +212,55 @@ describe("RegisterPanel", () => {
     await user.keyboard("{Escape}");
 
     expect(invoke).not.toHaveBeenCalledWith("set_register", {
-      field: "p",
+      name: "P",
       value: expect.anything(),
     });
+  });
+
+  it("renders whatever registers and flags the CPU description lists", async () => {
+    const user = userEvent.setup();
+    const description = {
+      ...DESCRIPTION_6502,
+      registers: [
+        { name: "D", width_bits: 16, role: "data" as const },
+        { name: "PC", width_bits: 16, role: "pc" as const },
+        { name: "CC", width_bits: 8, role: "flags" as const },
+      ],
+      flags: [
+        { label: "E", bit: 1, name: "Entire" },
+        { label: "C", bit: 0, name: "Carry" },
+      ],
+      flags_register: "CC",
+    };
+    const snap = {
+      ...snapshot(),
+      values: { D: 0x1234, PC: 0x8000, CC: 0x02 },
+    };
+    vi.mocked(invoke).mockImplementation(async (cmd) => {
+      if (cmd === "get_cpu_description") return description;
+      if (cmd === "get_registers") return snap;
+      if (cmd === "set_register") return snap;
+      return undefined;
+    });
+    renderPanel();
+
+    const dRow = (await screen.findByText("D")).closest("tr")!;
+    expect(within(dRow).getByText("1234")).toBeInTheDocument();
+    expect(screen.queryByText("A")).not.toBeInTheDocument();
+    const flagsCell = document.querySelector(".reg-flags") as HTMLElement;
+    expect(flagsCell.textContent).toBe("E-");
+
+    // A 16-bit data register takes a 16-bit value.
+    await user.dblClick(within(dRow).getByText("1234"));
+    const input = within(dRow).getByRole("textbox");
+    await user.clear(input);
+    await user.type(input, "BEEF{Enter}");
+    expect(invoke).toHaveBeenCalledWith("set_register", { name: "D", value: 0xbeef });
+
+    // The flags edit writes the description's flags register.
+    await user.dblClick(within(flagsCell).getByText("E"));
+    await user.click(within(flagsCell).getByText("-"));
+    await user.keyboard("{Enter}");
+    expect(invoke).toHaveBeenCalledWith("set_register", { name: "CC", value: 0x03 });
   });
 });

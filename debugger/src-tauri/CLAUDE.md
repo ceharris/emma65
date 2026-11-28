@@ -7,6 +7,9 @@ React/TypeScript frontend (`debugger/frontend/`) via `#[tauri::command]`s. UI pr
 (theme, exit-confirmation skip) are not profile-scoped and live in
 `~/.emma/debugger/config/ui.toml` instead. One module per UI panel:
 
+- **`cpu`** — the session's `CpuDescription` (registers, flags, interrupt lines, stack, byte
+  order), sent by `get_cpu_description` and as the `session-loaded` payload, and register access
+  by name; the frontend's `CpuDescriptionContext` holds it and the panels render from it
 - **`registers`** — register snapshot/edit
 - **`cpu_bus`** — reset, IRQ assert/release, NMI trigger, cached bus-signal snapshot
 - **`disassembly`** — run/stop/step-into/step-over/step-return, breakpoint CRUD, disassembly listing

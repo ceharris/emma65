@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { FlagDescription, flagMask, isUnusedFlag, RegisterDescription } from "./cpuDescription";
+import { useCpuDescription } from "./CpuDescriptionContext";
 import { useExecutionContext } from "./ExecutionContext";
 import {
   ADDR_RADIX_CYCLE,
@@ -12,14 +14,11 @@ import {
 import "./styles/registers.scss";
 
 export interface RegisterSnapshot {
-  a: number;
-  x: number;
-  y: number;
-  s: number;
+  /** Every register in the CPU description, keyed by its name. */
+  values: Record<string, number>;
+  /** The program counter, also in `values`. */
   pc: number;
-  /** Processor status byte. */
-  p: number;
-  /** Bitmask of P-register bits that changed on the most recent step (0 on initial load). */
+  /** Bitmask of flags-register bits that changed on the most recent step (0 on initial load). */
   changed_flags: number;
   /** True when the CPU executed STP and is now halted. */
   cpu_stopped: boolean;
@@ -36,8 +35,8 @@ function printableAscii(value: number): string | null {
 
 // --- register editing ---
 
-/** Register field names as sent to the `set_register` Tauri command. */
-type RegisterField = "a" | "x" | "y" | "s" | "pc" | "p";
+/** The edit target while the flags row is being edited; never a register's name. */
+const FLAGS_EDIT = "#flags";
 
 /** Parses `rest` as an integer in `base` if it matches `charset` exactly, else null. */
 function parseDigits(rest: string, charset: RegExp, base: number): number | null {
@@ -109,28 +108,25 @@ function toUnsignedInRange(value: number, widthBits: number, allowSigned: boolea
 
 // --- flag display ---
 
-/** Flag bit positions in the P register, ordered N V - B D I Z C (bit 7 → bit 0). */
-const FLAG_CHARS = [
-  { label: "N", bit: 0x80 },
-  { label: "V", bit: 0x40 },
-  { label: "-", bit: 0x20 },
-  { label: "B", bit: 0x10 },
-  { label: "D", bit: 0x08 },
-  { label: "I", bit: 0x04 },
-  { label: "Z", bit: 0x02 },
-  { label: "C", bit: 0x01 },
-];
-
-function FlagDisplay({ p, changed }: { p: number; changed: number }) {
+function FlagDisplay({
+  flags,
+  value,
+  changed,
+}: {
+  flags: FlagDescription[];
+  value: number;
+  changed: number;
+}) {
   return (
     <>
-      {FLAG_CHARS.map(({ label, bit }) => {
-        const isSet = (p & bit) !== 0;
-        // The UNUSED bit (0x20, displayed as "-") never changes meaningfully.
-        const didChange = label !== "-" && (changed & bit) !== 0;
+      {flags.map((flag) => {
+        const mask = flagMask(flag);
+        const isSet = (value & mask) !== 0;
+        // An unused bit (displayed as "-") never changes meaningfully.
+        const didChange = !isUnusedFlag(flag) && (changed & mask) !== 0;
         return (
           <span
-            key={label}
+            key={flag.bit}
             className={[
               "flag-char",
               isSet ? "flag-set" : "flag-clear",
@@ -139,7 +135,7 @@ function FlagDisplay({ p, changed }: { p: number; changed: number }) {
               .filter(Boolean)
               .join(" ")}
           >
-            {isSet ? label : "-"}
+            {isSet ? flag.label : "-"}
           </span>
         );
       })}
@@ -147,14 +143,21 @@ function FlagDisplay({ p, changed }: { p: number; changed: number }) {
   );
 }
 
+/** True for the registers shown in the data group (with the data radix); the rest are
+ *  shown in the address group, with the address radix. */
+function isDataGroup(reg: RegisterDescription): boolean {
+  return reg.role === "data" || reg.role === "index";
+}
+
 // --- component ---
 
 export default function RegisterPanel() {
   const { lastSnapshot: snapFromParent, execState, onEdit } = useExecutionContext();
+  const description = useCpuDescription();
   const [snap, setSnap] = useState<RegisterSnapshot | null>(null);
   const [dataRadix, cycleDataRadix] = useDataRadix("hex");
   const [addrRadix, cycleAddrRadix] = useRadixCycle(ADDR_RADIX_CYCLE, "hex");
-  const [editingTarget, setEditingTarget] = useState<RegisterField | "flags" | null>(null);
+  const [editingTarget, setEditingTarget] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [editInvalid, setEditInvalid] = useState(false);
   const [editFlags, setEditFlags] = useState(0);
@@ -184,9 +187,9 @@ export default function RegisterPanel() {
   }, [fetchRegisters]);
 
   const beginEdit = useCallback(
-    (field: RegisterField, currentText: string) => {
+    (name: string, currentText: string) => {
       if (!isEditable) return;
-      setEditingTarget(field);
+      setEditingTarget(name);
       setEditValue(currentText);
       setEditInvalid(false);
     },
@@ -199,7 +202,7 @@ export default function RegisterPanel() {
   }, []);
 
   const commitEdit = useCallback(
-    async (field: RegisterField, radix: DataRadix, widthBits: number, allowSigned: boolean) => {
+    async (name: string, radix: DataRadix, widthBits: number, allowSigned: boolean) => {
       const parsed = parseRegisterInput(editValue, radix);
       const value = parsed === null ? null : toUnsignedInRange(parsed, widthBits, allowSigned);
       if (value === null) {
@@ -207,7 +210,7 @@ export default function RegisterPanel() {
         return;
       }
       try {
-        const result = await invoke<RegisterSnapshot>("set_register", { field, value });
+        const result = await invoke<RegisterSnapshot>("set_register", { name, value });
         onEdit(result);
         setEditingTarget(null);
         setEditInvalid(false);
@@ -220,10 +223,10 @@ export default function RegisterPanel() {
   );
 
   const beginFlagsEdit = useCallback(
-    (currentP: number) => {
+    (currentFlags: number) => {
       if (!isEditable) return;
-      setEditingTarget("flags");
-      setEditFlags(currentP);
+      setEditingTarget(FLAGS_EDIT);
+      setEditFlags(currentFlags);
     },
     [isEditable],
   );
@@ -236,10 +239,12 @@ export default function RegisterPanel() {
     setEditFlags((f) => f ^ bit);
   }, []);
 
+  const flagsRegister = description?.flags_register;
   const commitFlagsEdit = useCallback(async () => {
+    if (flagsRegister === undefined) return;
     try {
       const result = await invoke<RegisterSnapshot>("set_register", {
-        field: "p",
+        name: flagsRegister,
         value: editFlags,
       });
       onEdit(result);
@@ -248,19 +253,19 @@ export default function RegisterPanel() {
       console.error("set_register failed:", e);
       setEditingTarget(null);
     }
-  }, [editFlags, onEdit]);
+  }, [editFlags, flagsRegister, onEdit]);
 
-  /** Renders a register's value cell: an inline edit input when `field` is
+  /** Renders a register's value cell: an inline edit input when `name` is
    *  being edited, otherwise the formatted display text (double-clickable
    *  to start editing when the CPU is stopped). */
   const renderRegisterValue = (
-    field: RegisterField,
+    name: string,
     displayText: string,
     radix: DataRadix,
     widthBits: number,
     allowSigned: boolean,
   ) => {
-    if (editingTarget === field) {
+    if (editingTarget === name) {
       return (
         <input
           className={`reg-edit-input${editInvalid ? " invalid" : ""}`}
@@ -272,7 +277,7 @@ export default function RegisterPanel() {
             e.stopPropagation();
             if (e.key === "Enter") {
               e.preventDefault();
-              commitEdit(field, radix, widthBits, allowSigned);
+              commitEdit(name, radix, widthBits, allowSigned);
             } else if (e.key === "Escape") {
               e.preventDefault();
               cancelEdit();
@@ -285,7 +290,7 @@ export default function RegisterPanel() {
     return (
       <span
         className={isEditable ? "reg-editable" : ""}
-        onDoubleClick={() => beginEdit(field, displayText)}
+        onDoubleClick={() => beginEdit(name, displayText)}
         title={isEditable ? "Double-click to edit" : undefined}
       >
         {displayText}
@@ -293,11 +298,11 @@ export default function RegisterPanel() {
     );
   };
 
-  /** Renders the P-register flag characters: individually toggleable (click
-   *  a flag to flip it, except the unused "-" position) while editing,
+  /** Renders the flags register's flag characters: individually toggleable
+   *  (click a flag to flip it, except an unused "-" position) while editing,
    *  otherwise the plain display (double-clickable to start editing). */
-  const renderFlags = (p: number, changed: number) => {
-    if (editingTarget === "flags") {
+  const renderFlags = (flags: FlagDescription[], value: number, changed: number) => {
+    if (editingTarget === FLAGS_EDIT) {
       return (
         <div
           className="reg-flags-edit"
@@ -315,12 +320,13 @@ export default function RegisterPanel() {
           }}
           onBlur={cancelFlagsEdit}
         >
-          {FLAG_CHARS.map(({ label, bit }) => {
-            const isSet = (editFlags & bit) !== 0;
-            const toggleable = label !== "-";
+          {flags.map((flag) => {
+            const mask = flagMask(flag);
+            const isSet = (editFlags & mask) !== 0;
+            const toggleable = !isUnusedFlag(flag);
             return (
               <span
-                key={label}
+                key={flag.bit}
                 className={[
                   "flag-char",
                   isSet ? "flag-set" : "flag-clear",
@@ -328,9 +334,9 @@ export default function RegisterPanel() {
                 ]
                   .filter(Boolean)
                   .join(" ")}
-                onClick={toggleable ? () => toggleFlagBit(bit) : undefined}
+                onClick={toggleable ? () => toggleFlagBit(mask) : undefined}
               >
-                {isSet ? label : "-"}
+                {isSet ? flag.label : "-"}
               </span>
             );
           })}
@@ -340,17 +346,57 @@ export default function RegisterPanel() {
     return (
       <span
         className={isEditable ? "reg-editable" : ""}
-        onDoubleClick={() => beginFlagsEdit(p)}
+        onDoubleClick={() => beginFlagsEdit(value)}
         title={isEditable ? "Double-click to edit flags" : undefined}
       >
-        <FlagDisplay p={p} changed={changed} />
+        <FlagDisplay flags={flags} value={value} changed={changed} />
       </span>
     );
   };
 
+  /** Renders one register's row, followed by the flags row when it is the flags
+   *  register. */
+  const renderRegisterRows = (
+    reg: RegisterDescription,
+    snapshot: RegisterSnapshot,
+    flags: FlagDescription[],
+    radix: DataRadix,
+  ) => {
+    const value = snapshot.values[reg.name] ?? 0;
+    const ascii = reg.role === "data" && reg.width_bits === 8 ? printableAscii(value) : null;
+    const rows = [
+      <tr key={reg.name}>
+        <td className="reg-name">{reg.name}</td>
+        <td className="reg-value">
+          {renderRegisterValue(
+            reg.name,
+            formatDataRadix(value, radix, reg.width_bits),
+            radix,
+            reg.width_bits,
+            // PC has no signed display mode, so it accepts only unsigned values.
+            reg.role !== "pc",
+          )}
+          {editingTarget !== reg.name && ascii !== null && (
+            <span className="reg-ascii">{ascii}</span>
+          )}
+        </td>
+      </tr>,
+    ];
+    if (reg.role === "flags") {
+      rows.push(
+        <tr key={`${reg.name}-flags`}>
+          <td className="reg-flags" colSpan={2}>
+            {renderFlags(flags, value, snapshot.changed_flags)}
+          </td>
+        </tr>,
+      );
+    }
+    return rows;
+  };
+
   return (
     <div className="register-panel">
-      {snap === null ? (
+      {snap === null || description === null ? (
         <span className="registers-empty">Waiting…</span>
       ) : (
         // Two side-by-side name/value column pairs (data registers, address
@@ -366,45 +412,9 @@ export default function RegisterPanel() {
                   <RadixButton radix={dataRadix} onCycle={cycleDataRadix} />
                 </td>
               </tr>
-              <tr>
-                <td className="reg-name">A</td>
-                <td className="reg-value">
-                  {renderRegisterValue(
-                    "a",
-                    formatDataRadix(snap.a, dataRadix, 8),
-                    dataRadix,
-                    8,
-                    true,
-                  )}
-                  {editingTarget !== "a" && printableAscii(snap.a) !== null && (
-                    <span className="reg-ascii">{printableAscii(snap.a)}</span>
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <td className="reg-name">X</td>
-                <td className="reg-value">
-                  {renderRegisterValue(
-                    "x",
-                    formatDataRadix(snap.x, dataRadix, 8),
-                    dataRadix,
-                    8,
-                    true,
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <td className="reg-name">Y</td>
-                <td className="reg-value">
-                  {renderRegisterValue(
-                    "y",
-                    formatDataRadix(snap.y, dataRadix, 8),
-                    dataRadix,
-                    8,
-                    true,
-                  )}
-                </td>
-              </tr>
+              {description.registers
+                .filter(isDataGroup)
+                .flatMap((reg) => renderRegisterRows(reg, snap, description.flags, dataRadix))}
             </tbody>
           </table>
           <table className="reg-table">
@@ -415,47 +425,9 @@ export default function RegisterPanel() {
                   <RadixButton radix={addrRadix} onCycle={cycleAddrRadix} />
                 </td>
               </tr>
-              <tr>
-                <td className="reg-name">PC</td>
-                <td className="reg-value">
-                  {renderRegisterValue(
-                    "pc",
-                    formatDataRadix(snap.pc, addrRadix, 16),
-                    addrRadix,
-                    16,
-                    false,
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <td className="reg-name">S</td>
-                <td className="reg-value">
-                  {renderRegisterValue(
-                    "s",
-                    formatDataRadix(snap.s, addrRadix, 8),
-                    addrRadix,
-                    8,
-                    true,
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <td className="reg-name">P</td>
-                <td className="reg-value">
-                  {renderRegisterValue(
-                    "p",
-                    formatDataRadix(snap.p, addrRadix, 8),
-                    addrRadix,
-                    8,
-                    true,
-                  )}
-                </td>
-              </tr>
-              <tr>
-                <td className="reg-flags" colSpan={2}>
-                  {renderFlags(snap.p, snap.changed_flags)}
-                </td>
-              </tr>
+              {description.registers
+                .filter((reg) => !isDataGroup(reg))
+                .flatMap((reg) => renderRegisterRows(reg, snap, description.flags, addrRadix))}
             </tbody>
           </table>
         </div>

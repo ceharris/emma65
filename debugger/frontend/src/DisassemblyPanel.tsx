@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useExecutionContext } from "./ExecutionContext";
 import { useRunControlsContext } from "./RunControlsContext";
+import type { RegisterSnapshot } from "./RegisterPanel";
 import "./styles/disassembly.scss";
 
 interface DisassembledRow {
@@ -42,19 +43,6 @@ function parseAddressInput(raw: string): number | null {
   if (!HEX_DIGITS.test(body)) return null;
   const n = parseInt(body, 16);
   return n >= 0 && n <= 0xffff ? n : null;
-}
-
-interface RegisterSnapshot {
-  a: number;
-  x: number;
-  y: number;
-  s: number;
-  pc: number;
-  p: number;
-  changed_flags: number;
-  cpu_stopped: boolean;
-  cpu_waiting: boolean;
-  breakpoint_hit: boolean;
 }
 
 /** Rows to pre-fetch beyond the visible window so scrolling has buffer. */

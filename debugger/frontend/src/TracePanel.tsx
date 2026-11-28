@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
+import type { RegisterDescription } from "./cpuDescription";
+import { useCpuDescription } from "./CpuDescriptionContext";
+import { formatFlags, formatRegister, traceRegisters } from "./traceFormat";
 import "./styles/trace.scss";
 
 interface TraceBusOpDto {
@@ -21,12 +24,8 @@ interface TraceRowDto {
   comment: string;
   is_valid: boolean;
   cycles: number | null;
-  a: number;
-  x: number;
-  y: number;
-  s: number;
-  p: number;
-  pc: number;
+  /** Every register in the CPU description, keyed by its name. */
+  registers: Record<string, number>;
   bus_ops: TraceBusOpDto[];
 }
 
@@ -42,24 +41,6 @@ interface TraceStatus {
 
 /** Fixed number of rows shown in the windowed log viewport. */
 const VIEWPORT_ROWS = 40;
-
-/** `(letter, bit)` pairs for the P register, in NV-BDIZC display order. */
-const FLAG_BITS: [string, number][] = [
-  ["N", 0x80],
-  ["V", 0x40],
-  ["B", 0x10],
-  ["D", 0x08],
-  ["I", 0x04],
-  ["Z", 0x02],
-  ["C", 0x01],
-];
-
-/** Formats P as an 8-char NV-BDIZC field, with a blank where the always-set UNUSED bit would render. */
-function formatFlags(p: number): string {
-  const chars = FLAG_BITS.map(([c, bit]) => (p & bit ? c : " "));
-  chars.splice(2, 0, " ");
-  return chars.join("");
-}
 
 function formatAddr(addr: number): string {
   return addr.toString(16).toUpperCase().padStart(4, "0");
@@ -87,16 +68,14 @@ function basename(path: string): string {
  * content is bottom-anchored) but need identical `<col>` widths to stay
  * visually aligned as columns.
  */
-function TraceColGroup() {
+function TraceColGroup({ registers }: { registers: RegisterDescription[] }) {
   return (
     <colgroup>
       <col className="col-seq" />
       <col className="col-cyc" />
-      <col className="col-reg" />
-      <col className="col-reg" />
-      <col className="col-reg" />
-      <col className="col-reg" />
-      <col className="col-reg" />
+      {registers.map((reg) => (
+        <col key={reg.name} className={reg.width_bits > 8 ? "col-reg-16" : "col-reg"} />
+      ))}
       <col className="col-flags" />
       <col className="col-addr" />
       <col className="col-bytes" />
@@ -113,6 +92,12 @@ export default function TracePanel() {
   const [paused, setPaused] = useState(false);
   const [cpuRunning, setCpuRunning] = useState(false);
   const [rows, setRows] = useState<TraceRowDto[]>([]);
+  const description = useCpuDescription();
+  const registers = description === null ? [] : traceRegisters(description);
+  const flagsRegister = description?.flags_register;
+  // Seq#, Cyc, a column per register, and Flags lead each row; Addr, Code and the
+  // three Instruction columns follow.
+  const leadingColumns = registers.length + 3;
   const [startRow, setStartRow] = useState(0);
   const [totalRows, setTotalRows] = useState(0);
   const [selectedSeq, setSelectedSeq] = useState<number | null>(null);
@@ -364,16 +349,14 @@ export default function TracePanel() {
         <div className="trace-log-area">
           <div className="trace-log-header">
             <table className="trace-table">
-              <TraceColGroup />
+              <TraceColGroup registers={registers} />
               <thead>
                 <tr>
                   <th>Seq#</th>
                   <th>Cyc</th>
-                  <th>A</th>
-                  <th>X</th>
-                  <th>Y</th>
-                  <th>S</th>
-                  <th>P</th>
+                  {registers.map((reg) => (
+                    <th key={reg.name}>{reg.name}</th>
+                  ))}
                   <th>Flags</th>
                   <th>Addr</th>
                   <th>Code</th>
@@ -385,11 +368,11 @@ export default function TracePanel() {
           <div className="trace-log-scroller">
             <div className="trace-log-body" ref={logBodyRef} onWheel={handleWheel}>
               <table className="trace-table">
-                <TraceColGroup />
+                <TraceColGroup registers={registers} />
                 <tbody>
                   {rows.length === 0 ? (
                     <tr className="trace-empty-row">
-                      <td colSpan={13} className="trace-empty">
+                      <td colSpan={leadingColumns + 5} className="trace-empty">
                         {recording ? "Waiting for instructions…" : "Not recording"}
                       </td>
                     </tr>
@@ -397,7 +380,7 @@ export default function TracePanel() {
                     rows.flatMap((row) => {
                       const labelRows = row.labels.map((label, i) => (
                         <tr key={`${row.seq}-label-${i}`} className="trace-row trace-label-row">
-                          <td colSpan={8} />
+                          <td colSpan={leadingColumns} />
                           <td colSpan={5} className="trace-label">
                             {label}:
                           </td>
@@ -411,12 +394,16 @@ export default function TracePanel() {
                         >
                           <td className="trace-seq">{row.seq}</td>
                           <td className="trace-cyc">{row.cycles ?? ""}</td>
-                          <td className="trace-reg">{formatByte(row.a)}</td>
-                          <td className="trace-reg">{formatByte(row.x)}</td>
-                          <td className="trace-reg">{formatByte(row.y)}</td>
-                          <td className="trace-reg">{formatByte(row.s)}</td>
-                          <td className="trace-reg">{formatByte(row.p)}</td>
-                          <td className="trace-flags">{formatFlags(row.p)}</td>
+                          {registers.map((reg) => (
+                            <td key={reg.name} className="trace-reg">
+                              {formatRegister(row.registers[reg.name] ?? 0, reg.width_bits)}
+                            </td>
+                          ))}
+                          <td className="trace-flags">
+                            {description !== null && flagsRegister !== undefined
+                              ? formatFlags(row.registers[flagsRegister] ?? 0, description)
+                              : ""}
+                          </td>
                           <td className="trace-addr">{formatAddr(row.addr)}</td>
                           <td className="trace-bytes">{formatBytes(row.bytes)}</td>
                           <td className="trace-mnemonic">{row.mnemonic}</td>
