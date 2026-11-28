@@ -19,7 +19,7 @@
 use super::StepResult;
 use crate::LogSender;
 use crate::bus::vector::IdentityVectorResolver;
-use crate::bus::{AddressRange, Bus, BusOp};
+use crate::bus::{AddressRange, Bus, BusOp, CpuRequest};
 use crate::error::ExecError;
 use crate::exec::ClockSpeed;
 use crate::machine::MachineState;
@@ -215,13 +215,13 @@ impl Processor for ToyCpu {
         match self.halt {
             HaltState::Stopped => {
                 self.machine.tick_idle();
-                if !self.machine.interrupts.reset_pending() {
+                if !self.machine.interrupts.request_pending() {
                     return StepResult::Stopped;
                 }
             }
             HaltState::Waiting => {
                 self.machine.tick_idle();
-                if !self.machine.interrupts.reset_pending()
+                if !self.machine.interrupts.request_pending()
                     && !self.machine.irq_recognized()
                     && !self.machine.interrupts.nmi_pending()
                 {
@@ -243,11 +243,19 @@ impl Processor for ToyCpu {
             }
         }
 
-        if self.machine.interrupts.take_reset() {
-            return match self.reset() {
-                Ok(()) => StepResult::Reset,
-                Err(e) => StepResult::Error(e),
-            };
+        match self.machine.interrupts.take_request() {
+            None => {}
+            Some(CpuRequest::Reset) => {
+                return match self.reset() {
+                    Ok(()) => StepResult::Reset,
+                    Err(e) => StepResult::Error(e),
+                };
+            }
+            Some(CpuRequest::Exit(status)) => {
+                self.halt = HaltState::Stopped;
+                self.machine.set_exit_status(Some(status));
+                return StepResult::Stopped;
+            }
         }
 
         let result = self
@@ -264,6 +272,7 @@ impl Processor for ToyCpu {
 
     fn reset(&mut self) -> Result<(), ExecError> {
         self.machine.bus.reset_devices();
+        self.machine.exit_status = None;
         let vector = self
             .machine
             .vector_resolver

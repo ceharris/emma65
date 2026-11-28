@@ -922,3 +922,58 @@ mod interrupts {
         assert!(matches!(cpu.step(None, true), StepResult::Waiting));
     }
 }
+
+// --- the exit device ---
+
+/// A 6809 with an `exit` device at $9000 and a program that writes `EXIT`
+/// and `status` to it.
+fn cpu_that_exits(status: u8) -> Cpu {
+    use emma6k_core::device::{DeviceId, ExitDevice};
+    let bus = Bus::config()
+        .ram_with_fill(AddressRange::new(0x0000, 0xFFFF), 0)
+        .unwrap()
+        .device(
+            AddressRange::new(0x9000, 0x9000),
+            DeviceId(1),
+            Box::new(ExitDevice::new(0x9000)),
+        )
+        .unwrap()
+        .build();
+    let mut cpu = Cpu::builder().bus(bus).build().unwrap();
+    write(&mut cpu, RESET_VECTOR, &START.to_be_bytes());
+    let mut program = Vec::new();
+    for b in [b'E', b'X', b'I', b'T', status] {
+        program.extend_from_slice(&[0x86, b, 0xB7, 0x90, 0x00]); // LDA #b; STA $9000
+    }
+    program.push(0x12); // NOP, never reached
+    write(&mut cpu, START, &program);
+    cpu.reset().unwrap();
+    cpu
+}
+
+#[test]
+fn an_exit_request_stops_the_cpu_with_its_status() {
+    let mut cpu = cpu_that_exits(7);
+    steps(&mut cpu, 10);
+    assert_eq!(cpu.machine().exit_status(), None);
+    assert!(matches!(cpu.step(None, true), StepResult::Stopped));
+    assert_eq!(cpu.halt_state(), HaltState::Stopped);
+    assert_eq!(cpu.machine().exit_status(), Some(7));
+    assert_eq!(cpu.regs.pc, START + 25); // stopped before the NOP
+    // It stays stopped.
+    assert!(matches!(cpu.step(None, true), StepResult::Stopped));
+}
+
+#[test]
+fn after_an_exit_only_a_reset_wakes_the_cpu() {
+    let mut cpu = cpu_that_exits(0);
+    while !matches!(cpu.step(None, true), StepResult::Stopped) {}
+    cpu.regs.cc = ConditionCodes::from_byte(0); // unmask IRQ and FIRQ
+    cpu.interrupts_mut().assert_irq(emma6k_core::IrqSource(2));
+    cpu.interrupts_mut().signal_nmi();
+    assert!(matches!(cpu.step(None, true), StepResult::Stopped));
+    cpu.interrupts_mut().signal_reset();
+    assert!(matches!(cpu.step(None, true), StepResult::Reset));
+    assert_eq!(cpu.halt_state(), HaltState::Running);
+    assert_eq!(cpu.machine().exit_status(), None);
+}

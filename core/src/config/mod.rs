@@ -3,6 +3,7 @@ mod console;
 mod device;
 mod display;
 mod emulator;
+mod exit;
 mod finch;
 mod lcd_display;
 mod led_matrix;
@@ -30,6 +31,7 @@ pub use display::CharDisplayModule;
 pub use emulator::{
     BuildError, BuiltMachine, INTERRUPT_ATTRIBUTE, MachineSpec, UnmappedPolicySpec, build_machine,
 };
+pub use exit::ExitModule;
 pub use finch::FinchModule;
 pub use lcd_display::LcdDisplayModule;
 pub use led_matrix::LedMatrixModule;

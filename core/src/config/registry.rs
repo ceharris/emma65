@@ -1,7 +1,7 @@
 use super::{
-    ConsoleModule, DeviceModule, DeviceModuleError, FinchModule, LfsrModule, Mc6840Module,
-    Mc6850Module, PhoebeModule, PicFinchModule, R6551Module, RamModule, RomModule, Via6522Module,
-    VireoModule,
+    ConsoleModule, DeviceModule, DeviceModuleError, ExitModule, FinchModule, LfsrModule,
+    Mc6840Module, Mc6850Module, PhoebeModule, PicFinchModule, R6551Module, RamModule, RomModule,
+    Via6522Module, VireoModule,
 };
 use crate::bus::DeviceIdAllocator;
 use crate::config::display::CharDisplayModule;
@@ -243,6 +243,7 @@ impl DeviceRegistry {
         r.register(CharDisplayModule);
         r.register(LcdDisplayModule);
         r.register(LfsrModule);
+        r.register(ExitModule);
         r.register(R6551Module);
         r.register(Mc6840Module);
         r.register(Mc6850Module);

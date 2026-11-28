@@ -40,6 +40,9 @@ pub struct CpuBusSnapshot {
     pub cpu_stopped: bool,
     /// True when the CPU executed WAI and is waiting for an interrupt.
     pub cpu_waiting: bool,
+    /// The status the program asked to exit with through the `exit` device,
+    /// once the CPU has stopped for it.
+    pub exit_status: Option<u8>,
 }
 
 /// Combined CPU/bus state returned by `get_cpu_bus_state`.
@@ -59,6 +62,9 @@ pub struct CpuBusState {
     pub cpu_stopped: bool,
     /// True when the CPU executed WAI and is waiting for an interrupt.
     pub cpu_waiting: bool,
+    /// The status the program asked to exit with through the `exit` device,
+    /// once the CPU has stopped for it.
+    pub exit_status: Option<u8>,
 }
 
 /// Resets the CPU (reads reset vector, reinitializes registers) and returns the
@@ -258,6 +264,7 @@ fn refresh_cpu_bus_cache(cpu: &Cpu, cpu_bus_cache: &State<CpuBusCache>) -> CpuBu
         is_running: false,
         cpu_stopped: snap.cpu_stopped,
         cpu_waiting: snap.cpu_waiting,
+        exit_status: snap.exit_status,
     }
 }
 
@@ -270,6 +277,7 @@ pub fn snapshot_cpu_bus(cpu: &Cpu) -> CpuBusSnapshot {
         effective_speed: EFFECTIVE_SPEED_UNKNOWN.to_string(),
         cpu_stopped: cpu.is_stopped(),
         cpu_waiting: cpu.is_waiting(),
+        exit_status: cpu.exit_status(),
     }
 }
 
@@ -309,6 +317,7 @@ fn current_cpu_bus_state(
         is_running,
         cpu_stopped: live.as_ref().map_or(snap.cpu_stopped, |s| s.cpu_stopped),
         cpu_waiting: live.as_ref().map_or(snap.cpu_waiting, |s| s.cpu_waiting),
+        exit_status: live.as_ref().map_or(snap.exit_status, |s| s.exit_status),
     }
 }
 

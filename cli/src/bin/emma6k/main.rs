@@ -220,9 +220,17 @@ async fn run_session<P: Processor>(
         Vec::new(),
         app.park_on_halt,
     );
-    let (cpu_done_tx, mut cpu_done_rx) = tokio::sync::oneshot::channel::<StepResult<P::Op>>();
+    // The run's result, and the status the program asked to exit with (see
+    // the `exit` device), if it did.
+    let (cpu_done_tx, mut cpu_done_rx) =
+        tokio::sync::oneshot::channel::<(StepResult<P::Op>, Option<u8>)>();
     tokio::spawn(async move {
-        let _ = cpu_done_tx.send(run_handle.wait().await);
+        let (result, cpu) = run_handle.take_cpu_with_result().await;
+        let exit_status = cpu.machine().exit_status();
+        // Dropping the CPU drops its trace callback, which lets the trace
+        // writer finish.
+        drop(cpu);
+        let _ = cpu_done_tx.send((result, exit_status));
     });
 
     let mut events_open = true;
@@ -237,9 +245,13 @@ async fn run_session<P: Processor>(
             },
 
             result = &mut cpu_done_rx => {
-                if let StepResult::Error(e) = result.unwrap_or(StepResult::Stopped) {
-                    eprintln!("CPU error: {e}");
-                    exit_code = ExitCode::FAILURE;
+                match result.unwrap_or((StepResult::Stopped, None)) {
+                    (StepResult::Error(e), _) => {
+                        eprintln!("CPU error: {e}");
+                        exit_code = ExitCode::FAILURE;
+                    }
+                    (_, Some(status)) => exit_code = ExitCode::from(status),
+                    _ => {}
                 }
                 break;
             },

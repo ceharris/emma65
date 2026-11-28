@@ -7,7 +7,8 @@ pub mod symbol;
 pub mod vector;
 
 pub use interrupt::{
-    DeviceInterruptState, InterruptController, InterruptLine, IrqSource, MAX_IRQ_SOURCES,
+    CpuRequest, DeviceInterruptState, InterruptController, InterruptLine, IrqSource,
+    MAX_IRQ_SOURCES,
 };
 pub use loader::BusLoadTarget;
 use rand::RngExt;
@@ -130,7 +131,14 @@ impl DeviceIdAllocator {
 /// The configurable memory bus with RAM, ROM, and IO device regions.
 pub struct Bus {
     regions: Vec<Region>,
+    /// Every device: first the polled ones, then the passive ones (see
+    /// [`IoDevice::is_passive`]), each group in registration order.
     devices: Vec<(DeviceId, Box<dyn IoDevice>)>,
+    /// How many of `devices`, from the front, are ticked and polled each step.
+    polled_len: usize,
+    /// A request a device made in response to a write, waiting for
+    /// [`take_written_request`](Self::take_written_request).
+    written_request: Option<CpuRequest>,
     unmapped_policy: UnmappedPolicy,
     symbol_table: SymbolTable,
     resolved: Box<[Option<u32>]>,
@@ -170,6 +178,10 @@ impl Bus {
             Some(RegionMatch::Device { device, addr }) => match device.check_writability(addr) {
                 Ok(()) => {
                     device.write(addr, value);
+                    // Devices make their requests in response to writes.
+                    if let Some(request) = device.take_request() {
+                        self.written_request = Some(request);
+                    }
                     Ok(())
                 }
                 Err(e) => Err(e),
@@ -218,15 +230,31 @@ impl Bus {
             }
             Some(RegionMatch::Device { device, addr }) => {
                 device.patch(addr, value);
+                if let Some(request) = device.take_request() {
+                    self.written_request = Some(request);
+                }
             }
             None => {}
         }
     }
 
-    /// Calls `tick(cycles)` on every IO device mapped on the bus.
+    /// Takes the request a device made in response to a write, if any. Called
+    /// once per step, with the per-step device poll.
+    #[inline]
+    pub fn take_written_request(&mut self) -> Option<CpuRequest> {
+        // Test before taking, so the usual empty case doesn't store.
+        if self.written_request.is_some() {
+            self.written_request.take()
+        } else {
+            None
+        }
+    }
+
+    /// Calls `tick(cycles)` on every IO device mapped on the bus, except
+    /// passive ones.
     #[inline]
     pub fn tick_devices(&mut self, cycles: u32) {
-        for (_, device) in &mut self.devices {
+        for (_, device) in &mut self.devices[..self.polled_len] {
             device.tick(cycles);
         }
     }
@@ -239,19 +267,18 @@ impl Bus {
         }
     }
 
-    /// Returns each device's current interrupt state as a [`DeviceInterruptState`], in a
-    /// single pass over the device map. `nmi` drains the device's pending NMI edge (see
-    /// [`IoDevice::take_nmi`]), and `reset` drains its pending reset request (see
-    /// [`IoDevice::take_reset`]).
+    /// Returns each polled device's current interrupt state as a
+    /// [`DeviceInterruptState`], in a single pass over the device map. `nmi` drains the
+    /// device's pending NMI edge (see [`IoDevice::take_nmi`]). Passive devices are left
+    /// out. Device requests aren't polled: see [`take_written_request`](Self::take_written_request).
     #[inline]
     pub fn device_interrupt_states(&mut self) -> impl Iterator<Item = DeviceInterruptState> + '_ {
-        self.devices
+        self.devices[..self.polled_len]
             .iter_mut()
             .map(|(id, device)| DeviceInterruptState {
                 id: *id,
                 irq_active: device.irq_active(),
                 nmi: device.take_nmi(),
-                reset: device.take_reset(),
             })
     }
 
@@ -587,11 +614,31 @@ impl BusConfig {
         self.vector_resolver.take()
     }
 
-    pub fn build(self) -> Bus {
-        let resolved = Self::resolve_addresses(&self.regions, &self.devices);
+    pub fn build(mut self) -> Bus {
+        // Move passive devices behind the polled ones, so the per-step tick and
+        // poll cover only a prefix, and point the regions at the new places.
+        let mut order: Vec<usize> = (0..self.devices.len()).collect();
+        order.sort_by_key(|&i| self.devices[i].1.is_passive());
+        let mut new_index = vec![0; order.len()];
+        for (new, &old) in order.iter().enumerate() {
+            new_index[old] = new;
+        }
+        for region in &mut self.regions {
+            if let Region::Device { device_index, .. } = region {
+                *device_index = new_index[*device_index];
+            }
+        }
+        let mut slots: Vec<Option<(DeviceId, Box<dyn IoDevice>)>> =
+            self.devices.into_iter().map(Some).collect();
+        let devices: Vec<_> = order.iter().map(|&i| slots[i].take().unwrap()).collect();
+        let polled_len = devices.iter().filter(|(_, d)| !d.is_passive()).count();
+
+        let resolved = Self::resolve_addresses(&self.regions, &devices);
         Bus {
             regions: self.regions,
-            devices: self.devices,
+            devices,
+            polled_len,
+            written_request: None,
             unmapped_policy: self.unmapped_policy,
             symbol_table: self.symbol_table,
             resolved,
@@ -1295,10 +1342,10 @@ mod tests {
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             false
         }
-        fn take_reset(&mut self) -> bool {
+        fn take_request(&mut self) -> Option<crate::bus::CpuRequest> {
             self.take_reset_count
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            false
+            None
         }
         fn identity_address(&self) -> u16 {
             0
@@ -1337,6 +1384,9 @@ mod tests {
         assert_eq!(reset_count.load(Ordering::SeqCst), 1);
         assert_eq!(irq_active_count.load(Ordering::SeqCst), 1);
         assert_eq!(take_nmi_count.load(Ordering::SeqCst), 1);
+        // Requests aren't polled; a write asks for one.
+        assert_eq!(take_reset_count.load(Ordering::SeqCst), 0);
+        bus.write(0xFF00, 0).unwrap();
         assert_eq!(take_reset_count.load(Ordering::SeqCst), 1);
     }
 
@@ -1533,5 +1583,117 @@ mod tests {
             result,
             Err(BusConfigError::DuplicateVectorResolver)
         ));
+    }
+
+    /// The writes a [`WriteLog`] has seen.
+    type Writes = std::sync::Arc<std::sync::Mutex<Vec<(u16, u8)>>>;
+    /// How many times a [`WriteLog`] was ticked.
+    type Ticks = std::sync::Arc<std::sync::atomic::AtomicUsize>;
+
+    /// A device that records every write it sees, and can be passive.
+    struct WriteLog {
+        passive: bool,
+        writes: Writes,
+        ticks: Ticks,
+    }
+
+    impl IoDevice for WriteLog {
+        fn read(&mut self, _address: u16) -> u8 {
+            0x5A
+        }
+        fn write(&mut self, address: u16, value: u8) {
+            self.writes.lock().unwrap().push((address, value));
+        }
+        fn peek(&self, _address: u16) -> u8 {
+            0x5A
+        }
+        fn tick(&mut self, _cycles: u32) {
+            self.ticks.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+        fn is_passive(&self) -> bool {
+            self.passive
+        }
+        fn identity_address(&self) -> u16 {
+            0
+        }
+    }
+
+    fn write_log(passive: bool) -> (Box<WriteLog>, Writes, Ticks) {
+        let writes = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let ticks = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let device = Box::new(WriteLog {
+            passive,
+            writes: writes.clone(),
+            ticks: ticks.clone(),
+        });
+        (device, writes, ticks)
+    }
+
+    #[test]
+    fn passive_devices_are_not_ticked_or_polled_but_still_mapped() {
+        use std::sync::atomic::Ordering;
+        // The passive device is registered first, so building the bus moves it.
+        let (passive, passive_writes, passive_ticks) = write_log(true);
+        let (polled, polled_writes, polled_ticks) = write_log(false);
+        let mut bus = Bus::config()
+            .device(AddressRange::new(0x1000, 0x1000), DeviceId(1), passive)
+            .unwrap()
+            .device(AddressRange::new(0x2000, 0x2001), DeviceId(2), polled)
+            .unwrap()
+            .extend_device(AddressRange::new(0x3000, 0x3000), DeviceId(1))
+            .unwrap()
+            .build();
+
+        bus.tick_devices(1);
+        assert_eq!(passive_ticks.load(Ordering::SeqCst), 0);
+        assert_eq!(polled_ticks.load(Ordering::SeqCst), 1);
+        let polled_ids: Vec<DeviceId> = bus.device_interrupt_states().map(|s| s.id).collect();
+        assert_eq!(polled_ids, [DeviceId(2)]);
+
+        // Each address still reaches its own device.
+        bus.write(0x1000, 1).unwrap();
+        bus.write(0x2001, 2).unwrap();
+        bus.write(0x3000, 3).unwrap();
+        assert_eq!(*passive_writes.lock().unwrap(), [(0x1000, 1), (0x3000, 3)]);
+        assert_eq!(*polled_writes.lock().unwrap(), [(0x2001, 2)]);
+        assert_eq!(bus.read(0x1000).unwrap(), 0x5A);
+    }
+
+    #[test]
+    fn a_request_made_by_a_write_waits_for_take_written_request() {
+        let mut bus = Bus::config()
+            .ram(AddressRange::new(0x0000, 0x7FFF))
+            .unwrap()
+            .device(
+                AddressRange::new(0x9000, 0x9000),
+                DeviceId(1),
+                Box::new(crate::device::ExitDevice::new(0x9000)),
+            )
+            .unwrap()
+            .build();
+        for b in *b"EXIT" {
+            bus.write(0x9000, b).unwrap();
+        }
+        assert_eq!(bus.take_written_request(), None);
+        bus.write(0x9000, 9).unwrap();
+        assert_eq!(bus.device_interrupt_states().count(), 0);
+        assert_eq!(bus.take_written_request(), Some(CpuRequest::Exit(9)));
+        assert_eq!(bus.take_written_request(), None);
+    }
+
+    #[test]
+    fn a_patch_to_a_passive_device_can_make_a_request() {
+        let mut bus = Bus::config()
+            .device(
+                AddressRange::new(0x9000, 0x9000),
+                DeviceId(1),
+                Box::new(crate::device::ExitDevice::new(0x9000)),
+            )
+            .unwrap()
+            .build();
+        for b in *b"EXIT\x04" {
+            bus.patch(0x9000, b);
+        }
+        assert_eq!(bus.take_written_request(), Some(CpuRequest::Exit(4)));
     }
 }

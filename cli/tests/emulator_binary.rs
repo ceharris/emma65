@@ -617,3 +617,92 @@ fn a_wrapper_names_itself_in_usage_errors() {
     let stderr = stderr_of(&output);
     assert!(stderr.contains("emma65"), "stderr: {stderr}");
 }
+
+// ---------------------------------------------------------------------------
+// The exit device
+// ---------------------------------------------------------------------------
+
+/// Runs `command` with stdin an open pipe, first writing `input` to it, and
+/// waits up to ten seconds for it to exit by itself. Returns its exit code.
+fn exit_code_of(mut command: std::process::Command, input: &[u8]) -> i32 {
+    use std::io::Write;
+    let mut child = command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    stdin.write_all(input).unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            drop(stdin);
+            return status.code().expect("exited by a signal");
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("the emulator didn't exit by itself");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// A 32 KB ROM for $8000 holding `program`, then a loop, with the reset
+/// vector at the end in the given byte order.
+fn rom_with(program: &[u8], loop_bytes: &[u8], big_endian: bool) -> NamedTempFile {
+    let mut rom = vec![0u8; 32768];
+    rom[..program.len()].copy_from_slice(program);
+    rom[program.len()..program.len() + loop_bytes.len()].copy_from_slice(loop_bytes);
+    if big_endian {
+        rom[0x7FFE] = 0x80;
+    } else {
+        rom[0x7FFD] = 0x80;
+    }
+    let f = tempfile::Builder::new().suffix(".bin").tempfile().unwrap();
+    std::fs::write(f.path(), rom).unwrap();
+    f
+}
+
+/// Writes `EXIT` and `status` to $7000 with LDA # / STA abs, which both CPUs
+/// encode alike except for the store's byte order and opcode.
+fn exit_program(status: u8, sta: u8, big_endian: bool) -> Vec<u8> {
+    let mut program = Vec::new();
+    let lda = if sta == 0x8D { 0xA9 } else { 0x86 };
+    let addr: [u8; 2] = if big_endian {
+        [0x70, 0x00]
+    } else {
+        [0x00, 0x70]
+    };
+    for b in [b'E', b'X', b'I', b'T', status] {
+        program.extend_from_slice(&[lda, b, sta, addr[0], addr[1]]);
+    }
+    program
+}
+
+#[test]
+fn a_6502_program_exits_with_its_status() {
+    // LDA #b; STA $7000, then BRA * (only on the 65C02).
+    let rom = rom_with(&exit_program(42, 0x8D, false), &[0x80, 0xFE], false);
+    let mut command = std::process::Command::new(emulator_bin());
+    command.args(device_args(rom.path()));
+    command.args(["--device", "exit@0x7000"]);
+    assert_eq!(exit_code_of(command, b""), 42);
+}
+
+#[test]
+fn a_6809_program_exits_with_its_status() {
+    // LDA #b; STA $7000, then BRA *.
+    let rom = rom_with(&exit_program(3, 0xB7, true), &[0x20, 0xFE], true);
+    let mut command = std::process::Command::new(emma09_bin());
+    command.args(device_args_6809(rom.path()));
+    command.args(["--device", "exit@0x7000"]);
+    assert_eq!(exit_code_of(command, b""), 3);
+}
+
+#[test]
+fn camelforth_bye_ends_emma09_with_status_0() {
+    let command = std::process::Command::new(emma09_bin());
+    assert_eq!(exit_code_of(command, b"BYE\r"), 0);
+}

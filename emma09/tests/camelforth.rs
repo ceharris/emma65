@@ -3,7 +3,9 @@
 //! 6809's broadest end-to-end test, since CamelForth exercises most of the
 //! instruction set and the IRQ path.
 
-use emma6k_core::{InstantiationContext, InternalPipeTransport, Transport, TransportReporter};
+use emma6k_core::{
+    InstantiationContext, InternalPipeTransport, Processor, Transport, TransportReporter,
+};
 use emma09::cpu::StepResult;
 use emma09::{Config, device_registry, templates};
 use figment::Figment;
@@ -125,4 +127,17 @@ async fn ctrl_c_abandons_a_runaway_word() {
     forth.type_text("6 7 * .\r");
     let reply = forth.run_until("OK");
     assert!(reply.contains("42 "), "{reply:?}");
+}
+
+#[tokio::test]
+async fn bye_ends_the_run_with_status_0() {
+    let mut forth = Forth::boot().await;
+    forth.run_until("6809 CamelForth");
+    forth.type_text("BYE\r");
+    let mut steps = 0;
+    while !matches!(forth.cpu.step(None, false), StepResult::Stopped) {
+        steps += 1;
+        assert!(steps < 1_000_000, "BYE didn't stop the CPU");
+    }
+    assert_eq!(forth.cpu.machine().exit_status(), Some(0));
 }

@@ -835,6 +835,7 @@ pub fn run() {
             effective_speed: cpu_bus::EFFECTIVE_SPEED_UNKNOWN.to_string(),
             cpu_stopped: false,
             cpu_waiting: false,
+            exit_status: None,
         })))
         .manage(preferences::UiConfigState(Mutex::new(
             preferences::load_ui_config_from(&config_dir),

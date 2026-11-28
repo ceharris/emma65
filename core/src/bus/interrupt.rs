@@ -55,6 +55,16 @@ impl From<DeviceId> for IrqSource {
 /// Maximum number of IRQ sources
 pub const MAX_IRQ_SOURCES: u32 = 64;
 
+/// A request a device makes of the CPU itself, rather than an interrupt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CpuRequest {
+    /// Reset the CPU, as the RESET line does.
+    Reset,
+    /// Stop the CPU for good, as the 65C02's STP does, ending the run with
+    /// this exit status (see the `exit` device).
+    Exit(u8),
+}
+
 /// One device's per-step interrupt state, as reported by
 /// [`Bus::device_interrupt_states`](crate::bus::Bus::device_interrupt_states) and
 /// consumed by [`InterruptController::poll_devices`].
@@ -66,8 +76,6 @@ pub struct DeviceInterruptState {
     pub irq_active: bool,
     /// `true` if the device has a pending NMI edge (drained via `IoDevice::take_nmi`).
     pub nmi: bool,
-    /// `true` if the device has a pending CPU reset request (drained via `IoDevice::take_reset`).
-    pub reset: bool,
 }
 
 /// The CPU interrupt inputs a device can be wired to, or that a CPU declares it has.
@@ -110,7 +118,9 @@ pub struct InterruptController {
     /// for a CPU without FIRQ.
     firq_mask: u64,
     nmi_pending: bool,
-    reset_pending: bool,
+    /// A pending reset or exit request. An exit outranks a reset: once
+    /// pending, a later reset doesn't replace it.
+    request: Option<CpuRequest>,
 }
 
 impl InterruptController {
@@ -121,7 +131,7 @@ impl InterruptController {
             irq_pulse_sources: 0,
             firq_mask: 0,
             nmi_pending: false,
-            reset_pending: false,
+            request: None,
         }
     }
 
@@ -216,29 +226,47 @@ impl InterruptController {
     }
 
     /// Latches a pending RESET. Called on the falling edge of the RESET line.
+    /// Ignored while an exit is pending.
     pub fn signal_reset(&mut self) {
-        self.reset_pending = true;
+        if !matches!(self.request, Some(CpuRequest::Exit(_))) {
+            self.request = Some(CpuRequest::Reset);
+        }
     }
 
-    /// Consumes and clears the pending RESET flag. Returns `true` if RESET was pending.
+    /// Latches a pending exit with `status`, replacing any pending reset.
+    pub fn signal_exit(&mut self, status: u8) {
+        self.request = Some(CpuRequest::Exit(status));
+    }
+
+    /// Latches `request`, as [`signal_reset`](Self::signal_reset) or
+    /// [`signal_exit`](Self::signal_exit) does.
+    #[cold]
+    pub fn latch_request(&mut self, request: CpuRequest) {
+        match request {
+            CpuRequest::Reset => self.signal_reset(),
+            CpuRequest::Exit(status) => self.signal_exit(status),
+        }
+    }
+
+    /// Consumes and returns the pending reset or exit request, if any. A CPU
+    /// checks this once per step, before executing anything.
     #[inline]
-    pub fn take_reset(&mut self) -> bool {
-        let pending = self.reset_pending;
-        self.reset_pending = false;
-        pending
+    pub fn take_request(&mut self) -> Option<CpuRequest> {
+        self.request.take()
     }
 
-    /// Returns `true` if RESET is pending and has not yet been serviced.
+    /// Returns `true` if a reset or exit is pending: what wakes a CPU parked
+    /// by WAI, STP, CWAI or SYNC so it can act on the request.
     #[inline]
-    pub fn reset_pending(&self) -> bool {
-        self.reset_pending
+    pub fn request_pending(&self) -> bool {
+        self.request.is_some()
     }
 
-    /// Syncs device IRQ, NMI, and RESET state into the controller. Called by the CPU after
-    /// each instruction with each device's [`DeviceInterruptState`]: `irq_active` is synced
-    /// into the source bitmask, `nmi` (if `true`) latches a pending NMI via
-    /// [`signal_nmi`](Self::signal_nmi), and `reset` (if `true`) latches a pending RESET via
-    /// [`signal_reset`](Self::signal_reset).
+    /// Syncs device IRQ and NMI state into the controller. Called by the CPU after each
+    /// instruction with each device's [`DeviceInterruptState`]: `irq_active` is synced into
+    /// the source bitmask, and `nmi` (if `true`) latches a pending NMI via
+    /// [`signal_nmi`](Self::signal_nmi). Device requests (reset, exit) arrive separately,
+    /// through [`Bus::take_written_request`](crate::bus::Bus::take_written_request).
     pub fn poll_devices(&mut self, states: impl Iterator<Item = DeviceInterruptState>) {
         for state in states {
             if state.id.0 < MAX_IRQ_SOURCES {
@@ -251,9 +279,6 @@ impl InterruptController {
             }
             if state.nmi {
                 self.signal_nmi();
-            }
-            if state.reset {
-                self.signal_reset();
             }
         }
     }
@@ -353,37 +378,47 @@ mod tests {
 
     #[test]
     fn reset_inactive_by_default() {
-        assert!(!InterruptController::new().reset_pending());
+        assert!(!InterruptController::new().request_pending());
     }
 
     #[test]
     fn signal_reset_latches_pending() {
         let mut ctrl = InterruptController::new();
         ctrl.signal_reset();
-        assert!(ctrl.reset_pending());
+        assert!(ctrl.request_pending());
     }
 
     #[test]
-    fn take_reset_returns_true_and_clears() {
+    fn take_request_returns_a_reset_and_clears() {
         let mut ctrl = InterruptController::new();
         ctrl.signal_reset();
-        assert!(ctrl.take_reset());
-        assert!(!ctrl.reset_pending());
+        assert_eq!(ctrl.take_request(), Some(CpuRequest::Reset));
+        assert!(!ctrl.request_pending());
     }
 
     #[test]
-    fn take_reset_returns_false_when_not_pending() {
+    fn take_request_returns_none_when_not_pending() {
         let mut ctrl = InterruptController::new();
-        assert!(!ctrl.take_reset());
+        assert_eq!(ctrl.take_request(), None);
+    }
+
+    #[test]
+    fn an_exit_outranks_a_reset() {
+        let mut ctrl = InterruptController::new();
+        ctrl.signal_reset();
+        ctrl.signal_exit(3);
+        ctrl.signal_reset();
+        assert!(ctrl.request_pending());
+        assert_eq!(ctrl.take_request(), Some(CpuRequest::Exit(3)));
+        assert_eq!(ctrl.take_request(), None);
     }
 
     /// Builds a `DeviceInterruptState` tersely for test iterators.
-    fn dis(id: u32, irq_active: bool, nmi: bool, reset: bool) -> DeviceInterruptState {
+    fn dis(id: u32, irq_active: bool, nmi: bool, _reset: bool) -> DeviceInterruptState {
         DeviceInterruptState {
             id: DeviceId(id),
             irq_active,
             nmi,
-            reset,
         }
     }
 
@@ -423,20 +458,6 @@ mod tests {
         let mut ctrl = InterruptController::new();
         ctrl.poll_devices([dis(1, true, false, false)].into_iter());
         assert!(!ctrl.nmi_pending());
-    }
-
-    #[test]
-    fn poll_devices_latches_reset_from_device_state() {
-        let mut ctrl = InterruptController::new();
-        ctrl.poll_devices([dis(1, false, false, true)].into_iter());
-        assert!(ctrl.reset_pending());
-    }
-
-    #[test]
-    fn poll_devices_does_not_latch_reset_when_not_reported() {
-        let mut ctrl = InterruptController::new();
-        ctrl.poll_devices([dis(1, true, false, false)].into_iter());
-        assert!(!ctrl.reset_pending());
     }
 
     #[test]
