@@ -175,7 +175,8 @@ impl<'a> LoadTarget for SliceLoadTarget<'a> {
 /// * Binary Image: identified by filenames ending in `.bin`, `.rom`; size of the file must
 ///   fit the target with the specified bias
 /// * Intel Hex; identified by filenames ending in `.hex`, `.ihx`, `.ihex`; supports records of
-///   type 0 (Data), type 1 (End of File), and type 5 (Start Linear Address)
+///   type 0 (Data), type 1 (End of File), type 4 (Extended Linear Address; ignored, since the
+///   address space is 16 bits), and type 5 (Start Linear Address)
 /// * Motorola S-Record; identified by filenames ending in `.s19`, `.srec`; supports records of
 ///   type 0 (Header), type 1 (Data), type 5 (Count), type 9 (Start Address, terminator)
 ///
@@ -228,6 +229,7 @@ struct HexRecord<'a> {
 fn load_intel_hex(data: &[u8], target: &mut dyn LoadTarget) -> Result<Option<u16>, LoadError> {
     const IHEX_DATA: u8 = 0;
     const IHEX_EOF: u8 = 1;
+    const IHEX_EXT_LINEAR_ADDR: u8 = 4;
     const IHEX_START: u8 = 5;
     let data = consume_preamble(data, b':');
     if data.is_empty() {
@@ -251,6 +253,11 @@ fn load_intel_hex(data: &[u8], target: &mut dyn LoadTarget) -> Result<Option<u16
             }
             IHEX_EOF => {
                 eof = true;
+            }
+            IHEX_EXT_LINEAR_ADDR => {
+                // Some assemblers and linkers emit this record even for a 16-bit target. Its
+                // upper address bits have no meaning here, so skip its data.
+                consume_data(&mut record, rec_len, &mut checksum)?;
             }
             IHEX_START => {
                 let upper_word = parse_hex_u16(&mut record)?;
@@ -632,6 +639,25 @@ S9030000FC
         let mut target = SliceLoadTarget::new(&mut mem, 0);
         let start_addr = load_target(hex_data, LoadFormat::IntelHex, &mut target).unwrap();
         assert!(matches!(start_addr, Some(addr) if addr == 0x00cd))
+    }
+
+    #[test]
+    fn load_intel_hex_ignores_extended_linear_address_record() {
+        let hex_data = ":020000040000FA\n:04010000214601365D\n:00000001FF\n".as_bytes();
+        let mut mem: [u8; 16] = [0; 16];
+        let mut target = SliceLoadTarget::new(&mut mem, -0x100);
+        let start_addr = load_target(hex_data, LoadFormat::IntelHex, &mut target).unwrap();
+        assert!(start_addr.is_none());
+        assert_eq!(mem[0x0..0x4], vec![0x21u8, 0x46u8, 0x01u8, 0x36u8]);
+    }
+
+    #[test]
+    fn load_intel_hex_when_extended_linear_address_has_bad_checksum() {
+        let hex_data = ":020000040000FB\n:00000001FF\n".as_bytes();
+        let mut mem: [u8; 0] = [];
+        let mut target = SliceLoadTarget::new(&mut mem, 0);
+        let err = load_target(hex_data, LoadFormat::IntelHex, &mut target).unwrap_err();
+        assert!(matches!(err, LoadError::ChecksumMismatch { .. }));
     }
 
     #[test]
