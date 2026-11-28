@@ -17,7 +17,8 @@ breaking/additive/fix-only definitions and pre-1.0 policy.
 
 - The `exit` device: a program writes `EXIT` and a status byte to it to stop
   the CPU, and `emma6k` (or `emma65`/`emma09`) exits with that status. It works
-  on either CPU. CamelForth's new `BYE` word uses it.
+  on either CPU. CamelForth's new `BYE` word uses it. Like the other devices,
+  it logs a message when it's reset.
 
 ### Removed
 
@@ -33,6 +34,11 @@ breaking/additive/fix-only definitions and pre-1.0 policy.
   (`is_passive`), which leaves them out of the per-step tick and poll.
 - Trace files are format version 3, which records the CPU family. The 6502's
   records are unchanged, and version 2 files still read.
+
+### Fixed
+
+- A run with `--log-file` no longer hangs after the CPU stops (STP, or the
+  `exit` device) or on Ctrl+C: the emulator now exits once the log is written.
 
 ## [0.1.0] - 2026-09-07
 

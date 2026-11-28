@@ -29,7 +29,7 @@ impl DeviceModule for ExitModule {
         bus_config: BusConfig,
         address: u16,
         attributes: &HashMap<String, Value>,
-        _context: &InstantiationContext,
+        context: &InstantiationContext,
         id_allocator: Arc<Mutex<DeviceIdAllocator>>,
     ) -> Result<BusConfig, DeviceModuleError> {
         let attrs = Dict::from_iter(attributes.clone());
@@ -38,12 +38,16 @@ impl DeviceModule for ExitModule {
             .extract()
             .map_err(|e| DeviceModuleError::Config(format!("configuration error: {e}")))?;
 
+        let mut device = ExitDevice::new(address);
+        if let Some(sender) = &context.log_sender {
+            device.set_log_sender(sender.clone());
+        }
         let device_id = id_allocator.lock().unwrap().next_available();
         bus_config
             .device(
                 AddressRange::new(address, address),
                 device_id,
-                Box::new(ExitDevice::new(address)),
+                Box::new(device),
             )
             .map_err(DeviceModuleError::BusConfig)
     }

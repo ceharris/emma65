@@ -706,3 +706,18 @@ fn camelforth_bye_ends_emma09_with_status_0() {
     let command = std::process::Command::new(emma09_bin());
     assert_eq!(exit_code_of(command, b"BYE\r"), 0);
 }
+
+#[test]
+fn a_run_with_a_log_file_exits_and_logs_the_exit_device_reset() {
+    // Joining the log writer used to wait forever on a sender the CLI
+    // still held, so a run with --log-file never ended by itself.
+    let rom = rom_with(&exit_program(9, 0x8D, false), &[0x80, 0xFE], false);
+    let log = NamedTempFile::new().unwrap();
+    let mut command = std::process::Command::new(emulator_bin());
+    command.args(device_args(rom.path()));
+    command.args(["--device", "exit@0x7000"]);
+    command.arg("--log-file").arg(log.path());
+    assert_eq!(exit_code_of(command, b""), 9);
+    let text = std::fs::read_to_string(log.path()).unwrap();
+    assert!(text.contains("exit@0x7000 reset"), "log was:\n{text}");
+}

@@ -224,6 +224,7 @@ async fn run_session<P: Processor>(
     // the `exit` device), if it did.
     let (cpu_done_tx, mut cpu_done_rx) =
         tokio::sync::oneshot::channel::<(StepResult<P::Op>, Option<u8>)>();
+    let stopper = run_handle.stopper();
     tokio::spawn(async move {
         let (result, cpu) = run_handle.take_cpu_with_result().await;
         let exit_status = cpu.machine().exit_status();
@@ -255,10 +256,19 @@ async fn run_session<P: Processor>(
                 }
                 break;
             },
-            _ = tokio::signal::ctrl_c() => break,
+            _ = tokio::signal::ctrl_c() => {
+                // Stop the CPU and wait for the task to drop it: the CPU
+                // and its devices hold the trace callback and log senders,
+                // and the writers below finish only once those are gone.
+                stopper.stop();
+                let _ = (&mut cpu_done_rx).await;
+                break;
+            },
         }
     }
 
+    // The log writer finishes when its last sender is dropped.
+    drop(log_sender_for_events);
     if let Some(finish) = finish_trace {
         finish();
     }

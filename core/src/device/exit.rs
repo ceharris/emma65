@@ -3,6 +3,7 @@
 
 use super::IoDevice;
 use crate::bus::CpuRequest;
+use crate::{LogCategory, LogLevel, LogSender, log_msg};
 
 /// The bytes a program writes, in order, before the status byte.
 pub const UNLOCK: [u8; 4] = *b"EXIT";
@@ -14,8 +15,9 @@ pub const UNLOCK: [u8; 4] = *b"EXIT";
 /// with the status byte as its process exit code. Any byte that breaks the
 /// sequence starts it over (an `E` starts a new one), so a stray write or a
 /// loop clearing memory can't end the run by accident. Reads return 0. A
-/// reset forgets a partly written sequence.
-#[derive(Debug, Default)]
+/// reset forgets a partly written sequence and logs that the device was
+/// reset, as the other devices do, so the log shows it's configured.
+#[derive(Default)]
 pub struct ExitDevice {
     /// The register's bus address.
     address: u16,
@@ -23,6 +25,8 @@ pub struct ExitDevice {
     matched: usize,
     /// The exit request, once the status byte has been written.
     request: Option<u8>,
+    /// Where the reset message goes.
+    log_sender: LogSender,
 }
 
 impl ExitDevice {
@@ -33,6 +37,11 @@ impl ExitDevice {
             address,
             ..Self::default()
         }
+    }
+
+    /// Sets where the device sends its log messages.
+    pub fn set_log_sender(&mut self, sender: LogSender) {
+        self.log_sender = sender;
     }
 }
 
@@ -58,6 +67,13 @@ impl IoDevice for ExitDevice {
 
     fn reset(&mut self) {
         self.matched = 0;
+        log_msg!(
+            self.log_sender,
+            LogLevel::Info,
+            LogCategory::Device,
+            "{} reset",
+            self.identity()
+        );
     }
 
     fn take_request(&mut self) -> Option<CpuRequest> {
@@ -138,6 +154,18 @@ mod tests {
         device.reset();
         write_all(&mut device, b"T\x00");
         assert_eq!(device.take_request(), None);
+    }
+
+    #[test]
+    fn reset_logs_device_message() {
+        let (sender, rx) = crate::logging::log_channel(4);
+        let mut device = ExitDevice::new(0xFFD2);
+        device.set_log_sender(sender);
+        device.reset();
+        let received = rx.recv().unwrap();
+        assert_eq!(received.level, LogLevel::Info);
+        assert_eq!(received.category, LogCategory::Device);
+        assert_eq!(received.message, "exit@0xffd2 reset");
     }
 
     #[test]
