@@ -10,7 +10,8 @@
 //! **Control Register (offset 0 write):**
 //! - Bits 1–0 (CD): Counter Divide — `11` = master reset; `00`/`01`/`10` = ÷1/÷16/÷64
 //! - Bits 4–2 (WS): Word Select — data bits, parity, stop bits
-//! - Bits 6–5 (TC): Transmit Control — `10` = TX interrupt enabled; others = disabled
+//! - Bits 6–5 (TC): Transmit Control — `01` = TX interrupt enabled; `00`, `10`, `11` =
+//!   disabled. (RTS and the break level aren't modeled.)
 //! - Bit 7 (RIE): Receive Interrupt Enable — `1` = enabled
 //!
 //! **Status Register (offset 0 read):**
@@ -60,7 +61,7 @@ pub struct Mc6850 {
 const CD_MASK: u8 = 0x03;
 const CD_MASTER_RESET: u8 = 0x03;
 const TC_MASK: u8 = 0x60;
-const TC_TX_IRQ: u8 = 0x40; // TC bits = 10
+const TC_TX_IRQ: u8 = 0x20; // TC bits = 01
 const RIE_MASK: u8 = 0x80;
 
 impl Mc6850 {
@@ -397,8 +398,18 @@ mod tests {
     #[test]
     fn irq_on_tdre_when_tx_irq_enabled() {
         let mut device = device();
-        device.write(0, 0x41); // TC=10 (TX IRQ enabled), CD=01
+        device.write(0, 0x21); // TC=01 (TX IRQ enabled), CD=01
         assert!(device.irq_active()); // TDRE is always set
+    }
+
+    #[test]
+    fn other_transmit_control_codes_leave_the_tx_irq_disabled() {
+        let mut device = device();
+        for control in [0x01, 0x41, 0x61] {
+            // TC=00, 10 (RTS high), 11 (break), with CD=01
+            device.write(0, control);
+            assert!(!device.irq_active(), "control ${control:02X}");
+        }
     }
 
     #[test]

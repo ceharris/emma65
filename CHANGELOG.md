@@ -37,6 +37,9 @@ breaking/additive/fix-only definitions and pre-1.0 policy.
 
 ### Fixed
 
+- The MC6850 (`acia/6850`) enabled its transmit interrupt with control bits
+  6–5 set to `10`. It now uses `01`, as the datasheet does, so software written
+  for a real 6850 gets transmit interrupts, and `10` no longer enables them.
 - A run with `--log-file` no longer hangs after the CPU stops (STP, or the
   `exit` device) or on Ctrl+C: the emulator now exits once the log is written.
 

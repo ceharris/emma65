@@ -84,9 +84,8 @@ async fn first_handler(interrupt: Option<&str>) -> u16 {
     const START: u16 = 0x1000;
     const IRQ_HANDLER: u16 = 0x2000;
     const FIRQ_HANDLER: u16 = 0x2100;
-    // The emulated MC6850 enables its transmit interrupt with control bits
-    // CR6:CR5 = 10; CR1:CR0 = 01 selects ÷16.
-    const ACIA_TX_IRQ_ENABLE: u8 = 0x41;
+    // CR6:CR5 = 01 enables the transmit interrupt; CR1:CR0 = 01 selects ÷16.
+    const ACIA_TX_IRQ_ENABLE: u8 = 0x21;
     let routing = interrupt.map_or(String::new(), |line| format!("interrupt = \"{line}\""));
     let mut session = config(&format!(
         r#"
@@ -115,7 +114,7 @@ async fn first_handler(interrupt: Option<&str>) -> u16 {
         0x80,
         0x00, //       STA $8000
         0x86,
-        ACIA_TX_IRQ_ENABLE, // LDA #$41
+        ACIA_TX_IRQ_ENABLE, // LDA #$21
         0xB7,
         0x80,
         0x00, //       STA $8000

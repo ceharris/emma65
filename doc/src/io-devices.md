@@ -207,8 +207,9 @@ chip:
 
 **Control register** (write offset 0): bits 1–0 select the counter divide
 ratio (`11` triggers a master reset); bits 4–2 select word format (data
-bits/parity/stop bits); bits 6–5 enable/configure the transmit interrupt;
-bit 7 enables the receive interrupt.
+bits/parity/stop bits); bits 6–5 are the transmit control, where `01` (as in
+`$20`) enables the transmit interrupt and `00`, `10` and `11` disable it;
+bit 7 enables the receive interrupt. RTS and the break level aren't modeled.
 
 **Status register** (read offset 0): bit 0 RDRF (receive data register
 full), bit 1 TDRE (transmit data register empty), bit 5 OVRN (overrun), bit
