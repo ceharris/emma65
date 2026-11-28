@@ -977,3 +977,321 @@ fn after_an_exit_only_a_reset_wakes_the_cpu() {
     assert_eq!(cpu.halt_state(), HaltState::Running);
     assert_eq!(cpu.machine().exit_status(), None);
 }
+
+// --- gaps found by mutation testing ---
+//
+// `cargo mutants -p emma09` showed which changes to the CPU no test caught;
+// Schwotzer's suite checks results but rarely that an instruction clears a
+// flag that was already set. These tests close those gaps.
+
+use emma6k_core::bus::{InterruptController, RomWritePolicy};
+use std::sync::{Arc, Mutex};
+
+/// A flag case: name, program, A, B, CC in, A out, CC out.
+type FlagCase = (&'static str, &'static [u8], u8, u8, u8, u8, u8);
+
+/// Each case runs one instruction from `cc_in` with A = `a` and B = `b`, then
+/// checks A and the whole CC. Starting with the affected flags set checks
+/// that the instruction clears them.
+#[test]
+fn instructions_set_and_clear_exactly_their_flags() {
+    const N: u8 = 0x08;
+    const Z: u8 = 0x04;
+    const V: u8 = 0x02;
+    const C: u8 = 0x01;
+    #[rustfmt::skip]
+    let cases: &[FlagCase] = &[
+        // name, program, A, B, CC in, A out, CC out
+        ("ANDA", &[0x84, 0x0F], 0x01, 0, N | Z | V, 0x01, 0),
+        ("BITA", &[0x85, 0x0F], 0x01, 0, N | Z | V, 0x01, 0),
+        ("EORA", &[0x88, 0xFF], 0x0F, 0, Z | V | C, 0xF0, N | C),
+        ("ORA", &[0x8A, 0x02], 0x01, 0, N | Z | V, 0x03, 0),
+        ("COMA", &[0x43], 0x0F, 0, V, 0xF0, N | C),
+        ("ASRA", &[0x47], 0x02, 0, N | Z | C, 0x01, 0),
+        ("ASLA $01", &[0x48], 0x01, 0, N | Z | V | C, 0x02, 0),
+        ("ASLA $40", &[0x48], 0x40, 0, 0, 0x80, N | V),
+        ("ASLA $80", &[0x48], 0x80, 0, 0, 0x00, Z | V | C),
+        ("ASLA $C0", &[0x48], 0xC0, 0, 0, 0x80, N | C),
+        ("TSTA", &[0x4D], 0x01, 0, Z | V | C, 0x01, C),
+        ("CLRA", &[0x4F], 0x55, 0, N | V | C, 0x00, Z),
+        ("SEX", &[0x1D], 0xAA, 0x01, N | Z, 0x00, 0),
+        ("ORCC", &[0x1A, 0x05], 0, 0, 0x11, 0, 0x15),
+        ("DAA $09", &[0x19], 0x09, 0, 0, 0x09, 0),
+        ("DAA $8A", &[0x19], 0x8A, 0, 0, 0x90, N),
+        ("DAA $90", &[0x19], 0x90, 0, 0, 0x90, N),
+        ("DAA $A0 with C", &[0x19], 0xA0, 0, C, 0x00, Z | C),
+        ("STA", &[0xB7, 0x20, 0x00], 0x01, 0, N | Z | V, 0x01, 0),
+        ("STB", &[0xF7, 0x20, 0x00], 0, 0x01, N | Z | V, 0, 0),
+        ("LDD #", &[0xCC, 0x00, 0x01], 0, 0, N | Z | V, 0x00, 0),
+        ("STD", &[0xFD, 0x20, 0x00], 0x00, 0x01, N | Z | V, 0x00, 0),
+    ];
+    for &(name, program, a, b, cc_in, a_out, cc_out) in cases {
+        let mut cpu = cpu(program);
+        cpu.regs.a = a;
+        cpu.regs.b = b;
+        cpu.regs.cc = ConditionCodes::from_byte(cc_in);
+        step(&mut cpu);
+        assert_eq!(cpu.registers().a, a_out, "{name}: A");
+        assert_eq!(cc(&cpu).to_byte(), cc_out, "{name}: CC");
+    }
+}
+
+#[test]
+fn tst_memory_sets_n_z_and_clears_v_but_keeps_c() {
+    // TST $2000, where $2000 holds $80.
+    let mut cpu = cpu(&[0x7D, 0x20, 0x00]);
+    write(&mut cpu, 0x2000, &[0x80]);
+    cpu.regs.cc = ConditionCodes::V | ConditionCodes::C;
+    step(&mut cpu);
+    assert_eq!(cc(&cpu), ConditionCodes::N | ConditionCodes::C);
+    assert_eq!(peek(&cpu, 0x2000), 0x80);
+}
+
+#[test]
+fn stu_stores_u_and_clears_v() {
+    // STU $2000
+    let mut cpu = cpu(&[0xFF, 0x20, 0x00]);
+    cpu.regs.u = 0x1234;
+    cpu.regs.cc = ConditionCodes::N | ConditionCodes::Z | ConditionCodes::V;
+    step(&mut cpu);
+    assert_eq!([peek(&cpu, 0x2000), peek(&cpu, 0x2001)], [0x12, 0x34]);
+    assert_eq!(cc(&cpu), ConditionCodes::empty());
+}
+
+/// Every branch condition after CMPA, against what the comparison means:
+/// signed and unsigned order, equality, the sign of the difference, and
+/// signed overflow. Short and long branches share the conditions.
+#[test]
+fn every_branch_condition_follows_its_comparison() {
+    let values = [0x00u8, 0x01, 0x7F, 0x80, 0x81, 0xFF];
+    for a in values {
+        for b in values {
+            let (sa, sb) = (a as i8, b as i8);
+            let difference = a.wrapping_sub(b) as i8;
+            let overflow = sa.checked_sub(sb).is_none();
+            let expected = [
+                true,            // BRA
+                false,           // BRN
+                a > b,           // BHI
+                a <= b,          // BLS
+                a >= b,          // BHS
+                a < b,           // BLO
+                a != b,          // BNE
+                a == b,          // BEQ
+                !overflow,       // BVC
+                overflow,        // BVS
+                difference >= 0, // BPL
+                difference < 0,  // BMI
+                sa >= sb,        // BGE
+                sa < sb,         // BLT
+                sa > sb,         // BGT
+                sa <= sb,        // BLE
+            ];
+            for (condition, &taken) in expected.iter().enumerate() {
+                // LDA #a; CMPA #b; Bcc +$10
+                let branch = 0x20 | condition as u8;
+                let mut cpu = cpu(&[0x86, a, 0x81, b, branch, 0x10]);
+                steps(&mut cpu, 3);
+                let next = START + 6;
+                let target = if taken { next + 0x10 } else { next };
+                assert_eq!(
+                    cpu.pc(),
+                    target,
+                    "${a:02X} vs ${b:02X}, branch ${branch:02X}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn tfr_reads_s_pc_and_undefined_registers() {
+    // TFR S,X; TFR PC,Y; TFR 6,U (undefined 16-bit code: all ones).
+    let mut cpu = cpu(&[0x1F, 0x41, 0x1F, 0x52, 0x1F, 0x63]);
+    cpu.regs.s = 0x7000;
+    steps(&mut cpu, 3);
+    assert_eq!(cpu.registers().x, 0x7000);
+    assert_eq!(cpu.registers().y, START + 4); // PC after the TFR
+    assert_eq!(cpu.registers().u, 0xFFFF);
+}
+
+#[test]
+fn indexed_auto_increment_updates_u_alone() {
+    // LDA ,U+
+    let mut cpu = cpu(&[0xA6, 0xC0]);
+    write(&mut cpu, 0x3000, &[0x5A]);
+    cpu.regs.u = 0x3000;
+    step(&mut cpu);
+    assert_eq!(cpu.registers().a, 0x5A);
+    assert_eq!(cpu.registers().u, 0x3001);
+    assert_eq!(cpu.registers().s, STACK);
+}
+
+/// Indexed forms add the postbyte's cycles (here 1, for a 5-bit offset) to
+/// every instruction group's base.
+#[test]
+fn indexed_operands_add_their_cycles_to_every_group() {
+    let cases: &[(&str, &[u8], u64)] = &[
+        ("NEG 5,X", &[0x60, 0x05], 7),
+        ("TST 5,X", &[0x6D, 0x05], 7),
+        ("JMP 5,X", &[0x6E, 0x05], 4),
+        ("JSR 5,X", &[0xAD, 0x05], 8),
+        ("LDA 5,X", &[0xA6, 0x05], 5),
+        ("LDB 5,X", &[0xE6, 0x05], 5),
+        ("STA 5,X", &[0xA7, 0x05], 5),
+        ("ADDD 5,X", &[0xE3, 0x05], 7),
+        ("LDD 5,X", &[0xEC, 0x05], 6),
+        ("STD 5,X", &[0xED, 0x05], 6),
+        ("LEAX 5,X", &[0x30, 0x05], 5),
+        // PSHS adds one cycle a byte: U is the first register pushed.
+        ("PSHS U", &[0x34, 0x40], 7),
+    ];
+    for &(name, program, expected) in cases {
+        let mut cpu = cpu(program);
+        cpu.regs.x = 0x3000;
+        assert_eq!(step(&mut cpu), expected, "{name}");
+    }
+}
+
+#[test]
+fn every_flag_and_register_has_a_watch_name() {
+    for (name, mask) in [
+        ("E", 0x80),
+        ("f", 0x40),
+        ("H", 0x20),
+        ("i", 0x10),
+        ("N", 0x08),
+        ("z", 0x04),
+        ("V", 0x02),
+        ("c", 0x01),
+    ] {
+        assert_eq!(map_flag_name(name), Some(mask), "{name}");
+        assert_eq!(
+            <Cpu as Processor>::map_flag_name(name),
+            Some(mask),
+            "{name}"
+        );
+    }
+    assert_eq!(<Cpu as Processor>::map_register_name("u"), Some(REG_U));
+    assert_eq!(<Cpu as Processor>::map_register_name("w"), None);
+}
+
+#[test]
+fn the_watch_context_reads_every_register() {
+    let mut cpu = cpu(&[]);
+    cpu.regs.x = 0x1111;
+    cpu.regs.y = 0x2222;
+    cpu.regs.u = 0x3333;
+    cpu.regs.s = 0x4444;
+    cpu.regs.pc = 0x5555;
+    cpu.regs.dp = 0x66;
+    cpu.regs.cc = ConditionCodes::from_byte(0x77);
+    let ctx = CpuWatchContext {
+        regs: &cpu.regs,
+        bus: cpu.machine.bus(),
+    };
+    for (id, value) in [
+        (REG_X, 0x1111),
+        (REG_Y, 0x2222),
+        (REG_U, 0x3333),
+        (REG_S, 0x4444),
+        (REG_PC, 0x5555),
+        (REG_DP, 0x66),
+        (REG_CC, 0x77),
+    ] {
+        assert_eq!(ctx.read_register_u32(id), value, "register {id}");
+    }
+}
+
+#[test]
+fn the_processor_reset_reads_the_reset_vector() {
+    let mut cpu = cpu(&[]);
+    cpu.regs.pc = 0x4000;
+    Processor::reset(&mut cpu).unwrap();
+    assert_eq!(cpu.pc(), START);
+}
+
+#[test]
+fn flush_trace_flushes_the_callback() {
+    struct Flushes(Arc<std::sync::atomic::AtomicUsize>);
+    impl TraceCallback<Registers> for Flushes {
+        fn record(&mut self, _rec: TraceRecord) {}
+        fn flush(&mut self) {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+    let flushes = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let mut cpu = cpu(&[]);
+    cpu.set_trace_callback(Some(Box::new(Flushes(flushes.clone()))));
+    cpu.flush_trace();
+    Processor::flush_trace(&mut cpu);
+    assert_eq!(flushes.load(std::sync::atomic::Ordering::Relaxed), 2);
+}
+
+#[test]
+fn a_failed_write_leaves_no_write_record() {
+    struct Writes(Arc<Mutex<Vec<TraceRecord>>>);
+    impl TraceCallback<Registers> for Writes {
+        fn record(&mut self, rec: TraceRecord) {
+            self.0.lock().unwrap().push(rec);
+        }
+    }
+    // RAM below $8000, ROM that refuses writes above it.
+    let bus = Bus::config()
+        .ram_with_fill(AddressRange::new(0x0000, 0x7FFF), 0)
+        .unwrap()
+        .rom_with_write_policy(
+            AddressRange::new(0x8000, 0xFFFF),
+            vec![0; 0x8000],
+            RomWritePolicy::Error,
+        )
+        .unwrap()
+        .build();
+    let mut cpu = Cpu::builder().bus(bus).build().unwrap();
+    write(&mut cpu, START, &[0xB7, 0x90, 0x00]); // STA $9000
+    cpu.regs.pc = START;
+    let records = Arc::new(Mutex::new(Vec::new()));
+    cpu.set_trace_callback(Some(Box::new(Writes(records.clone()))));
+    assert!(matches!(cpu.step(None, false), StepResult::Error(_)));
+    let records = records.lock().unwrap();
+    assert!(!records.is_empty());
+    assert!(
+        !records
+            .iter()
+            .any(|r| matches!(r.kind, TraceKind::Write { .. }))
+    );
+}
+
+#[test]
+fn builder_options_survive_later_calls() {
+    struct Redirect;
+    impl VectorResolver for Redirect {
+        fn resolve(&self, vector_addr: u16, _: &InterruptController) -> u16 {
+            if vector_addr == RESET_VECTOR {
+                0x0100
+            } else {
+                vector_addr
+            }
+        }
+    }
+    let bus = Bus::config()
+        .ram_with_fill(AddressRange::new(0x0000, 0xFFFF), 0)
+        .unwrap()
+        .build();
+    let (sender, rx) = emma6k_core::log_channel(4);
+    // Each option is set after the bus, so dropping the builder's earlier
+    // state would lose the bus.
+    let mut cpu = Cpu::builder()
+        .bus(bus)
+        .clock_speed(ClockSpeed::mhz(1.0))
+        .vector_resolver(Box::new(Redirect))
+        .log_sender(sender)
+        .build()
+        .unwrap();
+    assert_eq!(cpu.machine().clock_speed(), ClockSpeed::mhz(1.0));
+    write(&mut cpu, 0x0100, &[0x12, 0x34]);
+    cpu.reset().unwrap();
+    assert_eq!(cpu.pc(), 0x1234);
+    // The reset logged through the sender.
+    assert_eq!(rx.try_recv().unwrap().message, "6809 CPU reset");
+}

@@ -153,3 +153,53 @@ async fn an_mc6850_interrupts_through_the_irq_vector_by_default() {
     assert_eq!(first_handler(None).await, 0x2000);
     assert_eq!(first_handler(Some("irq")).await, 0x2000);
 }
+
+#[test]
+fn a_cpu_variant_converts_to_its_config_string() {
+    assert_eq!(String::from(CpuVariantSpec::Mc6809), "6809");
+}
+
+/// A device module that records the clock rate devices are built with.
+#[derive(Clone)]
+struct ClockProbe(std::sync::Arc<std::sync::Mutex<Option<u64>>>);
+
+impl DeviceModule for ClockProbe {
+    fn name(&self) -> &'static str {
+        "probe"
+    }
+
+    async fn instantiate(
+        &self,
+        bus_config: emma6k_core::BusConfig,
+        _address: u16,
+        _attributes: &std::collections::HashMap<String, figment::value::Value>,
+        context: &InstantiationContext,
+        _id_allocator: std::sync::Arc<std::sync::Mutex<emma6k_core::bus::DeviceIdAllocator>>,
+    ) -> Result<emma6k_core::BusConfig, DeviceModuleError> {
+        *self.0.lock().unwrap() = context.clock_hz;
+        Ok(bus_config)
+    }
+}
+
+#[tokio::test]
+async fn build_gives_devices_the_configured_clock_rate() {
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let mut registry = device_registry();
+    registry.register(ClockProbe(seen.clone()));
+    config(
+        r#"
+        clock-speed-hz = 2000000
+        [[devices]]
+        type = "ram"
+        address = 0x0000
+        size = 65536
+        [[devices]]
+        type = "probe"
+        address = 0x0000
+        "#,
+    )
+    .build(&registry)
+    .await
+    .unwrap();
+    assert_eq!(*seen.lock().unwrap(), Some(2_000_000));
+}

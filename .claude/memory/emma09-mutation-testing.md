@@ -1,6 +1,6 @@
 ---
 name: emma09-mutation-testing
-description: A cargo-mutants pass over the 6809 CPU is set up but deliberately deferred until just before the 6809 work (step 2) wraps up
+description: The cargo-mutants pass over emma09 ran 2026-11-28 — results, the gaps it found, the equivalent mutants left, and how to rerun it without filling /tmp
 metadata:
   type: project
 ---
@@ -11,4 +11,6 @@ Set up on the Linux workstation: `cargo-mutants` 27.1.0 is installed (`cargo ins
 
 **Why:** mutation testing shows which code changes no test catches. Schwotzer's expectations are trustworthy (validated on a real EF6809P), but its coverage is partial (no interrupts, SWI/RTI, CWAI/SYNC or cycle counts). It can't catch an error the code and a unit test share, such as a misread datasheet cycle count; CamelForth booting (Unit 5) is the independent check for that.
 
-**How to apply:** when step 2's last unit is done, or the user says to wrap up the 6809, run the pass. Triage each surviving mutant into a new test, or a note on why it's equivalent. Report the results in that PR. It's not a CI job.
+**Results (2026-11-28, Linux):** 1,111 mutants in 22 minutes with `-j 4`: 792 caught, 67 timeouts (these count as caught), 74 unviable, 178 missed. The new tests in branch `emma09-mutation-testing` caught 92 of the 178. No CPU bug turned up; every new test passed against the code as written. The gaps were mostly flags an instruction should clear and Schwotzer's suite never checks (AND/OR/EOR/STA/LD/ST/TST/CLR/ASL/ASR/COM/SEX), plus EOR, STU, TFR from S/PC, `,U+`, branch conditions, DAA edges, indexed extra cycles, watch names, the builder, and the trace assembler. The 86 left are equivalent: `|` → `^` on disjoint bits (84), `Cpu::builder` → `Default` and `variant_to_byte` → 0.
+
+**How to apply:** rerun after a large CPU change, not in CI. Set `TMPDIR` to a directory on disk (for example `target/mutants-tmp`) and use `--output target/mutants-out`: each job copies and builds the workspace in the temp directory, and `/tmp` is a 2.6 GB tmpfs on the Linux host. `--iterate` with the same output directory reruns only the mutants not yet caught. Expect the 86 equivalent survivors; anything else is new.
